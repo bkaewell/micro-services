@@ -1,10 +1,27 @@
 #!/bin/bash
 
-# Define directories
-REPO_DIR=~/repo/automation-scripts/extract_public_ip
-DEPLOY_DIR=~/deployed_extract_public_ip
+# Define base directories
+REPO_BASE=~/repo/automation-scripts
+DEPLOY_BASE=~/deployed_scripts
 
-# Check if DEPLOY_DIR exists, otherwise create it
+# Set the subdirectory for the specific script
+SCRIPT_SUBDIR=extract_public_ip
+
+# Define directories
+# REPO_DIR=~/repo/automation-scripts/extract_public_ip
+# DEPLOY_DIR=~/deployed_extract_public_ip
+
+# Define the full paths for the repository and deployed script directories
+REPO_DIR="$REPO_BASE/$SCRIPT_SUBDIR"
+DEPLOY_DIR="$DEPLOY_BASE/$SCRIPT_SUBDIR"
+
+# Ensure the base deployment directory exists
+if [ ! -d "$DEPLOY_BASE" ]; then
+    echo "Base deployment directory '$DEPLOY_BASE' does not exist. Creating it..."
+    mkdir -p "$DEPLOY_BASE"
+fi
+
+# Check if the specific deployment directory exists, otherwise create it
 if [ -d "$DEPLOY_DIR" ]; then
     echo "Deployment directory '$DEPLOY_DIR' already exists. Updating files..."
 else
@@ -29,11 +46,18 @@ else
 fi
 
 # Sync code from the repo to the deployed area, excluding production-specific files
-rsync -av --exclude='.env' --exclude='logs' "$REPO_DIR/" "$DEPLOY_DIR/"
+rsync -av \
+    --exclude='.env' \
+    --exclude='README.md' \
+    --exclude='requirements.txt' \
+    --exclude='logs' \
+    --exclude='cron_job' \
+    --exclude='deploy.sh' \
+    "$REPO_DIR/" "$DEPLOY_DIR/"
 
 # Check if the .env file exists in the deployed folder; if not, copy the .env.example over
 if [ ! -f "$DEPLOY_DIR/.env" ]; then
-    echo "No .env found in '$DEPLOY_DIR'. Copying .env.example ..."
+    echo "No .env found in '$DEPLOY_DIR'. Copying .env.example to .env..."
     cp "$REPO_DIR/.env.example" "$DEPLOY_DIR/.env"
     echo "Copied .env.example to deployed directory."
 else
