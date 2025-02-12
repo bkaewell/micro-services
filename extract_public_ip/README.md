@@ -26,8 +26,33 @@ GOOGLE_SHEET_NAME=Name of your Google Sheet
 GOOGLE_API_CREDENTIALS=Path to your Google service account JSON file
 ```
 
-### 3. Run the Script
+### 2. Configure Your Environment via Deployment
+
+Simply run the deployment script. The `deploy.sh` script will:
+
+- Create or update your production directory (e.g., `~/deployed_extract_public_ip`).
+- Create necessary subdirectories such as `logs` and `cron_job`.
+- If a `.env` file does not exist in the production directory, it will copy `.env.example` to `.env`.
+
+After running the deployment script, update the newly created `.env` file in the production directory with your actual configuration values (i.e., your private data and credentials).
+
+Run the deployment script with:
 
 ```bash
-python extract_public_ip_address.py
+./deploy.sh
+```
+
+### 3. Run the Script
+
+Once deployed, run the script from the production directory:
+
+```bash
+python ~/deployed_extract_public_ip/extract_public_ip_address.py
+```
+
+### 4. Set Up a Cron Job
+
+TBD
+```ini
+0 18 * * * cd ~/deployed_extract_public_ip && /usr/bin/python extract_public_ip_address.py >> logs/cron.log 2>&1
 ```
