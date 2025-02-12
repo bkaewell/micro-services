@@ -17,15 +17,6 @@ This script also copies the `.env.example` to `.env` if no `.env` exists.
 pip install -r requirements.txt
 ```
 
-### 2. Setup the .env File
-
-Create a private/uncommitted `.env` file in the same directory as the script and add the following variables:
-
-```ini
-GOOGLE_SHEET_NAME=Name of your Google Sheet
-GOOGLE_API_CREDENTIALS=Path to your Google service account JSON file
-```
-
 ### 2. Configure Your Environment via Deployment
 
 Simply run the deployment script. The `deploy.sh` script will:
@@ -35,6 +26,11 @@ Simply run the deployment script. The `deploy.sh` script will:
 - If a `.env` file does not exist in the production directory, it will copy `.env.example` to `.env`.
 
 After running the deployment script, update the newly created `.env` file in the production directory with your actual configuration values (i.e., your private data and credentials).
+
+```ini
+GOOGLE_SHEET_NAME=Name of your Google Sheet
+GOOGLE_API_CREDENTIALS=Path to your Google service account JSON file
+```
 
 Run the deployment script with:
 
