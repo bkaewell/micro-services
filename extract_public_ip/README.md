@@ -31,6 +31,7 @@ After running the deployment script, update the newly created `.env` file in the
 ```ini
 GOOGLE_SHEET_NAME=Name of your Google Sheet
 GOOGLE_API_CREDENTIALS=Path to your Google service account JSON file
+LOG_DIR=Path to your production directory where the logs reside
 ```
 
 Run the deployment script with:

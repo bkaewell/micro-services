@@ -12,7 +12,7 @@ load_dotenv()
 # Logging setup
 LOG_DIR = os.getenv("LOG_DIR", ".")
 os.makedirs(LOG_DIR, exist_ok=True)  # Ensure logs directory exists
-log_filename = os.path.join(LOG_DIR, f"streaming_ip_tracker_{datetime.datetime.now().strftime('%Y-%m-%d')}.log")
+log_filename = os.path.join(LOG_DIR, f"extract_public_ip_{datetime.datetime.now().strftime('%Y-%m-%d')}.log")
 
 logging.basicConfig(
     filename=log_filename,
