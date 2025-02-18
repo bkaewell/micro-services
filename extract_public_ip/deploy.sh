@@ -7,10 +7,6 @@ DEPLOY_BASE=~/deployed_scripts
 # Set the subdirectory for the specific script
 SCRIPT_SUBDIR=extract_public_ip
 
-# Define directories
-# REPO_DIR=~/repo/automation-scripts/extract_public_ip
-# DEPLOY_DIR=~/deployed_extract_public_ip
-
 # Define the full paths for the repository and deployed script directories
 REPO_DIR="$REPO_BASE/$SCRIPT_SUBDIR"
 DEPLOY_DIR="$DEPLOY_BASE/$SCRIPT_SUBDIR"
@@ -62,6 +58,25 @@ if [ ! -f "$DEPLOY_DIR/.env" ]; then
     echo "Copied .env.example to deployed directory."
 else
     echo ".env file already exists in '$DEPLOY_DIR'. Skipping copy."
+fi
+
+# Copy the cron job file from the repository to the deployment's cron_job subdirectory.
+CRON_SOURCE="$REPO_DIR/extract_public_ip_address.cron"
+CRON_DEST="$DEPLOY_DIR/cron_job/extract_public_ip_address.cron"
+if [ -f "$CRON_SOURCE" ]; then
+    cp "$CRON_SOURCE" "$CRON_DEST"
+    echo "Cron job file copied to '$DEPLOY_DIR/cron_job'."
+else
+    echo "No cron job file found in the repository at '$CRON_SOURCE'."
+fi
+
+# Automatically load the cron job from the deployed cron_job directory if the file exists.
+if [ -f "$CRON_DEST" ]; then
+    echo "Installing cron job from '$CRON_DEST'..."
+    crontab "$CRON_DEST"
+    echo "Cron job installed."
+else
+    echo "No cron job file found at '$CRON_DEST'. Skipping cron job installation."
 fi
 
 echo "Deployment complete."

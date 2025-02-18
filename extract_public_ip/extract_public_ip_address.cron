@@ -1,0 +1,3 @@
+# Cron job for extracting public IP address at 6 PM daily
+0 18 * * * cd ~/deployed_scripts/extract_public_ip && /usr/bin/python extract_public_ip_address.py >> logs/cron.log 2>&1
+
