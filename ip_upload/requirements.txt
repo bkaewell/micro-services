@@ -11,3 +11,5 @@ python-dotenv  # Loads .env files for secrets and configs
 # Date and time utilities (not needed for requirements.txt since built-in)
 # datetime
 # os
+# logging
+
