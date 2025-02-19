@@ -1,0 +1,42 @@
+
+# version: "3.8"  # Version header is optional, using the Compose file format
+
+services:
+  # -------------------------------------------------------------------
+  # Manual or Testing Runs Service: 'app'
+  # -------------------------------------------------------------------
+  # This service is intended for one-off or manual execution of the IP
+  # upload script. It overrides the container's default command to run the
+  # script immediately.
+  app:
+    build: .
+    env_file: .env
+    container_name: ip_uploader_app
+    # Run the Python script once (ideal for testing or manual runs)
+    command: /usr/local/bin/python /app/src/ip_upload.py
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - .:/app  # Mount the current directory into the container at /app
+      - ${GOOGLE_CREDS_HOST_DIR}:/creds:ro  # Mount the credentials directory from host into /creds in the container
+
+  # -------------------------------------------------------------------
+  # Continuously Scheduled Service: 'cron'
+  # -------------------------------------------------------------------
+  # This service is configured to run as a scheduled job using cron.
+  # It relies on the Dockerfile's entrypoint script (docker-entrypoint.sh)
+  # to check the CRON_ENABLED variable (.env). When enabled, the cron daemon runs
+  # as a foreground process, executing the scheduled job as defined in the
+  # cron file (e.g., cron/mycron).
+  cron:
+    build: .
+    env_file: .env
+    container_name: ip_uploader_cron
+    # We don't override the default command here; the entrypoint will handle it.
+    # Explicitly set the environment variable to enable cron (can also be set in .env)
+    environment:
+      - CRON_ENABLED=true
+    volumes:
+      - .:/app  # Mount the project directory into the container at /app
+      - ${GOOGLE_CREDS_HOST_DIR}:/creds:ro
+

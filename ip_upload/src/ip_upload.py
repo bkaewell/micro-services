@@ -8,15 +8,14 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Set up Google Sheets API credentials
-GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME")
-CREDENTIALS_FILE = os.getenv("GOOGLE_API_CREDENTIALS")
+# Set up Google Services API credentials
+GOOGLE_CREDS_PATH = os.getenv("GOOGLE_CREDS_PATH")
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 # Authenticate with Google Sheets
-creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPES)
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDS_PATH, SCOPES)
 client = gspread.authorize(creds)
-sheet = client.open(GOOGLE_SHEET_NAME).sheet1  # Open the first sheet
+sheet = client.open(os.getenv("GOOGLE_SHEET_NAME")).sheet1  # Open the first sheet
 
 # Retrieve the public IP address
 public_ip = get('https://api.ipify.org').text
