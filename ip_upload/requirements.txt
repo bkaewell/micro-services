@@ -1,9 +1,9 @@
-# Google Sheets API libraries
+# Google Services API libraries
 gspread  # Used for interacting with Google Sheets
 oauth2client  # Google authentication with service accounts
 
 # HTTP requests
-requests  # For making API requests
+requests  # For making external API endpoint requests
 
 # Environment variables
 python-dotenv  # Loads .env files for secrets and configs
@@ -12,4 +12,3 @@ python-dotenv  # Loads .env files for secrets and configs
 # datetime
 # os
 # logging
-

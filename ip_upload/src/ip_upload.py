@@ -27,8 +27,9 @@ sheet = client.open(GOOGLE_SHEET_NAME).worksheet("ip_monitor")  # Open sheet wit
 
 # Fetch column names dynamically
 headers = sheet.row_values(1)  # Assuming first row contains column names
+#print("Headers:", headers)
 
-# Define column indexes based on headers
+# Define column indexes based on headers (originally 0-based, now converted to 1-based)
 location_col = headers.index("Location") + 1
 ip_col = headers.index("Public IP Address") + 1
 timestamp_col = headers.index("Last Updated") + 1

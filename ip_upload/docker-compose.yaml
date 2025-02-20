@@ -1,6 +1,4 @@
 
-# version: "3.8"  # Version header is optional, using the Compose file format
-
 services:
   # -------------------------------------------------------------------
   # Manual or Testing Runs Service: 'app'
