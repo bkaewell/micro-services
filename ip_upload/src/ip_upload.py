@@ -35,38 +35,33 @@ timestamp_col = headers.index("Last Updated") + 1
 print("location_col=", location_col, "ip_col=", ip_col, "timestamp_col=", timestamp_col)
 
 # Retrieve the public IP address of the current device via an external API endpoint
-# public_ip = get('https://api.ipify.org').text
+# ip = get('https://api.ipify.org').text
 
 # Query an external API endpoint to retrieve the client's public IP address and geolocation metadata
 data = get("http://ip-api.com/json/").json()
 #print(data)  # Print full response (if needed)
-location, public_ip = data.get("city"), data.get("query")
+location, ip = data.get("city"), data.get("query")
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# Replace location if it exists in the mapping, otherwise keep it unchanged
+# Replace location if it exists in the dictionary mapping, otherwise keep it unchanged
 location = location_map.get(location, location)
 
-# Fetch all location values from the sheet
-locations = sheet.col_values(location_col)[1:]  # Exclude header row
-print(locations)
+# Fetch all location entries from the sheet
+locations = sheet.col_values(location_col)[1:]  # Exclude first row (header row)
+#print(locations)
 
 if location in locations:
     # Find the row number where the location exists
-    row_num = locations.index(location) + 2  # Offset for 1-based indexing and header row
-    print("row_num=", row_num, "location=", location)
-    sheet.update_cell(row_num, ip_col, public_ip)
+    # Convert 0-based index (from 'locations' list) to 1-based row index in Google Sheets
+    row_num = locations.index(location) + 2 # Offset for the first actual data row start at row 2
+
+    # Update the Google Sheet:
+    sheet.update_cell(row_num, ip_col, ip)
     sheet.update_cell(row_num, timestamp_col, timestamp)
     print(f"Updated existing location: {location}")
 else:
-    # Append a new row if location is not found
-    sheet.append_row([location, public_ip, timestamp])
+    # Append a new row if location is not found and update the Google Sheet
+    sheet.append_row([location, ip, timestamp])
     print(f"Added new location: {location}")
 
-
-# Update the Google Sheet:
-# Update the cells of the location and public IP of the current device
-#sheet.update(values=[[location]], range_name="A6")
-#sheet.update(values=[[public_ip]], range_name="B6")
-#sheet.update(values=[[timestamp]], range_name="C6")
-
-print(f"Updated Google Sheet: location={location}, public IP={public_ip}, timestamp={timestamp}")
+print(f"Updated Google Sheet: location={location}, public IP={ip}, timestamp={timestamp}")
