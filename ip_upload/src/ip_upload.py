@@ -65,4 +65,4 @@ else:
     sheet.append_row([location, ip, timestamp])
     print(f"Added new location: {location}")
 
-print(f"Updated Google Sheet: location={location}, public IP={ip}, timestamp={timestamp}")
+print(f"Updated Google Sheet: Location={location}, Public IP Address={ip}, Timestamp={timestamp}")

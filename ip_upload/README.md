@@ -1,3 +1,25 @@
+
+micro-services/                        # Root directory for all microservices
+└── ip_upload/                         # IP Upload microservice
+    ├── .env                           # Environment variable file (not committed)
+    ├── .env.example                   # Sample environment file for reference
+    ├── Dockerfile                     # Docker image configuration
+    ├── README.md                      # Detailed setup & deployment instructions for IP Upload (this file)
+    ├── cron/                          # Directory for scheduled jobs
+    │   └── .gitkeep                   # Placeholder to retain empty directory in Git
+    ├── docker-compose.yaml            # Docker Compose file for multi-container deployment
+    ├── requirements.txt               # Python dependencies list
+    ├── src/                           # Source code directory
+    │   ├── .gitkeep                   # Placeholder file to track directory
+    │   ├── ip_upload.py               # Core script for IP Upload functionality
+    │   └── ip_upload_with_logging.py  # Extended script with logging capabilities
+    └── tests/                         # Directory for test cases
+        └── .gitkeep                   # Placeholder to retain empty test directory in Git
+
+
+
+
+
 ## Quick Setup
 
 This repository contains:
