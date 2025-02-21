@@ -11,9 +11,21 @@ micro-services/                        # Root directory for all microservices
 ├── README.md                          # High-level repository documentation (this file)
 └── ip_upload/                         # IP Upload microservice (fully implemented)
 
-# Placeholder for Additional Microservices (Scalable & Generic)
+# Placeholder for Additional Microservices
 └── service-01/
 └── service-02/
 └── service-03/
 └── service-N/
 ```
+
+#### Scaling the Architecture
+This repository is built with scalability in mind. As I develop additional microservices, each will reside in its own subdirectory with dedicated setup and usage documentation. I encourage contributions and welcome enhancements to the architecture.
+
+#### Background
+The **IP Upload** microservice is designed to:
+
+**Process IP Address Data:** Process IP addresses efficiently.
+**Integrate with External APIs:** The service can be configured to work with third-party APIs (i.e. Google Services, ip-api, etc.).
+**Operate in a Containerized Environment:** Using Docker and Docker Compose to simplify deployment.
+
+For detailed instructions on setting up and running the IP Upload service, please see the README in the ip_upload/ folder.
