@@ -1,4 +1,4 @@
-# IP Upload Microservice 🚀
+# **IP Upload Microservice 🚀**
 
 A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration**.
 
@@ -8,7 +8,7 @@ A lightweight, containerized microservice for **IP address ingestion, processing
 - **Containerized Deployment**: Fully Dockerized for seamless deployment
 
 ## **⚡ Quick Setup**
-### 1. Clone the repo 
+### 1. Clone the repo
 ```bash
 git clone https://github.com/bkaewell/micro-services.git
 cd micro-services/ip_upload
@@ -62,7 +62,7 @@ python src/ip_upload.py
 pytest tests/
 ```
 
-**##🔄 Cron Job**
+## **🔄 Cron Job**
 The `cron/` directory is reserved for scheduled tasks. Configure and integrate cron jobs as needed for automated operations.
 
 ## **📂 Repository Overview**
