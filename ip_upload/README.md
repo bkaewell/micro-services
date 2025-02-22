@@ -1,9 +1,9 @@
 # **IP Upload Microservice 🚀**
 
-A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration**.
+A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration**
 
 ## **📌 Features**
-- **Process IP Address Data**: Efficiently process IP data for analytics or storage
+- **Process IP Address Data**: Efficiently process IP data for analytics and storage
 - **Integrate with External APIs**: Supports Google Services, ip-api, and more
 - **Containerized Deployment**: Fully Dockerized for seamless deployment
 
@@ -35,13 +35,13 @@ In the API key settings, [restrict usage](https://cloud.google.com/docs/authenti
 
 ## **🚀 Running the Service**
 ### Using Docker Compose
-1. Build and Start the Service
+Build and Start the Service
 
 ```bash
 docker-compose up --build
 ```
 
-2. Stop the Service
+Stop the Service
 
 ```bash
 docker-compose down
@@ -55,15 +55,15 @@ python src/ip_upload.py
 ```
 ## **🛠 Deployment & Testing**
 
-**- Production Deployment:** Use Docker Compose for consistency
-**- Run Tests:**
+**- Production Deployment:** Use Docker Compose for consistency  
+**- Run Tests:**  
 
 ```bash
 pytest tests/
 ```
 
 ## **🔄 Cron Job**
-The `cron/` directory is reserved for scheduled tasks. Configure and integrate cron jobs as needed for automated operations.
+The `cron/` directory is reserved for scheduled tasks. Configure and integrate cron jobs as needed for automated operations
 
 ## **📂 Repository Overview**
 ```
