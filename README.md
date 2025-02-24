@@ -17,8 +17,19 @@ micro-services/            # Root directory for all microservices
 #### **Scaling the Architecture**
 This repository is built with scalability in mind. As I develop additional microservices, each will reside in its own subdirectory with dedicated setup and usage documentation. I encourage contributions and welcome enhancements to the architecture.
 
-
-
 **🎯 Looking to contribute?** Open an issue or fork the repo!  
 **🏗 Author:** [Brian Kaewell](https://github.com/bkaewell)  
 **📧 Contact:** Please open an issue [here](https://github.com/bkaewell/micro-services/issues)  
+
+                     🔴
+                  •
+               •
+            🚀
+          •
+        •
+      •
+    •
+  •
+ •
+💥
+🌍
