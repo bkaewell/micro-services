@@ -21,6 +21,7 @@ This repository is built with scalability in mind. As I develop additional micro
 **🏗 Author:** [Brian Kaewell](https://github.com/bkaewell)  
 **📧 Contact:** Please open an issue [here](https://github.com/bkaewell/micro-services/issues)  
 
+```
                      🔴
                   •
                •
@@ -33,3 +34,4 @@ This repository is built with scalability in mind. As I develop additional micro
  •
 💥
 🌍
+```
