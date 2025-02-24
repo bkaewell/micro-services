@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Logging setup
-LOG_DIR = os.getenv("LOG_DIR", ".")
-os.makedirs(LOG_DIR, exist_ok=True)  # Ensure logs directory exists
-log_filename = os.path.join(LOG_DIR, f"extract_public_ip_{datetime.datetime.now().strftime('%Y-%m-%d')}.log")
+LOG_PATH = os.getenv("LOG_PATH", ".")
+os.makedirs(LOG_PATH, exist_ok=True)  # Ensure logs directory exists
+log_filename = os.path.join(LOG_PATH, f"extract_public_ip_{datetime.datetime.now().strftime('%Y-%m-%d')}.log")
 
 logging.basicConfig(
     filename=log_filename,
@@ -23,7 +23,7 @@ logging.info("Script started.")
 
 # Google Sheets API setup
 GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME")
-CREDENTIALS_FILE = os.getenv("GOOGLE_API_CREDENTIALS")
+GOOGLE_API_KEY_PATH = os.getenv("GOOGLE_API_KEY_PATH")
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 """
@@ -31,7 +31,7 @@ Authenticate with Google Sheets API and return the sheet object.
 """
 def authenticate_google_sheets():
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPES)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_PATH, SCOPES)
         client = gspread.authorize(creds)
         sheet = client.open(GOOGLE_SHEET_NAME).sheet1  # Open the first sheet
         logging.info("Google Sheets authentication successful.")

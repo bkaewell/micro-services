@@ -16,7 +16,7 @@ services:
       - TZ=America/New_York
     volumes:
       - .:/app  # Mount the current directory into the container at /app
-      - ${GOOGLE_CREDS_HOST_DIR}:/creds:ro  # Mount the credentials directory from host into /creds in the container
+      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro  # Mount the API keys directory from host into /creds in the container
 
   # -------------------------------------------------------------------
   # Continuously Scheduled Service: 'cron'
@@ -33,8 +33,8 @@ services:
     # We don't override the default command here; the entrypoint will handle it.
     # Explicitly set the environment variable to enable cron (can also be set in .env)
     environment:
+      - TZ=America/New_York
       - CRON_ENABLED=true
     volumes:
       - .:/app  # Mount the project directory into the container at /app
-      - ${GOOGLE_CREDS_HOST_DIR}:/creds:ro
-
+      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro

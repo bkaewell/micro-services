@@ -5,23 +5,23 @@ import datetime
 import os
 from dotenv import load_dotenv
 
-# Dictionary-based replacement
-location_map = {
-    "Warminster": "Ivyland",
-    "Los Angeles": "Hollywood",
-    "New York": "Manhattan"
-}
-
 # Load environment variables from .env file
 load_dotenv()
 
+# Specific location maps from .env file
+location_env = os.getenv("LOCATION_MAP")
+
+# Convert the string into a dictionary; Use dictionary-based replacement 
+location_map = dict(item.split(":") for item in location_env.split(","))
+#print(location_map)
+
 # Google Sheets config from .env file
-GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME")
-GOOGLE_CREDS_PATH = os.getenv("GOOGLE_CREDS_PATH") 
+GOOGLE_SHEET_NAME   = os.getenv("GOOGLE_SHEET_NAME")
+GOOGLE_API_KEY_PATH = os.getenv("GOOGLE_API_KEY_PATH")
 
 # Authenticate with Google Sheets
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDS_PATH, SCOPES)
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_PATH, SCOPES)
 client = gspread.authorize(creds)
 sheet = client.open(GOOGLE_SHEET_NAME).worksheet("ip_monitor")  # Open sheet with the IP address table
 
@@ -33,10 +33,10 @@ headers = sheet.row_values(1)  # Assuming first row contains column names
 location_col = headers.index("Location") + 1
 ip_col = headers.index("Public IP Address") + 1
 timestamp_col = headers.index("Last Updated") + 1
-print("location_col=", location_col, "ip_col=", ip_col, "timestamp_col=", timestamp_col)
+#print("location_col=", location_col, "ip_col=", ip_col, "timestamp_col=", timestamp_col)
 
 # Retrieve the public IP address of the current device via an external API endpoint
-# ip = get('https://api.ipify.org').text
+#ip = get('https://api.ipify.org').text
 
 # Query an external API endpoint to retrieve the client's public IP address and geolocation metadata
 data = get("http://ip-api.com/json/").json()
