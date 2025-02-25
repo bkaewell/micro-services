@@ -17,16 +17,17 @@ location_map = dict(item.split(":") for item in location_env.split(","))
 
 # Google Sheets config from .env file
 GOOGLE_SHEET_NAME   = os.getenv("GOOGLE_SHEET_NAME")
+GOOGLE_WORKSHEET = os.getenv("GOOGLE_WORKSHEET")
 GOOGLE_API_KEY_PATH = os.getenv("GOOGLE_API_KEY_PATH")
 
 # Authenticate with Google Sheets
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_PATH, SCOPES)
 client = gspread.authorize(creds)
-sheet = client.open(GOOGLE_SHEET_NAME).worksheet("ip_monitor")  # Open sheet with the IP address table
+sheet = client.open(GOOGLE_SHEET_NAME).worksheet(GOOGLE_WORKSHEET)  # Open sheet with the IP address table
 
-# Fetch column names dynamically
-headers = sheet.row_values(1)  # Assuming first row contains column names
+# Fetch column names dynamically (assuming first row contains column names)
+headers = sheet.row_values(1)
 #print("Headers:", headers)
 
 # Define column indexes based on headers (originally 0-based, now converted to 1-based)
