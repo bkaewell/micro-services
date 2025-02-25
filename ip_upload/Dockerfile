@@ -11,8 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application files
 COPY src/ ./src/
 
-# Install cron
-RUN apt-get update && apt-get install -y cron
+# Install cron and timezone data
+RUN apt-get update && apt-get install -y cron tzdata
+
+# Set the timezone inside the container
+ENV TZ=America/New_York
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Copy the cron job into the container
 COPY cron/mycron /etc/cron.d/mycron

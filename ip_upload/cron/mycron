@@ -1,4 +1,10 @@
-# Run the IP Upload script every 5 minutes
-*/1 * * * * root /usr/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
+# Run the IP Upload script once per day at 23:59
+#┌─────────  Minute (0 - 59)
+#│  ┌──────  Hour (0 - 23)
+#│  │ ┌────  Day of month (1 - 31)
+#│  │ │ ┌──  Month (1 - 12)
+#│  │ │ │ ┌─ Day of week (0 - 6) (Sunday = 0 or 7)
+
+59 23 * * * /usr/local/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
 
 # Required newline at the end of the file!
