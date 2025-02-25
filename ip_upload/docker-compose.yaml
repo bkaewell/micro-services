@@ -1,31 +1,29 @@
 
 services:
   # -------------------------------------------------------------------
-  # Manual or Testing Runs Service: 'app'
+  # Manual Testing Mode
   # -------------------------------------------------------------------
-  # This service is intended for one-off or manual execution of the IP
-  # upload script. It overrides the container's default command to run the
-  # script immediately.
   app:
     build: .
-    env_file: .env
+    env_file: .env  # set environment variables inside the container
     container_name: ip_uploader_app
-    # Run the Python script once (ideal for testing or manual runs)
     command: /usr/local/bin/python /app/src/ip_upload.py
     environment:
       - TZ=America/New_York
     volumes:
-      - .:/app  # Mount the current directory into the container at /app
-      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro  # Mount the API keys directory from host into /creds in the container
+      # Mount the current directory into the container at /app
+      - .:/app
+      # Mount the host API keys path (from .env) to the container credentials path
+      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro
 
   # -------------------------------------------------------------------
-  # Continuously Scheduled Service: 'cron'
+  # Scheduled Execution Mode
   # -------------------------------------------------------------------
   # This service is configured to run as a scheduled job using cron.
   # It relies on the Dockerfile's entrypoint script (docker-entrypoint.sh)
   # to check the CRON_ENABLED variable (.env). When enabled, the cron daemon runs
   # as a foreground process, executing the scheduled job as defined in the
-  # cron file (e.g., cron/mycron).
+  # cron file (i.e. cron/mycron).
   cron:
     build: .
     env_file: .env
@@ -34,7 +32,10 @@ services:
     # Explicitly set the environment variable to enable cron (can also be set in .env)
     environment:
       - TZ=America/New_York
-      - CRON_ENABLED=true
+      - CRON_ENABLED=true   #Override the environment variable 
+    # This service uses the default entrypoint, which will start cron    
     volumes:
-      - .:/app  # Mount the project directory into the container at /app
+      # Mount the current directory into the container at /app
+      - .:/app
+      # Mount the host API keys path (from .env) to the container credentials path
       - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro

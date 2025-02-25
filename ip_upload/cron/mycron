@@ -1,0 +1,4 @@
+# Run the IP Upload script every 5 minutes
+*/1 * * * * root /usr/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
+
+# Required newline at the end of the file!
