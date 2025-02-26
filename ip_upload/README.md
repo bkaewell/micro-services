@@ -1,11 +1,15 @@
-# **IP Upload Microservice 🚀**
+# **🚀 IP Upload Microservice**
 
-A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration**
+A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration.** Designed with **scalability, automation, and real-time monitoring** in mind.
+---
 
-## **📌 Features**
-- **Process IP Address Data**: Efficiently process IP data for analytics and storage
-- **Integrate with External APIs**: Supports Google Services, ip-api, and more
-- **Containerized Deployment**: Fully Dockerized for seamless deployment
+## 📌 Features
+- **Process IP Address Data:** Efficiently ingest and store IP-related data for analytics
+- **Integrate with External APIs:** Supports Google Services, ip-api, and more
+- **Automated & On-Demand Execution:** Run as a **scheduled cron job** or **manually**
+- **Containerized Deployment:** Fully Dockerized for seamless deployment
+- **Logging & Monitoring:** Supports **real-time logs for operational insights**
+
 
 ## **⚡ Quick Setup**
 ### 1. Clone the repo
@@ -18,7 +22,7 @@ cd micro-services/ip_upload
 ```bash
 cp .env.example .env
 ```
-Update `.env` with your API keys and configuration
+Update `.env` to configure **API keys, Google filenames, location mappings, and cron settings.**
 
 ### 3. (Optional) Set up Google API key
 
@@ -33,47 +37,87 @@ GOOGLE_API_KEY=your_api_key_here
 5. (Optional) Secure your API key:
 In the API key settings, [restrict usage](https://cloud.google.com/docs/authentication/api-keys#securing) (i.e. by HTTP referrers or IP addresses) for enhanced security
 
-## **🚀 Running the Service**
-### Using Docker Compose
-Build and Start the Service
-
+## 🐳 Containerization
+This microservice is **containerized using Docker** and **orchestrated with Docker Compose** for both **manual execution and scheduled automation.**
+### Run the Service in Two Modes
 ```bash
+# Start both manual (`app`) and automated cron (`cron`) services
 docker-compose up --build
 ```
-
-Stop the Service
-
+To run **only one mode,** specify the service:
+```bash
+docker-compose up app -d   # Manual test mode
+docker-compose up cron -d  # Scheduled cron job mode
+```
+To **stop all running services:**
 ```bash
 docker-compose down
 ```
 
-### Running Locally (Without Docker)
+## ⚙️ DevOps & Automation
+🕒 Cron Job Schedule (`cron/mycron`):
+Runs once per day at 23:59 New York time:
+```bash
+59 23 * * * /usr/local/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
+```
 
+### How Cron Jobs Are Integrated
+1. `cron/mycron` → Defines the schedule
+2. `docker-entrypoint.sh` → Determines whether to start cron or execute manually
+3. `docker-compose.yaml` → Defines the cron job as a separate service
+
+## 👨‍💻 Development
+For debugging or running the script locally **without Docker,** you can execute manually:
 ```bash
 pip install -r requirements.txt
 python src/ip_upload.py
 ```
-## **🛠 Deployment & Testing**
 
-**- Production Deployment:** Use Docker Compose for consistency  
-**- Run Tests:**  
+## 🛠 Deployment & Monitoring
+This microservice supports **real-time observability** using Docker logs.
 
+### Production Deployment
+Deploy in **detached mode** to run in the background:
+```bash
+docker-compose up -d
+```
+Verify running services:
+```bash
+docker ps
+```
+
+### Real-time Logs & Monitoring
+Monitor logs for **manual execution (`app`)** or **cron execution (`cron`):**
+```bash
+docker logs -f <ip_uploader_app | ip_uploader_cron>
+```
+For more details:
+```bash
+docker-compose logs --tail=100 -f
+```
+
+## Testing (TBD)
+### Run Unit Tests
 ```bash
 pytest tests/
 ```
 
-## **🔄 Cron Job**
-The `cron/` directory is reserved for scheduled tasks. Configure and integrate cron jobs as needed for automated operations
+### Run Manual IP Upload Test
+```bash
+docker exec -it ip_uploader_app python /app/src/ip_upload.py
+```
 
 ## **📂 Repository Overview**
 ```
 ip_upload/
-├── src/                # IP processing scripts
-├── tests/              # Unit tests
-├── Dockerfile          # Containerization
-├── .env.example        # Sample env file
-├── README.md           # This file
-└── docker-compose.yaml # Docker setup
+├── src/                    # IP processing scripts
+├── tests/                  # Unit tests
+├── cron/                   # Scheduled cron jobs
+├── docker-entrypoint.sh    # Controls execution (manual vs. cron)
+├── Dockerfile              # Containerization
+├── .env.example            # Sample env file
+├── README.md               # This file
+└── docker-compose.yaml     # Docker setup
 ```
 
 ## **📌 Why This Microservice?**
