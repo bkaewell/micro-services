@@ -11,24 +11,24 @@ A lightweight, containerized microservice for **IP address ingestion, processing
   
   
 ## **⚡ Quick Setup**
-### 1. Clone the repo
+### Clone the repo
 ```bash
 git clone https://github.com/bkaewell/micro-services.git
 cd micro-services/ip_upload
 ```
 
-### 2. Set up environment variables
+### Set up environment variables
 ```bash
 cp .env.example .env
 ```
-Update `.env` to configure **API keys, Google filenames, location mappings, and cron settings.**
+Update `.env` to configure **API keys, Google filenames/worksheet tabs, location mappings, and cron settings.**
 
-### 3. (Optional) Set up Google API key
+### (Optional) Set up Google API key
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Enable required APIs (i.e. Google Sheets, Google Maps, Cloud Vision, etc.)
 3. Generate an API key under APIs & Services > Credentials
-4. Add it to `.env`:
+4. Add the API key to the `.env`
 5. (Optional) Secure your API key:
 In the API key settings, [restrict usage](https://cloud.google.com/docs/authentication/api-keys#securing) (i.e. by HTTP referrers or IP addresses) for enhanced security
   
