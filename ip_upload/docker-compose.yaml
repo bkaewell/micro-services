@@ -13,8 +13,8 @@ services:
     volumes:
       # Mount the current directory into the container at /app
       - .:/app
-      # Mount the host API keys path (from .env) to the container credentials path
-      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro
+      # Mount the host API keys path (from .env) and mirror the local path inside the container
+      - ${GOOGLE_API_KEY_FILE}:/root/.config/api_keys:ro
 
   # -------------------------------------------------------------------
   # Scheduled Execution Mode
@@ -37,5 +37,5 @@ services:
     volumes:
       # Mount the current directory into the container at /app
       - .:/app
-      # Mount the host API keys path (from .env) to the container credentials path
-      - ${GOOGLE_API_KEY_HOST_PATH}:/creds:ro
+      # Mount the host API keys path (from .env) and mirror the local path inside the container
+      - ${GOOGLE_API_KEY_FILE}:/root/.config/api_keys:ro

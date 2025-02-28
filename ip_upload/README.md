@@ -38,7 +38,7 @@ This microservice is **containerized using Docker** and **orchestrated with Dock
 ### Run the Service in Two Modes
 ```bash
 # Start both manual (`app`) and automated cron (`cron`) services
-docker-compose up --build
+docker-compose up --build -d
 ```
 To run **only one mode,** specify the service:
 ```bash

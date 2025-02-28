@@ -18,11 +18,18 @@ location_map = dict(item.split(":") for item in location_env.split(","))
 # Google Sheets config from .env file
 GOOGLE_SHEET_NAME   = os.getenv("GOOGLE_SHEET_NAME")
 GOOGLE_WORKSHEET = os.getenv("GOOGLE_WORKSHEET")
-GOOGLE_API_KEY_PATH = os.getenv("GOOGLE_API_KEY_PATH")
+GOOGLE_API_KEY_FILE = os.getenv("GOOGLE_API_KEY_FILE")
+
+# Expand `~` to full home directory path
+GOOGLE_API_KEY_FILE = os.path.expanduser(GOOGLE_API_KEY_FILE)
+
+# Ensure file exists before proceeding
+if not os.path.exists(GOOGLE_API_KEY_FILE):
+    raise FileNotFoundError(f"API key file not found: {GOOGLE_API_KEY_FILE}")
 
 # Authenticate with Google Sheets
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_PATH, SCOPES)
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_FILE, SCOPES)
 client = gspread.authorize(creds)
 sheet = client.open(GOOGLE_SHEET_NAME).worksheet(GOOGLE_WORKSHEET)  # Open sheet with the IP address table
 
