@@ -14,7 +14,7 @@ services:
       # Mount the current directory into the container at /app
       - .:/app
       # Mount the host API keys path (from .env) and mirror the local path inside the container
-      - ${GOOGLE_API_KEY_FILE}:/root/.config/api_keys:ro
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro  # Dynamically mount based on .env
 
   # -------------------------------------------------------------------
   # Scheduled Execution Mode
@@ -38,4 +38,4 @@ services:
       # Mount the current directory into the container at /app
       - .:/app
       # Mount the host API keys path (from .env) and mirror the local path inside the container
-      - ${GOOGLE_API_KEY_FILE}:/root/.config/api_keys:ro
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro  # Dynamically mount based on .env

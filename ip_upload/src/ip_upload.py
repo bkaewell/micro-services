@@ -18,18 +18,25 @@ location_map = dict(item.split(":") for item in location_env.split(","))
 # Google Sheets config from .env file
 GOOGLE_SHEET_NAME   = os.getenv("GOOGLE_SHEET_NAME")
 GOOGLE_WORKSHEET = os.getenv("GOOGLE_WORKSHEET")
-GOOGLE_API_KEY_FILE = os.getenv("GOOGLE_API_KEY_FILE")
 
-# Expand `~` to full home directory path
-GOOGLE_API_KEY_FILE = os.path.expanduser(GOOGLE_API_KEY_FILE)
+# Get API key paths from .env file
+local_api_key = os.getenv("GOOGLE_API_KEY_LOCAL")
+docker_api_key = os.getenv("GOOGLE_API_KEY_DOCKER")
 
-# Ensure file exists before proceeding
-if not os.path.exists(GOOGLE_API_KEY_FILE):
-    raise FileNotFoundError(f"API key file not found: {GOOGLE_API_KEY_FILE}")
+
+# Determine which API key path to use
+if os.path.exists("/.dockerenv"):  # Running inside Docker
+    api_key_path = docker_api_key
+else:  # Running locally
+    api_key_path = os.path.expanduser(local_api_key)  # Expand `~` in local paths
+
+# Ensure the file exists before proceeding
+if not os.path.exists(api_key_path):
+    raise FileNotFoundError(f"API key file not found: {api_key_path}")
 
 # Authenticate with Google Sheets
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_API_KEY_FILE, SCOPES)
+creds = ServiceAccountCredentials.from_json_keyfile_name(api_key_path, SCOPES)
 client = gspread.authorize(creds)
 sheet = client.open(GOOGLE_SHEET_NAME).worksheet(GOOGLE_WORKSHEET)  # Open sheet with the IP address table
 
