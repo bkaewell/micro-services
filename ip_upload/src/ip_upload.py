@@ -1,12 +1,48 @@
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from requests import get
-import datetime
 import os
+import gspread
+import datetime
+import CloudFlare
+
+from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
+from requests import get
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Cloudflare configuration
+api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
+record_name = os.getenv("CLOUDFLARE_RECORD_NAME")
+
+if not api_token or not zone_id or not record_name:
+    raise Exception("CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID, and CLOUDFLARE_RECORD_NAME must be set in .env")
+
+cf = CloudFlare.CloudFlare(token=api_token)
+
+# Get current public IP
+current_ip = requests.get("https://api.ipify.org").text
+print(f"Current public IP: {current_ip}")
+
+# Fetch existing DNS record
+dns_records = cf.zones.dns_records.get(zone_id, params={'name': record_name})
+record = dns_records[0]
+if record['content'] != current_ip:
+    print(f"Updating IP from {record['content']} to {current_ip}")
+    cf.zones.dns_records.put(
+        zone_id,
+        record['id'],
+        data={
+            'type': 'A',
+            'name': record_name,
+            'content': current_ip,
+            'proxied': False  # Keep grey cloud
+        }
+    )
+else:
+    print("IP is current, no update needed")
+
+
 
 # Specific location maps from .env file
 location_env = os.getenv("LOCATION_MAP")
