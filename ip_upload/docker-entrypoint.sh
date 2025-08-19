@@ -3,12 +3,7 @@
 # Exit on error
 set -e
 
-# Load environment variables from .env
-#if [ -f .env ]; then
-#  export $(grep -v '^#' .env | xargs)
-#fi
-
-# Check if CRON_ENABLED is set (Docker Compose loads it automatically)
+# Check if CRON_ENABLED is set (docker-compose.yaml loads it automatically)
 CRON_ENABLED=${CRON_ENABLED:-false}  # Default to false if not set
 
 if [ "$CRON_ENABLED" = "true" ]; then

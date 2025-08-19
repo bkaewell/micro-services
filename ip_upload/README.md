@@ -10,7 +10,7 @@ A lightweight, containerized microservice for **IP address ingestion, processing
 - **Logging & Monitoring:** Supports **real-time logs for operational insights**
   
   
-## **⚡ Quick Setup**
+## ⚡ Quick Setup
 ### Clone the repo
 ```bash
 git clone https://github.com/bkaewell/micro-services.git
@@ -107,7 +107,7 @@ docker exec -it ip_uploader_app python /app/src/ip_upload.py
 ```
   
   
-## **📂 Repository Overview**
+## 📂 Repository Overview
 ```
 ip_upload/
 ├── src/                    # IP processing scripts
@@ -121,5 +121,5 @@ ip_upload/
 ```
   
   
-## **📌 Why This Microservice?**
+## Why This Microservice?
 Designed for **scalability, efficiency, and ease of deployment,** this service simplifies **IP data ingestion** with robust API integrations and a containerized environment.
