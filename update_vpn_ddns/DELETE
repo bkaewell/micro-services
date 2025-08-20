@@ -1,0 +1,33 @@
+# 1. Check the Homebrew Python path
+which python3
+# Example output: /opt/homebrew/bin/python3
+
+python3 --version
+# Should be 3.13.2 (Homebrew Python)
+
+# 2. Make sure Poetry is configured to create a .venv in the project root
+poetry config virtualenvs.in-project true
+
+# 3. Remove any old virtualenv for this project
+poetry env list
+poetry env remove python3.13
+
+# 4. Tell Poetry to use the Homebrew Python explicitly
+poetry env use /opt/homebrew/bin/python3
+
+# 5. Install dependencies and generate the local .venv
+poetry install
+
+# 6. Verify the environment
+poetry env info
+poetry run python --version
+# Should show 3.13.2
+
+# 7. Activate the project-local virtualenv manually (optional)
+source .venv/bin/activate
+python --version
+# Should also show 3.13.2
+
+# From here, any pip installs or python commands are isolated to this project
+
+
