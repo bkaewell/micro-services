@@ -29,7 +29,7 @@ def update_dns_record(cloudflare_config,
         "type": "A",
         "name": dns_name,
         "content": ip,     # Update to the new IP
-        "ttl": 120,
+        "ttl": 60,         # Time to Live 
         "proxied": False   # Keep grey cloud
     }
 
@@ -47,17 +47,17 @@ def update_dns_record(cloudflare_config,
 
     record_id = records[0]["id"]
     current_ip = records[0]["content"]
-    print(f"Current IP for {dns_name}: {current_ip}")
+    #print(f"Current IP for {dns_name}: {current_ip}")
 
     # Update DNS record if IP has changed
     if current_ip != ip:
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
-        #resp = requests.put(update_url, headers=header, json=data)
-        #resp.raise_for_status()
-        print(f"✅  Updated {dns_name}: {current_ip} → {ip}")
+        resp = requests.put(update_url, headers=header, json=data)
+        resp.raise_for_status()
+        #print(f"✅  Updated {dns_name}: {current_ip} → {ip}")
         return True
     else:
-        print(f"ℹ️  No update needed for {dns_name}, IP unchanged")
+        #print(f"ℹ️  No update needed for {dns_name}, IP unchanged")
         return False
 
 
@@ -92,7 +92,7 @@ def upload_ip(google_config,
     # Get header row to dynamically find column indices
     headers = sheet.row_values(1)
     dns_col = headers.index("DNS") + 1
-    ip_col = headers.index("Public IP Address") + 1
+    ip_col = headers.index("IP") + 1
     timestamp_col = headers.index("Last Updated") + 1
 
     # Get all values from DNS column (excluding header)
@@ -104,9 +104,9 @@ def upload_ip(google_config,
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.update_cell(row_num, ip_col, ip)
         sheet.update_cell(row_num, timestamp_col, timestamp)
-        print(f"✅  Updated DNS '{dns_name}': IP={ip}, Timestamp={timestamp}")
+        #print(f"✅ Uploaded IP {ip} for DNS '{dns_name}' at {timestamp}")
     else:
-        print(f"⚠️  DNS name '{dns_name}' not found in sheet — add it first.")
+        print(f"⚠️ DNS name '{dns_name}' not found in sheet — add it first")
 
 
 def main():
@@ -128,7 +128,7 @@ def main():
 
     # Fetch current public IP
     current_ip = requests.get("https://api.ipify.org").text
-    print(f"Detected public IP: {current_ip}")
+    #print(f"Detected public IP: {current_ip}")
 
     # Update the DNS record
     update_dns_record(cloudflare_config,
