@@ -1,16 +1,29 @@
 
 services:
+  # -------------------------------------------------------------------
+  # Manual Testing Mode
+  # -------------------------------------------------------------------
   app:
     build: .
     env_file: .env
     container_name: vpn_ddns_app
-    command: poetry run python /app/src/update_vpn_ddns.py
+    #command: poetry run python /app/src/update_vpn_ddns.py
     environment:
       - TZ=America/New_York
     volumes:
+      # Mount the current directory into the container at /app
       - .:/app
-      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+      # Mount the host API keys path (from .env) and mirror the local path inside the container
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro   # Dynamically mount based on .env
 
+  # -------------------------------------------------------------------
+  # Scheduled Execution Mode
+  # -------------------------------------------------------------------
+  # This service is configured to run as a scheduled job using cron.
+  # It relies on the Dockerfile's entrypoint script (docker-entrypoint.sh)
+  # to check the CRON_ENABLED variable (.env). When enabled, the cron daemon runs
+  # as a foreground process, executing the scheduled job as defined in the
+  # cron file (i.e. cron/mycron).
   cron:
     build: .
     env_file: .env
@@ -21,46 +34,3 @@ services:
     volumes:
       - .:/app
       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
-
-
-
-# services:
-#   # -------------------------------------------------------------------
-#   # Manual Testing Mode
-#   # -------------------------------------------------------------------
-#   app:
-#     build: .
-#     env_file: .env  # set environment variables inside the container
-#     container_name: ip_uploader_app
-#     command: /usr/local/bin/python /app/src/ip_upload.py
-#     environment:
-#       - TZ=America/New_York
-#     volumes:
-#       # Mount the current directory into the container at /app
-#       - .:/app
-#       # Mount the host API keys path (from .env) and mirror the local path inside the container
-#       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro  # Dynamically mount based on .env
-
-#   # -------------------------------------------------------------------
-#   # Scheduled Execution Mode
-#   # -------------------------------------------------------------------
-#   # This service is configured to run as a scheduled job using cron.
-#   # It relies on the Dockerfile's entrypoint script (docker-entrypoint.sh)
-#   # to check the CRON_ENABLED variable (.env). When enabled, the cron daemon runs
-#   # as a foreground process, executing the scheduled job as defined in the
-#   # cron file (i.e. cron/mycron).
-#   cron:
-#     build: .
-#     env_file: .env
-#     container_name: ip_uploader_cron
-#     # We don't override the default command here; the entrypoint will handle it.
-#     # Explicitly set the environment variable to enable cron (can also be set in .env)
-#     environment:
-#       - TZ=America/New_York
-#       - CRON_ENABLED=true   #Override the environment variable 
-#     # This service uses the default entrypoint, which will start cron    
-#     volumes:
-#       # Mount the current directory into the container at /app
-#       - .:/app
-#       # Mount the host API keys path (from .env) and mirror the local path inside the container
-#       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro  # Dynamically mount based on .env
