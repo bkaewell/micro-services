@@ -1,10 +1,10 @@
-# The IP Upload script will execute once per day at 23:59 (New York time)
+# The Update VPN DDNS script will execute once per minute (New York time)
 #┌─────────  Minute (0 - 59)
 #│  ┌──────  Hour (0 - 23)
 #│  │ ┌────  Day of month (1 - 31)
 #│  │ │ ┌──  Month (1 - 12)
 #│  │ │ │ ┌─ Day of week (0 - 6) (Sunday = 0 or 7)
 
-59 23 * * * /usr/local/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
+* * * * * /usr/local/bin/python3 -m update_vpn_ddns.__main__ >> /var/log/cron.log 2>&1
 
 # Required newline at the end of the file
