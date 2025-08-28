@@ -46,13 +46,18 @@ COPY cron/mycron /etc/cron.d/mycron
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # -------------------------------------------------------------------
-# 6. Permissions and cron setup
+# 6. Update PYTHONPATH so Python finds src/
+# -------------------------------------------------------------------
+ENV PYTHONPATH=/app/src:$PYTHONPATH
+
+# -------------------------------------------------------------------
+# 7. Permissions and cron setup
 # -------------------------------------------------------------------
 RUN chmod 0644 /etc/cron.d/mycron \
     && crontab /etc/cron.d/mycron \
     && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # -------------------------------------------------------------------
-# 7. Entrypoint
+# 8. Entrypoint
 # -------------------------------------------------------------------
 CMD ["/usr/local/bin/docker-entrypoint.sh"]
