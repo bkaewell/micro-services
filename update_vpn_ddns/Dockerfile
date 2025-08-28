@@ -10,7 +10,6 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
-    cron \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,15 +34,13 @@ RUN poetry config virtualenvs.create false
 # -------------------------------------------------------------------
 COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-interaction --no-ansi --no-root
-#RUN poetry install --no-interaction --no-ansi --no-root --without dev
+# For production without dev dependencies, uncomment:
 #RUN poetry install --no-root --without dev
 
 # -------------------------------------------------------------------
-# 5. Copy application code and cron configs
+# 5. Copy application code 
 # -------------------------------------------------------------------
 COPY src ./src
-COPY cron/mycron /etc/cron.d/mycron
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # -------------------------------------------------------------------
 # 6. Update PYTHONPATH so Python finds src/
@@ -51,13 +48,6 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENV PYTHONPATH=/app/src:$PYTHONPATH
 
 # -------------------------------------------------------------------
-# 7. Permissions and cron setup
+# 7. Default command (overridden by docker-compose)
 # -------------------------------------------------------------------
-RUN chmod 0644 /etc/cron.d/mycron \
-    && crontab /etc/cron.d/mycron \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# -------------------------------------------------------------------
-# 8. Entrypoint
-# -------------------------------------------------------------------
-CMD ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["python", "-m", "update_vpn_ddns.__main__"]

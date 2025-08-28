@@ -7,7 +7,9 @@ services:
     build: .
     env_file: .env
     container_name: vpn_ddns_app
-    #command: poetry run python /app/src/update_vpn_ddns.py
+    command: >
+      sh -c "export PYTHONPATH=/app/src:$PYTHONPATH &&
+             python -m update_vpn_ddns.__main__"
     environment:
       - TZ=America/New_York
     volumes:
@@ -19,18 +21,18 @@ services:
   # -------------------------------------------------------------------
   # Scheduled Execution Mode
   # -------------------------------------------------------------------
-  # This service is configured to run as a scheduled job using cron.
-  # It relies on the Dockerfile's entrypoint script (docker-entrypoint.sh)
-  # to check the CRON_ENABLED variable (.env). When enabled, the cron daemon runs
-  # as a foreground process, executing the scheduled job as defined in the
-  # cron file (i.e. cron/mycron).
   cron:
     build: .
     env_file: .env
     container_name: vpn_ddns_cron
+    command: >
+      sh -c "export PYTHONPATH=/app/src:$PYTHONPATH &&
+             while true; do
+               python -m update_vpn_ddns.__main__;
+               sleep 60;
+             done"
     environment:
       - TZ=America/New_York
-      - CRON_ENABLED=true
     volumes:
       - .:/app
       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
