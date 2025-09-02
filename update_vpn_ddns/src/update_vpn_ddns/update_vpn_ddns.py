@@ -1,4 +1,5 @@
 import os
+import socket
 import gspread
 import datetime
 import requests
@@ -6,14 +7,55 @@ import requests
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 
+def get_public_ip():
+    """
+    Fetches the system's public IP address using multiple external services
+
+    Returns: the detected IP as a string, or None if all services fail
+    """
+
+    ip_services = [
+        "https://api.ipify.org",           # Plain text IPv4
+        #"http://ip-api.com/json/",        # JSON with 'query' field
+        #"https://ifconfig.me/ip",         # Plain text IPv6
+        "https://ipv4.icanhazip.com",      # Plain text IPv4
+        #"https://ipecho.net/plain"        # Plain text IPv6
+    ]
+    
+    for service in ip_services:
+        try:
+            response = requests.get(service, timeout=5)
+            if response.status_code == 200:
+                ip = response.text.strip()
+                print(f"get_public_ip: Detected public IP: {ip} via external API service: {service}")
+                return ip
+        except requests.RequestException:
+            continue  # try the next service
+    
+    return None
+
+
+def is_valid_ip(ip):
+    """
+    Validate the provided IP address using socket
+
+    Returns: True if the IP address is valid/usable, False otherwise
+    """
+
+    # Validate with socket to ensure usability
+    try:
+        socket.inet_pton(socket.AF_INET, ip)
+        return True
+    except socket.error:
+        return False
+
 
 def update_dns_record(cloudflare_config,
-                      ip: str) -> bool:
+                      detected_ip: str) -> bool:
     """
-    Update the Cloudflare DNS record to the new IP if it has changed
+    Update the Cloudflare DNS record to the detected IP if it has changed
 
-    Returns:
-        True if record was updated, False if unchanged
+    Returns: True if record was updated, False if unchanged
     """
 
     api_base_url = cloudflare_config["api_base_url"]
@@ -28,9 +70,9 @@ def update_dns_record(cloudflare_config,
     data = {
         "type": "A",
         "name": dns_name,
-        "content": ip,     # Update to the new IP
-        "ttl": 60,         # Time to Live 
-        "proxied": False   # Keep grey cloud
+        "content": detected_ip,   # Update to the detected IP if it has changed
+        "ttl": 60,                # TTL = Time to Live 
+        "proxied": False          # Keep grey cloud
     }
 
     # Get DNS record 
@@ -38,32 +80,33 @@ def update_dns_record(cloudflare_config,
 
     resp = requests.get(list_url, headers=header)     # Authenticate with API token
     resp.raise_for_status()
-    #print(f"List URL: {list_url}")
-    #print(f"JSON resp: {resp.json()}")
+    print(f"update_dns_record: List URL: {list_url}")             #####
+    print(f"update_dns_record: JSON resp: {resp.json()}")         #####
 
     records = resp.json().get("result", [])
     if not records:
-        raise ValueError(f"No DNS record found for {dns_name} in zone {zone_id}")
+        raise ValueError(f"update_dns_record: No DNS record found for {dns_name} in zone {zone_id}")
 
     record_id = records[0]["id"]
-    current_ip = records[0]["content"]
-    #print(f"Current IP for {dns_name}: {current_ip}")
+    dns_record_ip = records[0]["content"]
+    print(f"update_dns_record: DNS record for {dns_name}: {dns_record_ip}")       #####
+
 
     # Update DNS record if IP has changed
-    if current_ip != ip:
+    if dns_record_ip != detected_ip:
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
         resp = requests.put(update_url, headers=header, json=data)
         resp.raise_for_status()
-        #print(f"✅  Updated {dns_name}: {current_ip} → {ip}")
+        print(f"update_dns_record: ✅  Updated {dns_name}: {dns_record_ip} → {detected_ip}")       #####
         return True
     else:
-        #print(f"ℹ️  No update needed for {dns_name}, IP unchanged")
+        print(f"update_dns_record: ℹ️  No update needed for {dns_name}, IP unchanged")             #####
         return False
 
 
 def upload_ip(google_config,
               dns_name,
-              ip):
+              detected_ip):
     """
     Uploads IP information to Google Sheets
     """
@@ -80,7 +123,7 @@ def upload_ip(google_config,
         api_key_path = os.path.expanduser(local_api_key)
     
     if not os.path.exists(api_key_path):
-        raise FileNotFoundError(f"API key file not found: {api_key_path}")
+        raise FileNotFoundError(f"upload_ip: API key file not found: {api_key_path}")
 
 
     # Authenticate with Google Sheets
@@ -102,11 +145,11 @@ def upload_ip(google_config,
         # Find row number to update (offset by 2 for header row)
         row_num = dns_list.index(dns_name) + 2
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.update_cell(row_num, ip_col, ip)
+        sheet.update_cell(row_num, ip_col, detected_ip)
         sheet.update_cell(row_num, timestamp_col, timestamp)
-        #print(f"✅ Uploaded IP {ip} for DNS '{dns_name}' at {timestamp}")
+        print(f"upload_ip: ✅ Uploaded '{dns_name}' → {detected_ip} at {timestamp}")      #####
     else:
-        print(f"⚠️ DNS name '{dns_name}' not found in sheet — add it first")
+        print(f"upload_ip: ⚠️ DNS '{dns_name}' not found in sheet '{sheet_name}' (worksheet '{worksheet}'); Add it first")
 
 
 def main():
@@ -124,27 +167,32 @@ def main():
         "dns_name"     : os.getenv("CLOUDFLARE_DNS_NAME")
     }
     if not all(cloudflare_config.values()):
-        raise EnvironmentError("Missing required Cloudflare config in .env")
+        raise EnvironmentError("main: Missing required Cloudflare config in .env")
 
     # Fetch current public IP
-    current_ip = requests.get("https://api.ipify.org").text
-    #print(f"Detected public IP: {current_ip}")
+    detected_ip = get_public_ip()
+    is_valid = is_valid_ip(detected_ip)
 
-    # Update the DNS record
-    update_dns_record(cloudflare_config,
-                      current_ip)
+    if is_valid:
+        print(f"main: Detected public IP: {detected_ip}")
+        # Update the DNS record
+        #update_dns_record(cloudflare_config, 
+        #                  detected_ip)
 
-    # Validate config
-    google_config = {
-        "sheet_name"     : os.getenv("GOOGLE_SHEET_NAME"),
-        "worksheet"      : os.getenv("GOOGLE_WORKSHEET"),
-        "local_api_key"  : os.getenv("GOOGLE_API_KEY_LOCAL"),
-        "docker_api_key" : os.getenv("GOOGLE_API_KEY_DOCKER")
-    }
-    if not all(google_config.values()):
-        raise EnvironmentError("Missing required Google/Docker config in .env") 
+        # Validate config
+        google_config = {
+            "sheet_name"     : os.getenv("GOOGLE_SHEET_NAME"),
+            "worksheet"      : os.getenv("GOOGLE_WORKSHEET"),
+            "local_api_key"  : os.getenv("GOOGLE_API_KEY_LOCAL"),
+            "docker_api_key" : os.getenv("GOOGLE_API_KEY_DOCKER")
+        }
+        if not all(google_config.values()):
+            raise EnvironmentError("main: Missing required Google/Docker config in .env") 
 
-    # Uploads IP information to Google Sheets
-    upload_ip(google_config,
-              cloudflare_config["dns_name"],
-              current_ip)
+        # Uploads IP information to Google Sheets
+        #upload_ip(google_config,
+        #          cloudflare_config["dns_name"],
+        #          detected_ip)
+    else:
+        print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
+
