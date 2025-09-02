@@ -1,4 +1,5 @@
 import os
+import json
 import socket
 import gspread
 import datetime
@@ -14,6 +15,7 @@ def get_public_ip():
     Returns: the detected IP as a string, or None if all services fail
     """
 
+    # IP HTTPS API services list is ranked by reliability:
     ip_services = [
         "https://api.ipify.org",           # Plain text IPv4
         #"http://ip-api.com/json/",        # JSON with 'query' field
@@ -76,20 +78,22 @@ def update_dns_record(cloudflare_config,
     }
 
     # Get DNS record 
-    list_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}"
+    dns_records_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}"
 
-    resp = requests.get(list_url, headers=header)     # Authenticate with API token
+    resp = requests.get(dns_records_url, headers=header)     # Authenticate with API token
     resp.raise_for_status()
-    print(f"update_dns_record: List URL: {list_url}")             #####
-    print(f"update_dns_record: JSON resp: {resp.json()}")         #####
+    print(f"update_dns_record: DNS records URL: {dns_records_url}")         #####
+    print(f"update_dns_record: DNS records JSON response: {resp.json()}")   #####
+    print(f"update_dns_record: DNS records JSON response:\n{json.dumps(resp.json(), indent=2)}")    #####
+
 
     records = resp.json().get("result", [])
     if not records:
-        raise ValueError(f"update_dns_record: No DNS record found for {dns_name} in zone {zone_id}")
+        raise ValueError(f"update_dns_record: No DNS record found for '{dns_name}' in zone {zone_id}")
 
     record_id = records[0]["id"]
     dns_record_ip = records[0]["content"]
-    print(f"update_dns_record: DNS record for {dns_name}: {dns_record_ip}")       #####
+    print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
 
 
     # Update DNS record if IP has changed
@@ -97,10 +101,10 @@ def update_dns_record(cloudflare_config,
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
         resp = requests.put(update_url, headers=header, json=data)
         resp.raise_for_status()
-        print(f"update_dns_record: ✅  Updated {dns_name}: {dns_record_ip} → {detected_ip}")       #####
+        print(f"update_dns_record: ✅  Updated '{dns_name}': {dns_record_ip} → {detected_ip}")       #####
         return True
     else:
-        print(f"update_dns_record: ℹ️  No update needed for {dns_name}, IP unchanged")             #####
+        print(f"update_dns_record: ℹ️  No update needed for '{dns_name}', IP unchanged")             #####
         return False
 
 
@@ -176,8 +180,8 @@ def main():
     if is_valid:
         print(f"main: Detected public IP: {detected_ip}")
         # Update the DNS record
-        #update_dns_record(cloudflare_config, 
-        #                  detected_ip)
+        update_dns_record(cloudflare_config, 
+                          detected_ip)
 
         # Validate config
         google_config = {
@@ -195,4 +199,3 @@ def main():
         #          detected_ip)
     else:
         print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
-
