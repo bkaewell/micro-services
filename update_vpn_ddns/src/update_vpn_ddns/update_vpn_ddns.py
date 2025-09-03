@@ -1,5 +1,6 @@
 import os
 import json
+import pytz
 import socket
 import gspread
 import datetime
@@ -50,6 +51,24 @@ def is_valid_ip(ip):
         return True
     except socket.error:
         return False
+
+
+def format_modified_on(modified_on_str):
+    """
+    Convert Cloudflare's UTC 'modified_on' timestamp to America/New_York time
+
+    Returns: str: Converted timestamp as 'YYYY-MM-DD\\nHH:MM:SS'
+    """
+    utc = pytz.utc
+    ny_tz = pytz.timezone("America/New_York")
+
+    # Parse Cloudflare timestamp
+    utc_dt = datetime.strptime(modified_on_str, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=utc)
+
+    # Convert to New York timezone
+    ny_dt = utc_dt.astimezone(ny_tz)
+
+    return ny_dt.strftime("%Y-%m-%d\n%H:%M:%S")
 
 
 def update_dns_record(cloudflare_config,
@@ -110,7 +129,7 @@ def update_dns_record(cloudflare_config,
     return {
         "dns_name": dns_name,
         "detected_ip": detected_ip,
-        "dns_modified_on": dns_modified_on
+        "dns_modified_on": format_modified_on(dns_modified_on)
     }
 
 
@@ -136,31 +155,69 @@ def upload_ip(google_config,
     if not os.path.exists(api_key_path):
         raise FileNotFoundError(f"upload_ip: API key file not found: {api_key_path}")
 
-
     # Authenticate with Google Sheets
     SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name(api_key_path, SCOPES)
     client = gspread.authorize(creds)
     sheet = client.open(sheet_name).worksheet(worksheet)
 
-    # Get header row to dynamically find column indices
-    headers = sheet.row_values(1)
-    dns_col = headers.index("DNS") + 1
-    ip_col = headers.index("IP") + 1
-    timestamp_col = headers.index("Last Updated") + 1
 
-    # Get all values from DNS column (excluding header)
-    dns_list = sheet.col_values(dns_col)[1:]
+
+
+    # Map headers dynamically
+    headers = sheet.row_values(1)
+    header_map = {h.strip(): idx + 1 for idx, h in enumerate(headers)}
+
+    #required_columns = ["DNS", "IP", "Last Check", "Last Modified (Cloudflare)", "Weekly Uptime (%)", "Overall Uptime (%)"]
+    required_columns = ["DNS", "IP", "Last Updated", "Last Modified (Cloudflare)", "Weekly Uptime (%)", "Overall Uptime (%)"]
+
+    for col in required_columns:
+        if col not in header_map:
+            raise ValueError(f"upload_ip: Missing required column '{col}' in worksheet '{worksheet}'")
+
+    # Get DNS list to locate row
+    dns_list = sheet.col_values(header_map["DNS"])[1:]  # Exclude header
+    now = datetime.datetime.now().strftime("%Y-%m-%d\n%H:%M:%S")
 
     if dns_name in dns_list:
-        # Find row number to update (offset by 2 for header row)
+        # Existing DNS row → update
         row_num = dns_list.index(dns_name) + 2
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.update_cell(row_num, ip_col, detected_ip)
-        sheet.update_cell(row_num, timestamp_col, timestamp)
-        print(f"upload_ip: ✅ Uploaded '{dns_name}' → {detected_ip} at {timestamp}")      #####
+        updates = {
+            "IP": detected_ip,
+            "Last Check": now,
+            "Last Modified (Cloudflare)": modified_on,
+        }
+        if weekly_uptime is not None:
+            updates["Weekly Uptime (%)"] = f"{weekly_uptime:.2f}%"
+        if overall_uptime is not None:
+            updates["Overall Uptime (%)"] = f"{overall_uptime:.2f}%"
+
+        for column, value in updates.items():
+            sheet.update_cell(row_num, header_map[column], value)
+
+        print(f"upload_ip: ✅ Updated '{dns_name}' → IP: {detected_ip}, Modified: {modified_on}, Checked: {now}")
     else:
-        print(f"upload_ip: ⚠️ DNS '{dns_name}' not found in sheet '{sheet_name}' (worksheet '{worksheet}'); Add it first")
+        print(f"upload_ip: ⚠️ DNS '{dns_name}' not found in sheet '{sheet_name}' (worksheet '{worksheet}'); Add it first.")
+
+
+    # # Get header row to dynamically find column indices
+    # headers = sheet.row_values(1)
+    # dns_col = headers.index("DNS") + 1
+    # ip_col = headers.index("IP") + 1
+    # timestamp_col = headers.index("Last Updated") + 1
+
+    # # Get all values from DNS column (excluding header)
+    # dns_list = sheet.col_values(dns_col)[1:]
+
+    # if dns_name in dns_list:
+    #     # Find row number to update (offset by 2 for header row)
+    #     row_num = dns_list.index(dns_name) + 2
+    #     timestamp = datetime.datetime.now().strftime("%Y-%m-%d\n%H:%M:%S")
+    #     sheet.update_cell(row_num, ip_col, detected_ip)
+    #     sheet.update_cell(row_num, timestamp_col, timestamp)
+    #     print(f"upload_ip: ✅ Uploaded '{dns_name}' → {detected_ip} at {timestamp}")      #####
+    # else:
+    #     print(f"upload_ip: ⚠️ DNS '{dns_name}' not found in sheet '{sheet_name}' (worksheet '{worksheet}'); Add it first")
 
 
 def main():
