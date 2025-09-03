@@ -53,7 +53,7 @@ def is_valid_ip(ip):
 
 
 def update_dns_record(cloudflare_config,
-                      detected_ip: str) -> bool:
+                      detected_ip: str) -> dict:
     """
     Update the Cloudflare DNS record to the detected IP if it has changed
 
@@ -83,7 +83,6 @@ def update_dns_record(cloudflare_config,
     resp = requests.get(dns_records_url, headers=header)     # Authenticate with API token
     resp.raise_for_status()
     print(f"update_dns_record: DNS records URL: {dns_records_url}")         #####
-    print(f"update_dns_record: DNS records JSON response: {resp.json()}")   #####
     print(f"update_dns_record: DNS records JSON response:\n{json.dumps(resp.json(), indent=2)}")    #####
 
 
@@ -91,8 +90,9 @@ def update_dns_record(cloudflare_config,
     if not records:
         raise ValueError(f"update_dns_record: No DNS record found for '{dns_name}' in zone {zone_id}")
 
-    record_id = records[0]["id"]
-    dns_record_ip = records[0]["content"]
+    record_id       = records[0]["id"]
+    dns_record_ip   = records[0]["content"]
+    dns_modified_on = records[0]["modified_on"]
     print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
 
 
@@ -102,17 +102,24 @@ def update_dns_record(cloudflare_config,
         resp = requests.put(update_url, headers=header, json=data)
         resp.raise_for_status()
         print(f"update_dns_record: ✅  Updated '{dns_name}': {dns_record_ip} → {detected_ip}")       #####
-        return True
+        #return True
     else:
         print(f"update_dns_record: ℹ️  No update needed for '{dns_name}', IP unchanged")             #####
-        return False
+        #return False
+    
+    return {
+        "dns_name": dns_name,
+        "detected_ip": detected_ip,
+        "dns_modified_on": dns_modified_on
+    }
 
 
 def upload_ip(google_config,
-              dns_name,
-              detected_ip):
+              dns_name, 
+              detected_ip, 
+              dns_modified_on):
     """
-    Uploads IP information to Google Sheets
+    Uploads DNS IP and related metadata to Google Sheets
     """
 
     sheet_name     = google_config["sheet_name"]
@@ -180,8 +187,8 @@ def main():
     if is_valid:
         print(f"main: Detected public IP: {detected_ip}")
         # Update the DNS record
-        update_dns_record(cloudflare_config, 
-                          detected_ip)
+        result = update_dns_record(cloudflare_config, 
+                                   detected_ip)
 
         # Validate config
         google_config = {
@@ -193,9 +200,11 @@ def main():
         if not all(google_config.values()):
             raise EnvironmentError("main: Missing required Google/Docker config in .env") 
 
-        # Uploads IP information to Google Sheets
-        #upload_ip(google_config,
-        #          cloudflare_config["dns_name"],
-        #          detected_ip)
+        # Uploads IP data to Google Sheets
+        upload_ip(google_config,
+                  result["dns_name"],
+                  result["detected_ip"],
+                  dns_modified_on=result["dns_modified_on"])
+
     else:
         print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
