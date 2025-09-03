@@ -1,11 +1,11 @@
 import os
 import json
-import pytz
 import socket
 import gspread
 import datetime
 import requests
 
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -53,22 +53,17 @@ def is_valid_ip(ip):
         return False
 
 
-def format_modified_on(modified_on_str):
+def format_cloudflare_timestamp(last_modified_str):
     """
     Convert Cloudflare's UTC 'modified_on' timestamp to America/New_York time
 
     Returns: str: Converted timestamp as 'YYYY-MM-DD\\nHH:MM:SS'
     """
-    utc = pytz.utc
-    ny_tz = pytz.timezone("America/New_York")
 
-    # Parse Cloudflare timestamp
-    utc_dt = datetime.strptime(modified_on_str, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=utc)
-
-    # Convert to New York timezone
-    ny_dt = utc_dt.astimezone(ny_tz)
-
-    return ny_dt.strftime("%Y-%m-%d\n%H:%M:%S")
+    last_modified_utc = datetime.datetime.strptime(last_modified_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+    last_modified_utc = last_modified_utc.replace(tzinfo=ZoneInfo("UTC"))
+    last_modified_nyc = last_modified_utc.astimezone(ZoneInfo("America/New_York"))
+    return last_modified_nyc.strftime("%Y-%m-%d\n%H:%M:%S")
 
 
 def update_dns_record(cloudflare_config,
@@ -86,13 +81,13 @@ def update_dns_record(cloudflare_config,
 
     header = {
         "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json",
+        "Content-Type" : "application/json",
     }
     data = {
-        "type": "A",
-        "name": dns_name,
+        "type"   : "A",
+        "name"   : dns_name,
         "content": detected_ip,   # Update to the detected IP if it has changed
-        "ttl": 60,                # TTL = Time to Live 
+        "ttl"    : 60,            # TTL = Time to Live 
         "proxied": False          # Keep grey cloud
     }
 
@@ -109,9 +104,9 @@ def update_dns_record(cloudflare_config,
     if not records:
         raise ValueError(f"update_dns_record: No DNS record found for '{dns_name}' in zone {zone_id}")
 
-    record_id       = records[0]["id"]
-    dns_record_ip   = records[0]["content"]
-    dns_modified_on = records[0]["modified_on"]
+    record_id         = records[0]["id"]
+    dns_record_ip     = records[0]["content"]
+    dns_last_modified = records[0]["modified_on"]
     print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
 
 
@@ -127,16 +122,16 @@ def update_dns_record(cloudflare_config,
         #return False
     
     return {
-        "dns_name": dns_name,
-        "detected_ip": detected_ip,
-        "dns_modified_on": format_modified_on(dns_modified_on)
+        "dns_name"         : dns_name,
+        "detected_ip"      : detected_ip,
+        "dns_last_modified": format_cloudflare_timestamp(dns_last_modified)
     }
 
 
 def upload_ip(google_config,
               dns_name, 
               detected_ip, 
-              dns_modified_on):
+              dns_last_modified):
     """
     Uploads DNS IP and related metadata to Google Sheets
     """
@@ -163,13 +158,12 @@ def upload_ip(google_config,
 
 
 
-
     # Map headers dynamically
     headers = sheet.row_values(1)
     header_map = {h.strip(): idx + 1 for idx, h in enumerate(headers)}
 
     #required_columns = ["DNS", "IP", "Last Check", "Last Modified (Cloudflare)", "Weekly Uptime (%)", "Overall Uptime (%)"]
-    required_columns = ["DNS", "IP", "Last Updated", "Last Modified (Cloudflare)", "Weekly Uptime (%)", "Overall Uptime (%)"]
+    required_columns = ["DNS", "IP", "Last Updated", "Last Modified\n(Cloudflare)", "Weekly\nUptime (%)", "Overall\nUptime (%)", "Weekly\nDowntime (mins)"]
 
     for col in required_columns:
         if col not in header_map:
@@ -183,19 +177,20 @@ def upload_ip(google_config,
         # Existing DNS row → update
         row_num = dns_list.index(dns_name) + 2
         updates = {
-            "IP": detected_ip,
-            "Last Check": now,
-            "Last Modified (Cloudflare)": modified_on,
+            "IP"                        : detected_ip,
+            #"Last Check"                : now,
+            "Last Updated"              : now,            
+            "Last Modified\n(Cloudflare)": dns_last_modified,
         }
-        if weekly_uptime is not None:
-            updates["Weekly Uptime (%)"] = f"{weekly_uptime:.2f}%"
-        if overall_uptime is not None:
-            updates["Overall Uptime (%)"] = f"{overall_uptime:.2f}%"
+        # if weekly_uptime is not None:
+        #     updates["Weekly Uptime (%)"] = f"{weekly_uptime:.2f}%"
+        # if overall_uptime is not None:
+        #     updates["Overall Uptime (%)"] = f"{overall_uptime:.2f}%"
 
         for column, value in updates.items():
             sheet.update_cell(row_num, header_map[column], value)
 
-        print(f"upload_ip: ✅ Updated '{dns_name}' → IP: {detected_ip}, Modified: {modified_on}, Checked: {now}")
+        print(f"upload_ip: ✅ Updated '{dns_name}' → IP: {detected_ip}, Modified: {dns_last_modified}, Checked: {now}")
     else:
         print(f"upload_ip: ⚠️ DNS '{dns_name}' not found in sheet '{sheet_name}' (worksheet '{worksheet}'); Add it first.")
 
@@ -261,7 +256,7 @@ def main():
         upload_ip(google_config,
                   result["dns_name"],
                   result["detected_ip"],
-                  dns_modified_on=result["dns_modified_on"])
+                  dns_last_modified=result["dns_last_modified"])
 
     else:
         print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
