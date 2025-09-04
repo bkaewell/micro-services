@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import socket
 import gspread
@@ -16,7 +17,7 @@ def get_public_ip():
     Returns: the detected IP as a string, or None if all services fail
     """
 
-    # IP HTTPS API services list is ranked by reliability:
+    # IP API services list, ranked by reliability
     ip_services = [
         "https://api.ipify.org",           # Plain text IPv4
         #"http://ip-api.com/json/",        # JSON with 'query' field
@@ -24,16 +25,20 @@ def get_public_ip():
         "https://ipv4.icanhazip.com",      # Plain text IPv4
         #"https://ipecho.net/plain"        # Plain text IPv6
     ]
+
+    # Compile the regular expression that matches the general format of IPv4 addresses
+    ip_pattern = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
     
     for service in ip_services:
         try:
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
                 ip = response.text.strip()
-                print(f"get_public_ip: Detected public IP: {ip} via external API service: {service}")
-                return ip
+                if ip_pattern.match(ip):
+                    print(f"get_public_ip: Detected public IP: {ip} via external API service: {service}")
+                    return ip
         except requests.RequestException:
-            continue  # try the next service
+            continue  # try the next IP service
     
     return None
 
@@ -94,21 +99,20 @@ def update_dns_record(cloudflare_config,
     # Get DNS record 
     dns_records_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}"
 
-    resp = requests.get(dns_records_url, headers=header)     # Authenticate with API token
+    # Authenticate with API token
+    resp = requests.get(dns_records_url, headers=header)     
     resp.raise_for_status()
     print(f"update_dns_record: DNS records URL: {dns_records_url}")         #####
     print(f"update_dns_record: DNS records JSON response:\n{json.dumps(resp.json(), indent=2)}")    #####
 
-
+    # Get DNS metadata
     records = resp.json().get("result", [])
     if not records:
         raise ValueError(f"update_dns_record: No DNS record found for '{dns_name}' in zone {zone_id}")
-
     record_id         = records[0]["id"]
     dns_record_ip     = records[0]["content"]
     dns_last_modified = records[0]["modified_on"]
     print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
-
 
     # Update DNS record if IP has changed
     if dns_record_ip != detected_ip:
