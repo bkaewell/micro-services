@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import socket
 import gspread
@@ -10,71 +9,75 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 
-def get_public_ip() -> str | None:
-    """
-    Fetches the system's public IP address using multiple external API services
 
-    Returns: the detected IP as a string, or None if all services fail
+def is_valid_ip(ip: str,
+                version: str = "ipv4") -> bool:
+    """
+    Validate an IP address (IPv4 or IPv6) using socket
+
+    Args:
+        ip: The IP address string to validate
+        version: "ipv4" or "ipv6"    
+
+    Returns: 
+        True if the IP address is valid, False otherwise
     """
 
-    # IP API services list, ranked by reliability
-    ip_services = [
-        "https://api.ipify.org",         # Plain text IPv4
-        "https://ifconfig.me/ip",        # Plain text IPv4
-        "https://ipv4.icanhazip.com",    # Plain text IPv4
-        "https://ipecho.net/plain"       # Plain text IPv4
-        #"http://ip-api.com/json/"       # Need separate logic to parse JSON with 'query' field
-    ]
-    
-    for service in ip_services:
+    try:
+        if version.lower() == "ipv4":
+            socket.inet_pton(socket.AF_INET, ip)
+        elif version.lower() == "ipv6":
+            socket.inet_pton(socket.AF_INET6, ip)
+        else:
+            raise ValueError("Invalid IP version. Use 'ipv4' or 'ipv6'.")
+        return True
+    except (socket.error, ValueError):
+        return False
+
+
+def get_public_ip(version: str = "ipv4") -> str | None:
+    """
+    Fetches the public address for a given version ("ipv4" or "ipv6")
+
+    Args:
+        version: "ipv4" or "ipv6"
+
+    Returns: 
+        The detected IP address as a string, or None if all services fail
+    """
+
+    # API endpoints (redundant, ranked by reliability)
+    ip_services = {
+        "ipv4": [
+            "https://api.ipify.org",      # outputs plain text    
+            "https://ifconfig.me/ip", 
+            "https://ipv4.icanhazip.com", 
+            "https://ipecho.net/plain", 
+        ],
+        "ipv6": [
+            "https://api64.ipify.org", 
+            "https://ifconfig.me", 
+            "https://ipv6.icanhazip.com", 
+        ],
+    }
+
+    services = ip_services.get(version.lower())
+    if not services:
+        raise ValueError("get_public_ip[{version}]: Invalid IP version, use 'ipv4' or 'ipv6'")
+    print(services)
+
+    for service in services:
         try:
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
                 ip = response.text.strip()
-                if is_valid_ip(ip):
-                    print(f"get_public_ip: Detected public IP: {ip} via external API service: {service}")
+                if is_valid_ip(ip, version):
+                    print(f"get_public_ip[{version}]: {ip} (from {service})")
                     return ip
         except requests.RequestException:
-            continue  # try the next IP service
-    
+            continue  # try the next service
     return None
 
-def is_valid_ip(ip: str) -> bool:
-    """
-    Validate the provided IPv4 address using socket
-
-    Returns: True if the IPv4 address is valid/usable, False otherwise
-    """
-
-    try:
-        # First try IPv4
-        socket.inet_pton(socket.AF_INET, ip)
-        return True
-    except socket.error:
-        return False
-    
-
-# def is_valid_ip(ip: str) -> bool:
-#     """
-#     Validate the provided IP address (IPv4 or IPv6) using socket
-
-#     Returns: True if the IP address is valid/usable, False otherwise
-#     """
-
-#     try:
-#         # First try IPv4
-#         socket.inet_pton(socket.AF_INET, ip)
-#         return True
-#     except socket.error:
-#         pass
-
-#     try:
-#         # Then try IPv6
-#         socket.inet_pton(socket.AF_INET6, ip)
-#         return True
-#     except socket.error:
-#         return False
-    
 
 def format_cloudflare_timestamp(last_modified_str):
     """
@@ -90,11 +93,14 @@ def format_cloudflare_timestamp(last_modified_str):
 
 
 def update_dns_record(cloudflare_config,
-                      detected_ip: str) -> dict:
+                      detected_ip: str,
+                      version: str = "ipv4") -> dict:
     """
-    Update the Cloudflare DNS record to the detected IP if it has changed
+    Update the Cloudflare DNS record ('A' for IPv4, 'AAAA' for IPv6) 
+    to the detected IP if it has changed
 
-    Returns: True if record was updated, False if unchanged
+    Returns: 
+        dictionary
     """
 
     api_base_url = cloudflare_config["api_base_url"]
@@ -102,20 +108,24 @@ def update_dns_record(cloudflare_config,
     zone_id      = cloudflare_config["zone_id"]
     dns_name     = cloudflare_config["dns_name"]
 
+    # Add comment here
+    record_type = "A" if version.lower() == "ipv4" else "AAAA"
+
+    # Get DNS record 
+    dns_records_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}"
+
+    # Cloudflare API request: authentication headers + DNS record payload
     header = {
         "Authorization": f"Bearer {api_token}",
         "Content-Type" : "application/json",
     }
     data = {
-        "type"   : "A",
-        "name"   : dns_name,
-        "content": detected_ip,   # Update to the detected IP if it has changed
-        "ttl"    : 60,            # TTL = Time to Live 
-        "proxied": False          # Keep grey cloud
+        "type"   : record_type,   # DNS record type (i.e. A, AAAA)
+        "name"   : dns_name,      # DNS record name
+        "content": detected_ip,   # Public IP to update
+        "ttl"    : 60,            # TTL = Time-to-Live 
+        "proxied": False          # Grey cloud (not proxied thru Cloudflare)
     }
-
-    # Get DNS record 
-    dns_records_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}"
 
     # Authenticate with API token
     resp = requests.get(dns_records_url, headers=header)     
@@ -131,6 +141,9 @@ def update_dns_record(cloudflare_config,
     dns_record_ip     = records[0]["content"]
     dns_last_modified = records[0]["modified_on"]
     print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
+
+    print(f"******update_dns_record*******: id0={records[0]["id"]}") 
+    print(f"******update_dns_record*******: id1={records[1]["id"]}") 
 
     # Update DNS record if IP has changed
     if dns_record_ip != detected_ip:
@@ -253,14 +266,15 @@ def main():
         raise EnvironmentError("main: Missing required Cloudflare config in .env")
 
     # Fetch current public IP
-    detected_ip = get_public_ip()
-    # is_valid = is_valid_ip(detected_ip)
+    version = "ipv4"
+    detected_ip = get_public_ip(version)
 
     if detected_ip:
         print(f"main: Detected public IP: {detected_ip}")
         # Update the DNS record
         result = update_dns_record(cloudflare_config, 
-                                   detected_ip)
+                                   detected_ip,
+                                   version)
 
         # Validate config
         google_config = {
