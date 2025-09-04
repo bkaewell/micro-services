@@ -10,31 +10,28 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 
-def get_public_ip():
+def get_public_ip() -> str | None:
     """
-    Fetches the system's public IP address using multiple external services
+    Fetches the system's public IP address using multiple external API services
 
     Returns: the detected IP as a string, or None if all services fail
     """
 
     # IP API services list, ranked by reliability
     ip_services = [
-        "https://api.ipify.org",           # Plain text IPv4
-        #"http://ip-api.com/json/",        # JSON with 'query' field
-        #"https://ifconfig.me/ip",         # Plain text IPv6
-        "https://ipv4.icanhazip.com",      # Plain text IPv4
-        #"https://ipecho.net/plain"        # Plain text IPv6
+        "https://api.ipify.org",         # Plain text IPv4
+        "https://ifconfig.me/ip",        # Plain text IPv4
+        "https://ipv4.icanhazip.com",    # Plain text IPv4
+        "https://ipecho.net/plain"       # Plain text IPv4
+        #"http://ip-api.com/json/"       # Need separate logic to parse JSON with 'query' field
     ]
-
-    # Compile the regular expression that matches the general format of IPv4 addresses
-    ip_pattern = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
     
     for service in ip_services:
         try:
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
                 ip = response.text.strip()
-                if ip_pattern.match(ip):
+                if is_valid_ip(ip):
                     print(f"get_public_ip: Detected public IP: {ip} via external API service: {service}")
                     return ip
         except requests.RequestException:
@@ -42,21 +39,42 @@ def get_public_ip():
     
     return None
 
-
-def is_valid_ip(ip):
+def is_valid_ip(ip: str) -> bool:
     """
-    Validate the provided IP address using socket
+    Validate the provided IPv4 address using socket
 
-    Returns: True if the IP address is valid/usable, False otherwise
+    Returns: True if the IPv4 address is valid/usable, False otherwise
     """
 
-    # Validate with socket to ensure usability
     try:
+        # First try IPv4
         socket.inet_pton(socket.AF_INET, ip)
         return True
     except socket.error:
         return False
+    
 
+# def is_valid_ip(ip: str) -> bool:
+#     """
+#     Validate the provided IP address (IPv4 or IPv6) using socket
+
+#     Returns: True if the IP address is valid/usable, False otherwise
+#     """
+
+#     try:
+#         # First try IPv4
+#         socket.inet_pton(socket.AF_INET, ip)
+#         return True
+#     except socket.error:
+#         pass
+
+#     try:
+#         # Then try IPv6
+#         socket.inet_pton(socket.AF_INET6, ip)
+#         return True
+#     except socket.error:
+#         return False
+    
 
 def format_cloudflare_timestamp(last_modified_str):
     """
@@ -160,8 +178,6 @@ def upload_ip(google_config,
     client = gspread.authorize(creds)
     sheet = client.open(sheet_name).worksheet(worksheet)
 
-
-
     # Map headers dynamically
     headers = sheet.row_values(1)
     header_map = {h.strip(): idx + 1 for idx, h in enumerate(headers)}
@@ -238,9 +254,9 @@ def main():
 
     # Fetch current public IP
     detected_ip = get_public_ip()
-    is_valid = is_valid_ip(detected_ip)
+    # is_valid = is_valid_ip(detected_ip)
 
-    if is_valid:
+    if detected_ip:
         print(f"main: Detected public IP: {detected_ip}")
         # Update the DNS record
         result = update_dns_record(cloudflare_config, 
