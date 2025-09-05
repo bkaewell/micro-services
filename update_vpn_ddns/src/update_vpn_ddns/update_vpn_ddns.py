@@ -133,17 +133,21 @@ def update_dns_record(cloudflare_config,
     print(f"update_dns_record: DNS records URL: {dns_records_url}")         #####
     print(f"update_dns_record: DNS records JSON response:\n{json.dumps(resp.json(), indent=2)}")    #####
 
-    # Get DNS metadata
+    # Extract the list of DNS records from the Cloudflare response
     records = resp.json().get("result", [])
-    if not records:
-        raise ValueError(f"update_dns_record: No DNS record found for '{dns_name}' in zone {zone_id}")
-    record_id         = records[0]["id"]
-    dns_record_ip     = records[0]["content"]
-    dns_last_modified = records[0]["modified_on"]
-    print(f"update_dns_record: DNS record for '{dns_name}' → {dns_record_ip}")       #####
 
-    print(f"******update_dns_record*******: id0={records[0]["id"]}") 
-    print(f"******update_dns_record*******: id1={records[1]["id"]}") 
+    # Find the record that matches the desired type (A or AAAA)
+    record = next((r for r in records if r.get("type") == record_type), None)
+
+    if record:
+        record_id         = record["id"]
+        dns_record_ip     = record["content"]
+        dns_last_modified = record["modified_on"]
+
+        print(f"✅ Found {record_type} record: id={record_id}, ip={dns_record_ip}, modified_on={dns_last_modified}")
+    else:
+        print(f"❌ No {record_type} record found for {dns_name}")
+        record_id = dns_record_ip = dns_last_modified = None
 
     # Update DNS record if IP has changed
     if dns_record_ip != detected_ip:
@@ -286,11 +290,11 @@ def main():
         if not all(google_config.values()):
             raise EnvironmentError("main: Missing required Google/Docker config in .env") 
 
-        # Uploads IP data to Google Sheets
-        upload_ip(google_config,
-                  result["dns_name"],
-                  result["detected_ip"],
-                  dns_last_modified=result["dns_last_modified"])
+        # # Uploads IP data to Google Sheets
+        # upload_ip(google_config,
+        #           result["dns_name"],
+        #           result["detected_ip"],
+        #           dns_last_modified=result["dns_last_modified"])
 
     else:
         print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
