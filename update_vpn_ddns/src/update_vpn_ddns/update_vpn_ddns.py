@@ -11,31 +11,34 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 
 def is_valid_ip(ip: str,
-                version: str = "ipv4") -> bool:
+                version: str="ipv4") -> bool:
     """
     Validate an IP address (IPv4 or IPv6) using socket
 
     Args:
-        ip: The IP address string to validate
-        version: "ipv4" or "ipv6"    
+        ip: IP address string to validate
+        version: "ipv4" (default) or "ipv6"    
 
     Returns: 
         True if the IP address is valid, False otherwise
     """
 
     try:
+        # Validate IPv4
         if version.lower() == "ipv4":
             socket.inet_pton(socket.AF_INET, ip)
+        # Validate IPv6
         elif version.lower() == "ipv6":
             socket.inet_pton(socket.AF_INET6, ip)
+        # Handle unsupported version input
         else:
-            raise ValueError("Invalid IP version. Use 'ipv4' or 'ipv6'.")
+            raise ValueError(f"is_valid_ip: Invalid version '{version}'; Use 'ipv4' or 'ipv6'")
         return True
     except (socket.error, ValueError):
         return False
 
 
-def get_public_ip(version: str = "ipv4") -> str | None:
+def get_public_ip(version: str=  "ipv4") -> str | None:
     """
     Fetches the public address for a given version ("ipv4" or "ipv6")
 
