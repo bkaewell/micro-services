@@ -26,4 +26,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
+responses = "^0.25.8"
 

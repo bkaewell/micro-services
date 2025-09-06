@@ -38,21 +38,21 @@ def is_valid_ip(ip: str,
         return False
 
 
-def get_public_ip(version: str=  "ipv4") -> str | None:
+def get_public_ip(version: str="ipv4") -> str | None:
     """
-    Fetches the public address for a given version ("ipv4" or "ipv6")
+    Fetch the public address for the given version ("ipv4" or "ipv6")
 
     Args:
         version: "ipv4" or "ipv6"
 
     Returns: 
-        The detected IP address as a string, or None if all services fail
+        Public IP address as a string or None if no service succeeds
     """
 
-    # API endpoints (redundant, ranked by reliability)
+    # API endpoints (redundant, outputs plain text, ranked by reliability)
     ip_services = {
         "ipv4": [
-            "https://api.ipify.org",      # outputs plain text    
+            "https://api.ipify.org", 
             "https://ifconfig.me/ip", 
             "https://ipv4.icanhazip.com", 
             "https://ipecho.net/plain", 
@@ -64,11 +64,12 @@ def get_public_ip(version: str=  "ipv4") -> str | None:
         ],
     }
 
+    # Select API endpoints for the requested version
     services = ip_services.get(version.lower())
     if not services:
-        raise ValueError("get_public_ip[{version}]: Invalid IP version, use 'ipv4' or 'ipv6'")
-    print(services)
+        raise ValueError(f"get_public_ip[{version}]: Invalid IP version, use 'ipv4' or 'ipv6'")
 
+    # Try endpoints in order until one succeeds
     for service in services:
         try:
             response = requests.get(service, timeout=5)
@@ -78,7 +79,9 @@ def get_public_ip(version: str=  "ipv4") -> str | None:
                     print(f"get_public_ip[{version}]: {ip} (from {service})")
                     return ip
         except requests.RequestException:
-            continue  # try the next service
+            continue  # Skip on network/timeout error and try next
+    
+    # No service returned a valid IP
     return None
 
 
