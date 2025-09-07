@@ -32,8 +32,32 @@ def test_invalid_ip_version():
 # Purpose: Ensure public IP fetching logic works with fallback APIs
 # =================================================================
 @responses.activate
-def test_get_public_ip_ipv4():
+def test_get_public_ip_ipv4_ipify_api():
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
     ip = get_public_ip("ipv4")
     assert ip == "8.8.8.8"
+
+@responses.activate
+def test_get_public_ip_ipv4_ifconfig_api():
+    responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=200)
+    ip = get_public_ip("ipv4")
+    assert ip == "8.8.8.8"
+
+@responses.activate
+def test_get_public_ip_ipv4_icanhazip_api():
+    responses.add(responses.GET, "https://ipv4.icanhazip.com", body="8.8.8.8", status=200)
+    ip = get_public_ip("ipv4")
+    assert ip == "8.8.8.8"
+
+@responses.activate
+def test_get_public_ip_ipv4_ipecho_api():
+    responses.add(responses.GET, "https://ipecho.net/plain", body="8.8.8.8", status=200)
+    ip = get_public_ip("ipv4")
+    assert ip == "8.8.8.8"
+
+@responses.activate
+def test_get_public_ip_ipv4_http_timeout_error():
+    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
+    ip = get_public_ip("ipv4")
+    assert ip == None
 

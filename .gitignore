@@ -5,4 +5,10 @@
 **/.venv/
 
 # Ignore python cache files
-**/__pycache__
+**/__pycache__/
+
+# Ignore pytest cache files
+**/.pytest_cache/
+
+# Ignore pytest coverage files
+**/.coverage/
