@@ -33,52 +33,33 @@ def test_invalid_ip_version():
 # =================================================================
 def test_get_public_ip_invalid_version():
     with pytest.raises(ValueError):
-        get_public_ip("ipv7")   # misuse case
+        get_public_ip("ipv7")
 
 @responses.activate
-def test_get_public_ip_ipv4_ipify_api():
+def test_get_public_ip_ipv4_success():
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
-    ip = get_public_ip("ipv4")
-    assert ip == "8.8.8.8"
+    assert get_public_ip("ipv4") == "8.8.8.8"
 
 @responses.activate
-def test_get_public_ip_ipv4_ifconfig_api():
+def test_get_public_ip_ipv4_fallback_success():
+    responses.add(responses.GET, "https://api.ipify.org", body="x", status=408)
     responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=200)
-    ip = get_public_ip("ipv4")
-    assert ip == "8.8.8.8"
+    assert get_public_ip("ipv4") == "8.8.8.8"
 
 @responses.activate
-def test_get_public_ip_ipv4_icanhazip_api():
-    responses.add(responses.GET, "https://ipv4.icanhazip.com", body="8.8.8.8", status=200)
-    ip = get_public_ip("ipv4")
-    assert ip == "8.8.8.8"
+def test_get_public_ip_ipv4_all_fail():
+    for url in ["https://api.ipify.org", "https://ifconfig.me/ip"]:
+        responses.add(responses.GET, url, body="x", status=408)
+    assert get_public_ip("ipv4") is None
 
 @responses.activate
-def test_get_public_ip_ipv4_ipecho_api():
-    responses.add(responses.GET, "https://ipecho.net/plain", body="8.8.8.8", status=200)
-    ip = get_public_ip("ipv4")
-    assert ip == "8.8.8.8"
+def test_get_public_ip_ipv6_success():
+    responses.add(responses.GET, "https://api64.ipify.org", body="2001:4860:4860::8888", status=200)
+    assert get_public_ip("ipv6") == "2001:4860:4860::8888"
 
 @responses.activate
-def test_get_public_ip_ipv4_single_api_timeout_returns_none():
-    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
-    ip = get_public_ip("ipv4")
-    assert ip == None
-
-
-@responses.activate
-def test_get_public_ip_ipv4_first_api_timeout_next_succeeds():
-    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
-    responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=200)
-    ip = get_public_ip("ipv4")
-    assert ip == "8.8.8.8"
-
-@responses.activate
-def test_get_public_ip_ipv4_all_apis_timeout_returns_none():
-    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
-    responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=408)
-    responses.add(responses.GET, "https://ipv4.icanhazip.com", body="8.8.8.8", status=408)
-    responses.add(responses.GET, "https://ipecho.net/plain", body="8.8.8.8", status=408)
-    ip = get_public_ip("ipv4")
-    assert ip == None
+def test_get_public_ip_ipv6_all_fail():
+    for url in ["https://api64.ipify.org", "https://ifconfig.me"]:
+        responses.add(responses.GET, url, body="x", status=408)
+    assert get_public_ip("ipv6") is None
 
