@@ -47,6 +47,9 @@ def get_public_ip(version: str="ipv4") -> str | None:
 
     Returns: 
         Public IP address as a string or None if no service succeeds
+
+    Raises:
+        ValueError: If an unsupported IP version is requested        
     """
 
     # API endpoints (redundant, outputs plain text, ranked by reliability)
@@ -64,13 +67,13 @@ def get_public_ip(version: str="ipv4") -> str | None:
         ],
     }
 
-    # Select API endpoints for the requested version
-    services = ip_services.get(version.lower())
-    if not services:
+    # Validate version upfront
+    version = version.lower()
+    if version not in ip_services:
         raise ValueError(f"get_public_ip[{version}]: Invalid IP version, use 'ipv4' or 'ipv6'")
 
-    # Try endpoints in order until one succeeds
-    for service in services:
+    # Try API endpoints in order until one succeeds
+    for service in ip_services[version]:
         try:
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
