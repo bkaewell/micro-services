@@ -10,5 +10,5 @@
 # Ignore pytest cache files
 **/.pytest_cache/
 
-# Ignore pytest coverage files
-**/.coverage/
+# Ignore pytest coverage file
+**/.coverage*
