@@ -31,6 +31,10 @@ def test_invalid_ip_version():
 # Unit Tests for get_public_ip()
 # Purpose: Ensure public IP fetching logic works with fallback APIs
 # =================================================================
+def test_get_public_ip_invalid_version():
+    with pytest.raises(ValueError):
+        get_public_ip("ipv7")   # misuse case
+
 @responses.activate
 def test_get_public_ip_ipv4_ipify_api():
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
@@ -56,8 +60,25 @@ def test_get_public_ip_ipv4_ipecho_api():
     assert ip == "8.8.8.8"
 
 @responses.activate
-def test_get_public_ip_ipv4_http_timeout_error():
+def test_get_public_ip_ipv4_single_api_timeout_returns_none():
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
+    ip = get_public_ip("ipv4")
+    assert ip == None
+
+
+@responses.activate
+def test_get_public_ip_ipv4_first_api_timeout_next_succeeds():
+    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
+    responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=200)
+    ip = get_public_ip("ipv4")
+    assert ip == "8.8.8.8"
+
+@responses.activate
+def test_get_public_ip_ipv4_all_apis_timeout_returns_none():
+    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=408)
+    responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=408)
+    responses.add(responses.GET, "https://ipv4.icanhazip.com", body="8.8.8.8", status=408)
+    responses.add(responses.GET, "https://ipecho.net/plain", body="8.8.8.8", status=408)
     ip = get_public_ip("ipv4")
     assert ip == None
 
