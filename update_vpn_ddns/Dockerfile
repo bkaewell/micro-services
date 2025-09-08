@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 # -------------------------------------------------------------------
 # 2. Set timezone
 # -------------------------------------------------------------------
-ENV TZ=America/New_York
+ENV TZ=${TZ:-UTC}
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # -------------------------------------------------------------------

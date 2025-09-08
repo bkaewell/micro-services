@@ -10,7 +10,7 @@ services:
     command: python -m update_vpn_ddns.__main__
     environment:
       - PYTHONPATH=/app/src
-      - TZ=America/New_York
+      - TZ=${TZ:-UTC}
     volumes:
       # Mount the current directory into the container at /app
       - .:/app
@@ -32,7 +32,7 @@ services:
              done"
     environment:
       - PYTHONPATH=/app/src
-      - TZ=America/New_York
+      - TZ=${TZ:-UTC}
     volumes:
       - .:/app
       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
