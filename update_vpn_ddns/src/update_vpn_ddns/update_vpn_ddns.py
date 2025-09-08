@@ -88,17 +88,38 @@ def get_public_ip(version: str="ipv4") -> str | None:
     return None
 
 
-def format_cloudflare_timestamp(last_modified_str):
+def to_local_time(iso_str: str = None) -> str:
     """
-    Convert Cloudflare's UTC 'modified_on' timestamp to America/New_York time
-
-    Returns: str: Converted timestamp as 'YYYY-MM-DD\\nHH:MM:SS'
+    Convert an ISO8601 string or return the current datetime in the timezone from TZ env var (default UTC),
+    formatted as 'YYYY-MM-DD\\nHH:MM:SS TZ ±HHMM'
+    
+    Args:
+        iso_str (str, optional): ISO8601 string to convert (i.e. '2025-09-05T02:33:15.640385Z')
+    
+    Returns:
+        str: Formatted datetime string
     """
 
-    last_modified_utc = datetime.datetime.strptime(last_modified_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-    last_modified_utc = last_modified_utc.replace(tzinfo=ZoneInfo("UTC"))
-    last_modified_nyc = last_modified_utc.astimezone(ZoneInfo("America/New_York"))
-    return last_modified_nyc.strftime("%Y-%m-%d\n%H:%M:%S")
+    tz_name = os.getenv("TZ", "UTC")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception as e:
+        print(f"to_local_time: ⚠️ Exception: {e}, defaulting to UTC")
+        tz = ZoneInfo("UTC")
+
+    try:
+        if iso_str:
+            # Parse ISO8601 string to datetime and convert to specified timezone
+            dt = datetime.datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+            dt = dt.astimezone(tz)
+        else:
+            # Get current time in the local timezone
+            dt = datetime.datetime.now(tz)
+    except Exception as e:
+        print(f"to_local_time: ⚠️ Exception: {e}, defaulting to current time in {tz_name}")
+        dt = datetime.now(tz)
+
+    return dt.strftime("%Y-%m-%d\n%H:%M:%S %Z %z")
 
 
 def update_dns_record(cloudflare_config,
@@ -152,10 +173,7 @@ def update_dns_record(cloudflare_config,
         record_id         = record["id"]
         dns_record_ip     = record["content"]
         dns_last_modified = record["modified_on"]
-
-        print(f"✅ Found {record_type} record: id={record_id}, ip={dns_record_ip}, modified_on={dns_last_modified}")
     else:
-        print(f"❌ No {record_type} record found for {dns_name}")
         record_id = dns_record_ip = dns_last_modified = None
 
     # Update DNS record if IP has changed
@@ -164,15 +182,13 @@ def update_dns_record(cloudflare_config,
         resp = requests.put(update_url, headers=header, json=data)
         resp.raise_for_status()
         print(f"update_dns_record: ✅  Updated '{dns_name}': {dns_record_ip} → {detected_ip}")       #####
-        #return True
     else:
         print(f"update_dns_record: ℹ️  No update needed for '{dns_name}', IP unchanged")             #####
-        #return False
     
     return {
         "dns_name"         : dns_name,
         "detected_ip"      : detected_ip,
-        "dns_last_modified": format_cloudflare_timestamp(dns_last_modified)
+        "dns_last_modified": to_local_time(dns_last_modified)
     }
 
 
@@ -217,15 +233,17 @@ def upload_ip(google_config,
 
     # Get DNS list to locate row
     dns_list = sheet.col_values(header_map["DNS"])[1:]  # Exclude header
-    now = datetime.datetime.now().strftime("%Y-%m-%d\n%H:%M:%S")
+    #now = datetime.datetime.now().strftime("%Y-%m-%d\n%H:%M:%S %Z %z")
+    #now = get_now_local().strftime("%Y-%m-%d\n%H:%M:%S %Z %z")
+    now = to_local_time()
 
     if dns_name in dns_list:
         # Existing DNS row → update
         row_num = dns_list.index(dns_name) + 2
         updates = {
-            "IP"                        : detected_ip,
+            "IP"                         : detected_ip,
             #"Last Check"                : now,
-            "Last Updated"              : now,            
+            "Last Updated"               : now,            
             "Last Modified\n(Cloudflare)": dns_last_modified,
         }
         # if weekly_uptime is not None:
@@ -299,11 +317,11 @@ def main():
         if not all(google_config.values()):
             raise EnvironmentError("main: Missing required Google/Docker config in .env") 
 
-        # # Uploads IP data to Google Sheets
-        # upload_ip(google_config,
-        #           result["dns_name"],
-        #           result["detected_ip"],
-        #           dns_last_modified=result["dns_last_modified"])
+        # Uploads IP data to Google Sheets
+        upload_ip(google_config,
+                  result["dns_name"],
+                  result["detected_ip"],
+                  dns_last_modified=result["dns_last_modified"])
 
     else:
         print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
