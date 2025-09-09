@@ -2,9 +2,9 @@ import os
 import json
 import socket
 import gspread
-import datetime
 import requests
 
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
@@ -110,11 +110,11 @@ def to_local_time(iso_str: str = None) -> str:
     try:
         if iso_str:
             # Parse ISO8601 string to datetime and convert to specified timezone
-            dt = datetime.datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
             dt = dt.astimezone(tz)
         else:
             # Get current time in the local timezone
-            dt = datetime.datetime.now(tz)
+            dt = datetime.now(tz)
     except Exception as e:
         print(f"to_local_time: ⚠️ Exception: {e}, defaulting to current time in {tz_name}")
         dt = datetime.now(tz)
