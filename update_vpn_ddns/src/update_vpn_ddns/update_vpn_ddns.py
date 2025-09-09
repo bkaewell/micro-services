@@ -23,18 +23,21 @@ def is_valid_ip(ip: str,
         True if the IP address is valid, False otherwise
     """
 
+    # Normalize version and default to IPv4 if invalid
+    version = version.lower()
+    if version not in ("ipv4", "ipv6"):
+        version = "ipv4"  # Default to IPv4 for invalid version
+        print(f"is_valid_ip: Invalid version specified, defaulting to IPv4")  # Optional warning
+
     try:
         # Validate IPv4
-        if version.lower() == "ipv4":
+        if version == "ipv4":
             socket.inet_pton(socket.AF_INET, ip)
         # Validate IPv6
-        elif version.lower() == "ipv6":
-            socket.inet_pton(socket.AF_INET6, ip)
-        # Handle unsupported version input
         else:
-            raise ValueError(f"is_valid_ip: Invalid version '{version}'; Use 'ipv4' or 'ipv6'")
+            socket.inet_pton(socket.AF_INET6, ip)
         return True
-    except (socket.error, ValueError):
+    except socket.error:
         return False
 
 

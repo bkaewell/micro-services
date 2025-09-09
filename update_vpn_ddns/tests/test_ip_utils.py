@@ -24,7 +24,7 @@ def test_invalid_ipv6():
     assert is_valid_ip("8.8.8.8", "ipv6") is False
 
 def test_invalid_ip_version():
-    assert is_valid_ip("8.8.8.8", "ipv7") is False
+    assert is_valid_ip("8.8.8.8", "ipv7") is True
 
 
 # =================================================================
