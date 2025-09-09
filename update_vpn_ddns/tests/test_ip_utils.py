@@ -31,9 +31,10 @@ def test_invalid_ip_version():
 # Unit Tests for get_public_ip()
 # Purpose: Ensure public IP fetching logic works with fallback APIs
 # =================================================================
-def test_get_public_ip_invalid_version():
-    with pytest.raises(ValueError):
-        get_public_ip("ipv7")
+@responses.activate
+def test_get_public_ip_invalid_version_success():
+    responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
+    assert get_public_ip("ipv7") == "8.8.8.8"    
 
 @responses.activate
 def test_get_public_ip_ipv4_success():

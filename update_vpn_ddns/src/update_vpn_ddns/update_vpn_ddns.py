@@ -27,7 +27,7 @@ def is_valid_ip(ip: str,
     version = version.lower()
     if version not in ("ipv4", "ipv6"):
         version = "ipv4"  # Default to IPv4 for invalid version
-        print(f"is_valid_ip: Invalid version specified, defaulting to IPv4")  # Optional warning
+        print(f"is_valid_ip: ⚠️ Invalid version specified, defaulting to IPv4")
 
     try:
         # Validate IPv4
@@ -46,13 +46,10 @@ def get_public_ip(version: str="ipv4") -> str | None:
     Fetch the public address for the given version ("ipv4" or "ipv6")
 
     Args:
-        version: "ipv4" or "ipv6"
+        version: "ipv4" (default) or "ipv6"
 
     Returns: 
-        Public IP address as a string or None if no service succeeds
-
-    Raises:
-        ValueError: If an unsupported IP version is requested        
+        Public IP address as a string or None if no service succeeds     
     """
 
     # API endpoints (redundant, outputs plain text, ranked by reliability)
@@ -70,10 +67,11 @@ def get_public_ip(version: str="ipv4") -> str | None:
         ],
     }
 
-    # Validate version upfront
+    # Normalize version and default to IPv4 if invalid
     version = version.lower()
     if version not in ip_services:
-        raise ValueError(f"get_public_ip[{version}]: Invalid IP version, use 'ipv4' or 'ipv6'")
+        print(f"get_public_ip: ⚠️ Invalid version '{version}', defaulting to IPv4")
+        version = "ipv4"
 
     # Try API endpoints in order until one succeeds
     for service in ip_services[version]:
