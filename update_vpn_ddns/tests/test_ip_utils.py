@@ -1,8 +1,7 @@
 import pytest
 import responses
 
-from update_vpn_ddns.update_vpn_ddns import is_valid_ip
-from update_vpn_ddns.update_vpn_ddns import get_public_ip
+from update_vpn_ddns.utils import is_valid_ip, get_public_ip
 
 # ==============================================================
 # Unit Tests for is_valid_ip()
@@ -10,17 +9,17 @@ from update_vpn_ddns.update_vpn_ddns import get_public_ip
 # ==============================================================
 
 # Google Public DNS
-def test_valid_ipv4():
+def test_valid_ipv4_address():
     assert is_valid_ip("8.8.8.8", "ipv4") is True
 
-def test_invalid_ipv4():
+def test_invalid_ipv4_address():
     assert is_valid_ip("777.777.777.777", "ipv4") is False
 
 # Google Public DNS
-def test_valid_ipv6():
+def test_valid_ipv6_address():
     assert is_valid_ip("2001:4860:4860::8888", "ipv6") is True
 
-def test_invalid_ipv6():
+def test_invalid_ipv6_address():
     assert is_valid_ip("8.8.8.8", "ipv6") is False
 
 def test_invalid_ip_version():
