@@ -5,7 +5,9 @@ Welcome to the **Micro Services Repository**! This repository serves as a scalab
 ## **📂 Repository Overview**
 ```
 micro-services/            # Root directory for all microservices
-└── ip_upload/             # IP Upload microservice (fully implemented)
+└── internet_watchdog/     # Internet Watchdog microservice (in-progress)
+└── update_vpn_ddns/       # Update Virtual Private Network (VPN) Dynamic Domain Name Server (DDNS) microservice (in-progress)
+
 
 # Placeholder for Additional Microservices
 └── service-01/

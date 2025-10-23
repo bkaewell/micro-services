@@ -1,4 +1,4 @@
-# 🚀 IP Upload Microservice
+# 🚀 Update VPN DDNS Microservice
 A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration.** Designed with **scalability, automation, and real-time monitoring** in mind.
   
   
@@ -109,7 +109,7 @@ docker exec -it ip_uploader_app python /app/src/ip_upload.py
   
 ## 📂 Repository Overview
 ```
-ip_upload/
+update_vpn_ddns/
 ├── src/                    # IP processing scripts
 ├── tests/                  # Unit tests
 ├── cron/                   # Scheduled cron jobs
