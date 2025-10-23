@@ -19,7 +19,7 @@ def reboot_plug():
         requests.get(f"http://{PLUG_IP}/relay/0?turn=off", timeout=3)
         time.sleep(REBOOT_DELAY)
         requests.get(f"http://{PLUG_IP}/relay/0?turn=on", timeout=3)
-        print("Router power restored.")
+        print("Router power restored")
     except Exception as e:
         print("Error communicating with plug:", e)
 
@@ -30,7 +30,7 @@ def main():
             print("✅ Internet UP")
         else:
             reboot_plug()
-            # wait a bit to allow devices to come back online
+            # Wait a bit to allow devices to come back online
             #time.sleep(60)
             time.sleep(CHECK_INTERVAL)
         time.sleep(CHECK_INTERVAL)
