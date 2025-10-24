@@ -34,7 +34,7 @@
 import pytest
 import responses
 
-from update_vpn_ddns.update_vpn_ddns import update_dns_record
+from network_autopilot.network_autopilot import update_dns_record
 
 def test_update_dns_record():
 

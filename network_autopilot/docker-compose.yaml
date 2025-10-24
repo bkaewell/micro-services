@@ -6,8 +6,8 @@ services:
   app:
     build: .
     env_file: .env
-    container_name: vpn_ddns_app
-    command: python -m update_vpn_ddns.__main__
+    container_name: network_autopilot_app
+    command: python -m network_autopilot.__main__
     environment:
       - PYTHONPATH=/app/src
       - TZ=${TZ:-UTC}
@@ -24,10 +24,10 @@ services:
   cron:
     build: .
     env_file: .env
-    container_name: vpn_ddns_cron
+    container_name: network_autopilot_cron
     command: >
       sh -c "while true; do
-               python -m update_vpn_ddns.__main__;
+               python -m network_autopilot.__main__;
                sleep 60;
              done"
     environment:
