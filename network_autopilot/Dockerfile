@@ -50,4 +50,4 @@ ENV PYTHONPATH=/app/src:$PYTHONPATH
 # -------------------------------------------------------------------
 # 7. Default command (overridden by docker-compose)
 # -------------------------------------------------------------------
-CMD ["python", "-m", "update_vpn_ddns.__main__"]
+CMD ["python", "-m", "network_autopilot.__main__"]

@@ -1,4 +1,4 @@
-# 🚀 Update VPN DDNS Microservice
+# 🚀 Autonomous Network Management Agent Microservice
 A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration.** Designed with **scalability, automation, and real-time monitoring** in mind.
   
   
@@ -109,7 +109,7 @@ docker exec -it ip_uploader_app python /app/src/ip_upload.py
   
 ## 📂 Repository Overview
 ```
-update_vpn_ddns/
+network_autopilot/
 ├── src/                    # IP processing scripts
 ├── tests/                  # Unit tests
 ├── cron/                   # Scheduled cron jobs
@@ -130,3 +130,15 @@ Verify package visibility (without full run):
 ```
 poetry run python -c "import network_autopilot; print(network_autopilot.__file__)"
 ```
+
+poetry check
+
+
+Dockerfile:
+# -------------------------------------------------------------------
+# 4. Install Python dependencies (cached and no dev deps in prod)
+# -------------------------------------------------------------------
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --no-interaction --no-ansi --no-root
+# For production without dev dependencies, uncomment:
+#RUN poetry install --no-root --without dev

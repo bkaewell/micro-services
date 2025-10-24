@@ -1,7 +1,7 @@
 import pytest
 import responses
 
-from update_vpn_ddns.utils import is_valid_ip, get_public_ip
+from network_autopilot.utils import is_valid_ip, get_public_ip
 
 # ==============================================================
 # Unit Tests for is_valid_ip()

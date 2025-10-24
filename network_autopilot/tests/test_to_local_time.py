@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
-from update_vpn_ddns.utils import to_local_time
+from network_autopilot.utils import to_local_time
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def mock_datetime_now():
         # Convert to the requested timezone if provided
         return fixed_time.astimezone(tz) if tz else fixed_time
 
-    with patch("update_vpn_ddns.utils.datetime") as mock_datetime:
+    with patch("network_autopilot.utils.datetime") as mock_datetime:
         # Configure the mock to override only the `now` method
         mock_datetime.now.side_effect = _now
         # Ensure other methods (i.e. fromisoformat) use the real datetime class
