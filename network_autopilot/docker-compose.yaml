@@ -1,0 +1,39 @@
+
+services:
+  # -------------------------------------------------------------------
+  # Manual Testing Mode
+  # -------------------------------------------------------------------
+  app:
+    build: .
+    env_file: .env
+    container_name: vpn_ddns_app
+    command: python -m update_vpn_ddns.__main__
+    environment:
+      - PYTHONPATH=/app/src
+      - TZ=${TZ:-UTC}
+    volumes:
+      # Mount the current directory into the container at /app
+      - .:/app
+      # Mount the host API keys path (from .env) and mirror the local path inside the container
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro   # Dynamically mount based on .env
+    restart: unless-stopped   # Auto-restarts on reboot/failure unless manually stopped
+
+  # -------------------------------------------------------------------
+  # Scheduled Execution Mode
+  # -------------------------------------------------------------------
+  cron:
+    build: .
+    env_file: .env
+    container_name: vpn_ddns_cron
+    command: >
+      sh -c "while true; do
+               python -m update_vpn_ddns.__main__;
+               sleep 60;
+             done"
+    environment:
+      - PYTHONPATH=/app/src
+      - TZ=${TZ:-UTC}
+    volumes:
+      - .:/app
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+    restart: unless-stopped   # Auto-restarts on reboot/failure unless manually stopped
