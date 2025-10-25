@@ -109,15 +109,23 @@ docker exec -it ip_uploader_app python /app/src/ip_upload.py
   
 ## 📂 Repository Overview
 ```
+
 network_autopilot/
-├── src/                    # IP processing scripts
 ├── tests/                  # Unit tests
-├── cron/                   # Scheduled cron jobs
+├─ __main__.py             # Runs the loop
+├─ network_autopilot.py    # Orchestrates all logic
+├─ watchdog.py             # Internet check & smart plug reset
+├─ cloudflare.py           # Cloudflare + Sheets logic
+├─ sheets.py               # Google Sheets updates
+├─ db.py                   # SQLite metrics (optional)
+├─ utils.py                # Helpers (ping, time, IP fetch)
+
 ├── docker-entrypoint.sh    # Controls execution (manual vs. cron)
 ├── Dockerfile              # Containerization
 ├── .env.example            # Sample env file
-├── README.md               # This file
+├── README.md               
 └── docker-compose.yaml     # Docker setup
+
 ```
   
   
