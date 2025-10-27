@@ -150,3 +150,6 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-interaction --no-ansi --no-root
 # For production without dev dependencies, uncomment:
 #RUN poetry install --no-root --without dev
+
+DNS Leak test
+IP leak test
