@@ -1,52 +1,19 @@
 services:
-  # --------------------------------
-  # Continuous Operation (Main Loop)
-  # --------------------------------
   autopilot:
     build:
-      context: .
       args:
-        POETRY_ENV: prod
-    env_file: .env
-    container_name: network_autopilot
-    command: python -m network_autopilot.__main__
-    environment:
-      - PYTHONPATH=/app/src
-      - TZ=${TZ:-UTC}
-    restart: unless-stopped
+        POETRY_ENV: dev
+    volumes:
+      - .:/app
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
 
-  # -------------------------------------------------------------------
-  # On-Demand Execution (Manual Run)
-  # -------------------------------------------------------------------
   manual_run:
     build:
-      context: .
       args:
-        POETRY_ENV: prod
-    env_file: .env
-    container_name: network_autopilot_manual
-    command: python -m network_autopilot.__main__
-    environment:
-      - PYTHONPATH=/app/src
-      - TZ=${TZ:-UTC}
-    restart: "no"
-
-
-
-
-
-
-
-services:
-  app:
-    build: .
-    container_name: network_autopilot_app
-    env_file: .env
-    environment:
-      - PYTHONPATH=/app/src
-      - TZ=${TZ:-UTC}
-    command: python -m network_autopilot.__main__
-    restart: unless-stopped
+        POETRY_ENV: dev
+    volumes:
+      - .:/app
+      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
 
 
 
