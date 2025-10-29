@@ -153,3 +153,13 @@ RUN poetry install --no-interaction --no-ansi --no-root
 
 DNS Leak test
 IP leak test
+
+Development (live editing):
+```
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
+```
+
+Production (frozen code):
+```
+docker compose -f docker-compose.yaml up -d
+```

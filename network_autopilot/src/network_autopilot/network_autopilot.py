@@ -18,6 +18,10 @@ def run_cycle():
     current_ip = get_public_ip()
     dns_changed = update_dns(current_ip)
 
+    print("Internet OK . . . . . . . . . .✅")
+
+
+
     # # Update Google Sheets
     # log_to_sheets(ip=current_ip,
     #               internet_ok=internet_ok,

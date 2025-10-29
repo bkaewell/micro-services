@@ -3,6 +3,8 @@ services:
     build:
       args:
         POETRY_ENV: dev
+    environment:
+     - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
@@ -11,9 +13,12 @@ services:
     build:
       args:
         POETRY_ENV: dev
+    environment:
+     - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+
 
 
 
