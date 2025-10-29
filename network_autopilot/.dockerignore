@@ -1,0 +1,20 @@
+# Ignore local environment files
+.env
+.venv/
+
+# Ignore Python caches
+__pycache__/
+*.pyc
+
+# Ignore tests
+tests/
+.pytest_cache/
+
+# Ignore Docker Compose files and Docker ignore itself
+docker-compose*.yaml
+.dockerignore
+
+# Keep source code and Poetry files
+!src/
+!pyproject.toml
+!poetry.lock
