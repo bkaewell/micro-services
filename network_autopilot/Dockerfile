@@ -1,6 +1,4 @@
-# ----------
 # Base Image
-# ----------
 FROM python:3.10.13-slim AS base
 
 # Set working directory

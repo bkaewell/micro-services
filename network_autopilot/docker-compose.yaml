@@ -1,49 +1,47 @@
+x-common-base: &common-base
+  build:
+    context: .
+    args:
+      POETRY_ENV: prod
+  env_file: .env
+  environment:
+    - TZ=${TZ:-UTC}
+
 services:
   # --------------------------------
   # Continuous Operation (Main Loop)
   # --------------------------------
   autopilot:
-    build:
-      context: .
-      args:
-        POETRY_ENV: prod
-    env_file: .env
+    <<: *common-base
     container_name: network_autopilot
-    environment:
-      - TZ=${TZ:-UTC}
     restart: unless-stopped
 
   # --------------------------------
   # On-Demand Execution (Manual Run)
   # --------------------------------
   manual_run:
-    build:
-      context: .
-      args:
-        POETRY_ENV: prod
-    env_file: .env
+    <<: *common-base
     container_name: network_autopilot_manual
-    environment:
-      - TZ=${TZ:-UTC}
     restart: "no"
 
 
 
 
 
-
-
 # services:
-#   app:
-#     build: .
-#     container_name: network_autopilot_app
-#     env_file: .env
-#     environment:
-#       - PYTHONPATH=/app/src
-#       - TZ=${TZ:-UTC}
-#     command: python -m network_autopilot.__main__
+#   # --------------------------------
+#   # Continuous Operation (Main Loop)
+#   # --------------------------------
+#   autopilot:
+#     container_name: network_autopilot
 #     restart: unless-stopped
 
+#   # --------------------------------
+#   # On-Demand Execution (Manual Run)
+#   # --------------------------------
+#   manual_run:
+#     container_name: network_autopilot_manual
+#     restart: "no"
 
 
 

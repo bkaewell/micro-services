@@ -1,23 +1,42 @@
+x-common-dev: &common-dev
+  build:
+    args:
+      POETRY_ENV: dev
+  environment:
+    - PYTHONUNBUFFERED=1
+  volumes:
+    - .:/app
+    - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+
 services:
   autopilot:
-    build:
-      args:
-        POETRY_ENV: dev
-    environment:
-     - PYTHONUNBUFFERED=1
-    volumes:
-      - .:/app
-      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
-
+    <<: *common-dev
   manual_run:
-    build:
-      args:
-        POETRY_ENV: dev
-    environment:
-     - PYTHONUNBUFFERED=1
-    volumes:
-      - .:/app
-      - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+    <<: *common-dev
+
+
+
+
+# services:
+#   autopilot:
+#     build:
+#       args:
+#         POETRY_ENV: dev
+#     environment:
+#      - PYTHONUNBUFFERED=1
+#     volumes:
+#       - .:/app
+#       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+
+#   manual_run:
+#     build:
+#       args:
+#         POETRY_ENV: dev
+#     environment:
+#      - PYTHONUNBUFFERED=1
+#     volumes:
+#       - .:/app
+#       - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
 
 
 
