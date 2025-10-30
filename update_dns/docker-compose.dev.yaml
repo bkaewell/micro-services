@@ -1,0 +1,24 @@
+# YAML anchor for common DEV settings that extend the base Docker config
+x-common-dev: &common-dev
+  build:
+    args:
+      POETRY_ENV: dev
+  environment:
+    - PYTHONUNBUFFERED=1
+  # Bind-mounts entire local repo into /app inside the container
+  # Volumes here apply to run-time environment, bypassing .dockerignore for live code editting in dev mode
+  volumes:
+    - .:/app # in dev mode, bypasses .dockerignore
+    - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
+
+services:
+  # ================================
+  # Continuous Operation (Main Loop)
+  # ================================
+  app:
+    <<: *common-dev
+  # ================================
+  # On-Demand Execution (Manual Run)
+  # ================================
+  test:
+    <<: *common-dev

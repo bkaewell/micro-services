@@ -1,7 +1,7 @@
 import requests
 #from feature.config import Config
 
-def update_dns(ip_address: str):
+def sync_dns(ip_address: str):
     # url = f"https://api.cloudflare.com/client/v4/zones/{Config.CLOUDFLARE_ZONE_ID}/dns_records"
     # headers = {"Authorization": f"Bearer {Config.CLOUDFLARE_API_TOKEN}"}
     # # NOTE: You’ll need to identify the record_id via Cloudflare API or config

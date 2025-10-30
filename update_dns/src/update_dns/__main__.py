@@ -1,6 +1,6 @@
 import time
 
-from .network_autopilot import run_cycle
+from .agent import run_cycle
 
 #CHECK_INTERVAL = 60 # seconds
 CHECK_INTERVAL = 5 # seconds

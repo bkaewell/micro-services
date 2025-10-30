@@ -110,7 +110,7 @@ docker exec -it ip_uploader_app python /app/src/ip_upload.py
 ## 📂 Repository Overview
 ```
 
-network_autopilot/
+update_dns/
 ├── tests/                  # Unit tests
 ├─ __main__.py             # Runs the loop
 ├─ network_autopilot.py    # Orchestrates all logic
@@ -136,7 +136,7 @@ Designed for **scalability, efficiency, and ease of deployment,** this service s
 
 Verify package visibility (without full run):
 ```
-poetry run python -c "import network_autopilot; print(network_autopilot.__file__)"
+poetry run python -c "import update_dns; print(update_dns.__file__)"
 ```
 
 poetry check
@@ -154,8 +154,14 @@ RUN poetry install --no-interaction --no-ansi --no-root
 DNS Leak test
 IP leak test
 
-Development (live editing):
+
+
+
+Development (live editing, base first, override second extends settings from the first base):
 ```
+docker compose up -d --build
+
+
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
 ```
 
@@ -163,3 +169,79 @@ Production (frozen code):
 ```
 docker compose -f docker-compose.yaml up -d
 ```
+
+docker compose up -d --build
+
+
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build manual_run
+
+
+
+Step 1: Build the Docker image
+Make sure you’re in your project root where your Dockerfile is:
+```
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml build test
+```
+
+Step 2: Run the container with an interactive shell
+Instead of running the normal Python command, override it to get a shell:
+```
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml run --rm test /bin/bash
+```
+- --rm → automatically deletes the container when you exit, keeps things clean
+- /bin/bash → opens a Bash shell inside the container
+
+Now you’re inside the container
+
+Step 3: Inspect environment variables
+Inside the container:
+```
+printenv
+```
+
+Step 4: Test your Python script
+Still inside the container, run:
+```
+python -m update_dns.__main__
+```
+- If you set PYTHONUNBUFFERED=1 in the dev compose file, your print statements will show immediately
+
+Step 5: Exit the container
+```
+exit
+```
+- If you used --rm, the container is deleted automatically
+
+Python package directory: micro-service/update_dns/src/update_dns/...
+
+
+🌐 Update DNS Microservice
+
+A lightweight, containerized service that monitors your public IP address and automatically updates DNS records when changes are detected. Designed for dynamic networks, remote systems, and self-hosted setups that need reliable domain availability.
+
+📌 Features
+
+Dynamic DNS Updates: Detects IP changes and syncs records via Cloudflare API
+
+Smart Network Watchdog: Periodically checks internet connectivity and resets hardware if needed
+
+Automated or Manual Execution: Run continuously or trigger on demand
+
+Containerized Deployment: Optimized Docker setup for local or distributed environments
+
+Logging & Observability: Provides clear, real-time runtime output for debugging and operations
+
+
+
+
+
+Test locally:
+```
+poetry run python -m update_dns.__main__
+```
+
+Deploy production code:
+docker compose build app
+docker compose run --rm app /bin/bash
+printenv
+python -m update_dns.__main__

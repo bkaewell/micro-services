@@ -1,5 +1,5 @@
 [project]
-name = "network_autopilot"
+name = "update_dns"
 version = "0.1.0"
 description = "Dynamic DNS updater for VPN using CloudFlare API"
 authors = [
@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-packages = [{ include = "network_autopilot", from = "src" }]
+packages = [{ include = "update_dns", from = "src" }]
 requires-python = ">=3.10, <4.0"
 dependencies = [
     "gspread (>=6.2.1, <7.0.0)",
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 #[tool.poetry.scripts]
-# Console script entry point
+#Console script entry point
 #update-vpn-ddns = "update_vpn_ddns.__main__:main"
 
 [build-system]
@@ -29,4 +29,3 @@ pytest = "^8.4.2"
 responses = "^0.25.8"
 pytest-cov = "^6.3.0"
 black = "^25.1.0"
-

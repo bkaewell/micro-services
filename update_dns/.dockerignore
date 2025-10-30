@@ -1,0 +1,26 @@
+# Only applies at build time (controls what goes into the Docker image)
+
+# ================================
+# Python build and cache artifacts
+# ================================
+.pytest_cache/
+src/update_dns/__pycache__/
+
+# ====================
+# Virtual environments
+# ====================
+.venv/
+
+# =====
+# Tests
+# =====
+tests/
+
+# =======================
+# Project config and docs
+# =======================
+README.md
+.dockerignore
+Dockerfile
+docker-compose.yaml
+docker-compose.dev.yaml

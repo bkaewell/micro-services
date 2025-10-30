@@ -1,0 +1,27 @@
+# YAML anchor for common BASE settings across all Docker services
+x-common-base: &common-base
+  build:
+    context: .
+    args:
+      TZ: ${TZ:-UTC}
+      POETRY_ENV: prod
+  env_file: .env
+  environment:
+    - TZ=${TZ:-UTC}
+
+services:
+  # ================================
+  # Continuous Operation (Main Loop)
+  # ================================
+  app:
+    <<: *common-base
+    container_name: update_dns_app
+    restart: unless-stopped
+
+  # ================================
+  # On-Demand Execution (Manual Run)
+  # ================================
+  test:
+    <<: *common-base
+    container_name: update_dns_test
+    restart: "no"

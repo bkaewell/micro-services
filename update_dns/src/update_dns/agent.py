@@ -1,5 +1,5 @@
 from .watchdog import check_internet, reset_smart_plug
-from .cloudflare import update_dns
+from .cloudflare import sync_dns
 # from .sheets import log_to_sheets
 #from .db import log_metrics
 
@@ -14,9 +14,9 @@ def run_cycle():
     if not internet_ok:
         reset_smart_plug()
 
-    # Get public IP address and update DNS
+    # Get public IP address and sync DNS
     current_ip = get_public_ip()
-    dns_changed = update_dns(current_ip)
+    dns_changed = sync_dns(current_ip)
 
     print("Internet OK . . . . . . . . . .✅")
 
