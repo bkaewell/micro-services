@@ -29,3 +29,8 @@ pytest = "^8.4.2"
 responses = "^0.25.8"
 pytest-cov = "^6.3.0"
 black = "^25.1.0"
+
+[tool.pytest.ini_options]
+# Tell pytest where to find source and test files
+pythonpath = ["src"]
+testpaths = ["tests"]

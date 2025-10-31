@@ -240,8 +240,30 @@ Test locally:
 poetry run python -m update_dns.__main__
 ```
 
-Deploy production code:
+
+Deployed production code:
 docker compose build app
 docker compose run --rm app /bin/bash
 printenv
 python -m update_dns.__main__
+
+Deployed dev code:
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml build test
+docker compose -f docker-compose.yaml -f docker-compose.dev.yaml run --rm test /bin/bash
+printenv
+python -m update_dns.__main__
+
+
+Cleaned up stale .venv/
+~/repo/micro-services/update_dns/
+rm -fr .venv
+poetry config virtualenvs.in-project true
+poetry env use python3.14
+poetry install --with dev
+poetry env info
+poetry run which python
+poetry run which pytest
+poetry run pytest
+
+poetry run pytest 
+poetry run pytest tests/test_to_local_time.py

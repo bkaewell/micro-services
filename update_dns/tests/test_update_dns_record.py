@@ -34,17 +34,11 @@
 import pytest
 import responses
 
-from network_autopilot.network_autopilot import update_dns_record
+from update_dns.agent import sync_dns
 
-def test_update_dns_record():
+def test_sync_dns():
 
-    
-
-    assert update_dns_record() is expected
-
-
-
-
+    assert sync_dns("8.8.8.8") is True
 
 
 
