@@ -1,4 +1,3 @@
-
 # Example tests:
 
 # 1. IP changed → record updated
