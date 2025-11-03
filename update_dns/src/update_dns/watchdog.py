@@ -6,6 +6,7 @@ import requests
 PLUG_IP = "192.168.0.150"   # Shelly plug static IP
 CHECK_HOST = "8.8.8.8"      # Google DNS (reliable ping target)
 REBOOT_DELAY = 3            # seconds
+# REBOOT_DELAY = 30            # seconds
 # =======================================
 
 def check_internet():

@@ -8,77 +8,48 @@ from zoneinfo import ZoneInfo
 from oauth2client.service_account import ServiceAccountCredentials
 
 
-def is_valid_ip(ip: str,
-                version: str="ipv4") -> bool:
+def is_valid_ip(ip: str) -> bool:
     """
-    Validate an IP address (IPv4 or IPv6) using socket
+    Validate an IP address using socket
 
     Args:
-        ip: IP address string to validate
-        version: "ipv4" (default) or "ipv6"    
+        ip: IP address string to validate   
 
     Returns: 
         True if the IP address is valid, False otherwise
     """
 
-    # Normalize version and default to IPv4 if invalid
-    version = version.lower()
-    if version not in ("ipv4", "ipv6"):
-        version = "ipv4"  # Default to IPv4 for invalid version
-        print(f"is_valid_ip: ⚠️ Invalid version specified, defaulting to IPv4")
-
     try:
-        # Validate IPv4
-        if version == "ipv4":
-            socket.inet_pton(socket.AF_INET, ip)
-        # Validate IPv6
-        else:
-            socket.inet_pton(socket.AF_INET6, ip)
+        socket.inet_pton(socket.AF_INET, ip)
         return True
     except socket.error:
         return False
 
 
-def get_public_ip(version: str="ipv4") -> str | None:
+def get_public_ip() -> str | None:
     """
-    Fetch the public address for the given version ("ipv4" or "ipv6")
-
-    Args:
-        version: "ipv4" (default) or "ipv6"
+    Fetch the public IP address (IPv4)
 
     Returns: 
         Public IP address as a string or None if no service succeeds     
     """
 
     # API endpoints (redundant, outputs plain text, ranked by reliability)
-    ip_services = {
-        "ipv4": [
-            "https://api.ipify.org", 
-            "https://ifconfig.me/ip", 
-            "https://ipv4.icanhazip.com", 
-            "https://ipecho.net/plain", 
-        ],
-        "ipv6": [
-            "https://api64.ipify.org", 
-            "https://ifconfig.me", 
-            "https://ipv6.icanhazip.com", 
-        ],
-    }
-
-    # Normalize version and default to IPv4 if invalid
-    version = version.lower()
-    if version not in ip_services:
-        print(f"get_public_ip: ⚠️ Invalid version '{version}', defaulting to IPv4")
-        version = "ipv4"
+    ip_services = [
+        "https://api.ipify.org", 
+        "https://ifconfig.me/ip", 
+        "https://ipv4.icanhazip.com", 
+        "https://ipecho.net/plain", 
+    ]
 
     # Try API endpoints in order until one succeeds
-    for service in ip_services[version]:
+    for service in ip_services:
         try:
             response = requests.get(service, timeout=5)
             if response.status_code == 200:
                 ip = response.text.strip()
-                if is_valid_ip(ip, version):
-                    print(f"get_public_ip[{version}]: {ip} (from {service})")
+                if is_valid_ip(ip):
+                    print(f"get_public_ip: {ip} (from {service})")
                     return ip
         except requests.RequestException:
             continue  # Skip on network/timeout error and try next

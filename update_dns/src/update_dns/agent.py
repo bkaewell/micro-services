@@ -1,10 +1,11 @@
 from .watchdog import check_internet, reset_smart_plug
 from .cloudflare import sync_dns
+from .utils import get_public_ip
 # from .sheets import log_to_sheets
 #from .db import log_metrics
 
-def get_public_ip():
-    return True
+# def get_public_ip():
+#     return True
 
 def run_cycle():
 
@@ -25,7 +26,7 @@ def run_cycle():
     current_ip = get_public_ip()
     dns_changed = sync_dns(current_ip)
 
-    print("Internet OK . . . . . . . . . .✅")
+    print(f"Internet OK . . . . . . . . . .✅........{current_ip}")
 
 
 
