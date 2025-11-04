@@ -9,8 +9,10 @@ REBOOT_DELAY = 3            # seconds
 # REBOOT_DELAY = 30            # seconds
 # =======================================
 
-def check_internet():
-    return os.system(f"ping -c 1 -W 2 {CHECK_HOST} > /dev/null 2>&1") == 0
+def check_internet(host: str = None) -> bool:
+    # Ping a host to verify internet connectivity
+    target = host or CHECK_HOST
+    return os.system(f"ping -c 1 -W 2 {target} > /dev/null 2>&1") == 0
 
 def reset_smart_plug():
     try:

@@ -1,6 +1,6 @@
 from .watchdog import check_internet, reset_smart_plug
-from .cloudflare import sync_dns
 from .utils import get_public_ip
+from .cloudflare import sync_dns
 # from .sheets import log_to_sheets
 #from .db import log_metrics
 
@@ -10,7 +10,7 @@ def run_cycle():
     Executes a single network maintenance cycle:
     1. Verify internet connectivity
     2. Detect current public IP
-    3. Sync DNS to the detected public IP if connection is valid
+    3. Update DNS record (hosted in Cloudflare) to point to the detected public IP
     4. Reset smart plug if connectivity fails
     """
 
@@ -42,19 +42,6 @@ def run_cycle():
         print(f"Unexpected failure during DNS sync: {e}")
 
 
-
-
-    if internet_ok and detected_ip:
-        print(f"main: Detected public IP: {detected_ip}")
-        try:
-            # Update DNS record
-            sync_dns(detected_ip)
-        except (RuntimeError, ValueError, NotImplementedError) as e:
-            print(f"main: ⚠️ Failed to update DNS or upload to Google Sheets: {e}")
-    else:
-        print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated.")
-        # Reset smart plug if internet is down
-        reset_smart_plug()
 
 
     # # Update Google Sheets
