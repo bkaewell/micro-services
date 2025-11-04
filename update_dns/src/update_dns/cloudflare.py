@@ -1,5 +1,5 @@
 import requests
-#from feature.config import Config
+from .config import Config
 
 def sync_dns(ip_address: str):
     # url = f"https://api.cloudflare.com/client/v4/zones/{Config.CLOUDFLARE_ZONE_ID}/dns_records"
@@ -18,5 +18,13 @@ def sync_dns(ip_address: str):
     #     print(f"❌ Failed DNS update: {response.text}")
 
     # return response.ok
+
+
+
+
+
+
+
+
 
     return True

@@ -2,14 +2,13 @@ import time
 
 from .agent import run_cycle
 
-#CHECK_INTERVAL = 60 # seconds
-CHECK_INTERVAL = 5 # seconds
 
-
-def main_loop():
+# Supervisor loop running once per minute
+# def main_loop(interval: int = 60):
+def main_loop(interval: int = 5):
     while True:
         run_cycle()
-        time.sleep(CHECK_INTERVAL)
+        time.sleep(interval)
 
 if __name__ == "__main__":
     main_loop()
