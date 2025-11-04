@@ -20,10 +20,11 @@ def run_cycle():
 
     if not internet_ok or not detected_ip:
         #logger.warning("No valid internet connection or public IP. Initiating fallback procedure.")
-        print("No valid internet connection or public IP")
+        print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated")
         #with suppress(Exception):
-        reset_smart_plug()
-        return
+        if not reset_smart_plug():
+            print("main: ⚠️ Smart plug reset failed")
+            return
     
     #logger.info(f"Detected public IP: {detected_ip}")
     print(f"Detected public IP: {detected_ip}")

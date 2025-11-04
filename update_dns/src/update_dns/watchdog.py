@@ -14,12 +14,19 @@ def check_internet(host: str = None) -> bool:
     target = host or CHECK_HOST
     return os.system(f"ping -c 1 -W 2 {target} > /dev/null 2>&1") == 0
 
-def reset_smart_plug():
+def reset_smart_plug() -> bool:
     try:
-        requests.get(f"http://{PLUG_IP}/relay/0?turn=off", timeout=3)
+        off_resp = requests.get(f"http://{PLUG_IP}/relay/0?turn=off", timeout=3)
         time.sleep(REBOOT_DELAY)
-        requests.get(f"http://{PLUG_IP}/relay/0?turn=on", timeout=3)
-        print("Router power restored")
+        on_resp = requests.get(f"http://{PLUG_IP}/relay/0?turn=on", timeout=3)
+
+        if off_resp.ok and on_resp.ok:
+            print("Router power restored")
+            return True
+        else:
+            print("Failed to toggle plug state properly")
+            return False
+    
     except Exception as e:
         print("Error communicating with plug:", e)
-
+        return False
