@@ -1,25 +1,30 @@
 import pytest
 import responses
-
 from update_dns.utils import is_valid_ip, get_public_ip
 
-# ============================
-# Unit Tests for is_valid_ip()
-# Purpose: Validate IP address
-# ============================
+# -------------------------------
+# PARAMETRIZED TEST: IP Addresses
+# -------------------------------
+@pytest.mark.parametrize(
+    "ip, expected_result",
+    [
+        ("8.8.8.8", True),
+        ("7.7.7", False),
+    ],
+)
 
-# Google Public DNS
-def test_valid_ip_address():
-    assert is_valid_ip("8.8.8.8") is True
+# ===================================
+# TEST GROUP: IP Address Verification
+# ===================================
+def test_is_valid_ip(ip, expected_result):
+    result = is_valid_ip(ip)
 
-def test_invalid_ip_address():
-    assert is_valid_ip("777.777.777.777") is False
+    assert expected_result is result
 
 
-# =================================================================
-# Unit Tests for get_public_ip()
-# Purpose: Ensure public IP fetching logic works with fallback APIs
-# =================================================================
+# =======================================================
+# TEST GROUP: Public IP Fetch (Fallback / Sequence Logic)
+# =======================================================
 @responses.activate
 def test_get_public_ip_success():
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
