@@ -15,7 +15,8 @@ def run_cycle():
     """
 
     # --- Phase 1: Network Health Check ---
-    internet_ok = check_internet()
+    host = "8.8.8.8"
+    internet_ok = check_internet(host)
     detected_ip = get_public_ip()
 
     if not internet_ok or not detected_ip:
@@ -28,6 +29,8 @@ def run_cycle():
     
     #logger.info(f"Detected public IP: {detected_ip}")
     print(f"Detected public IP: {detected_ip}")
+
+
 
     # --- Phase 2: DNS Synchronization ---
     try:
