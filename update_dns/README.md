@@ -265,5 +265,6 @@ poetry run which python
 poetry run which pytest
 poetry run pytest
 
-poetry run pytest 
+poetry run pytest -v
 poetry run pytest tests/test_to_local_time.py
+poetry run pytest -v tests/test_watchdog.py
