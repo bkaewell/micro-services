@@ -5,56 +5,65 @@ from .cloudflare import sync_dns
 #from .db import log_metrics
 
 
-def run_cycle():
+class NetworkWatchdog:
     """
     Executes a single network maintenance cycle:
     1. Verify internet connectivity
     2. Detect current public IP
     3. Update DNS record (hosted in Cloudflare) to point to the detected public IP
-    4. Reset smart plug if connectivity fails
+    4. Track consecutive connectivity failures (up to 3 attempts)
+    5. Reset smart plug automatically after 3 consecutive failed pings
     """
-
-    # --- Phase 1: Network Health Check ---
-    host = "8.8.8.8"
-    internet_ok = check_internet(host)
-    detected_ip = get_public_ip()
-
-    if not internet_ok or not detected_ip:
-        #logger.warning("No valid internet connection or public IP. Initiating fallback procedure.")
-        print("main: ⚠️ Could not fetch a valid public IP; DNS record not updated")
-        #with suppress(Exception):
-        if not reset_smart_plug():
-            print("main: ⚠️ Smart plug reset failed")
-            return
     
-    #logger.info(f"Detected public IP: {detected_ip}")
-    print(f"Detected public IP: {detected_ip}")
+    def __init__(self, host="8.8.8.8", max_failures=3):
+        self.host = host
+        self.max_failures = max_failures
+        self.failed_ping_count = 0
 
+    def run_cycle(self):
+        # --- Phase 1: Network Health Check ---
+        internet_ok = check_internet(self.host)
+        detected_ip = get_public_ip()
 
+        if internet_ok and detected_ip:
+            print(f"✅ Internet OK. Public IP: {detected_ip}")
+            self.failed_ping_count = 0
+        else:
+            self.failed_ping_count += 1
+            print(f"⚠️ Internet check failed ({self.failed_ping_count}/{self.max_failures})")
+            
+            if self.failed_ping_count >= self.max_failures:
+                print("🚨 Triggering smart plug reset...")
+                if not reset_smart_plug():
+                    print("⚠️ Smart plug reset failed")
+                self.failed_ping_count = 0  # reset counter after attempting recovery
+                return False
 
-    # --- Phase 2: DNS Synchronization ---
-    try:
-        sync_dns(detected_ip)
-        print("DNS record synchronized successfully")
-        #logger.info("DNS record synchronized successfully.")
-    except (RuntimeError, ValueError, NotImplementedError) as e:
-        print("DNS sync failed", exc_info=e)
-        #logger.error("DNS sync failed", exc_info=e)
-    except Exception as e:
-        # Last-resort safeguard for unexpected runtime failures
-        #logger.exception(f"Unexpected failure during DNS sync: {e}")
-        print(f"Unexpected failure during DNS sync: {e}")
+            return False
+        
+        # --- Phase 2: DNS Synchronization ---
+        try:
+            sync_dns(detected_ip)
+            print("✅ DNS record synchronized successfully")
+            # logger.info("DNS record synchronized successfully.")
+        except (RuntimeError, ValueError, NotImplementedError) as e:
+            print("DNS sync failed", exc_info=e)
+            # logger.error("DNS sync failed", exc_info=e)
+        except Exception as e:
+            # Last-resort safeguard for unexpected runtime failures
+            print(f"Unexpected failure during DNS sync: {e}")
+            # logger.exception(f"Unexpected failure during DNS sync: {e}")
 
+        # Future code
 
+        # Update Google Sheets
+        # log_to_sheets(ip=detected_ip,
+        #               internet_ok=internet_ok,
+        #               dns_changed=dns_changed)
 
-
-    # # Update Google Sheets
-    # log_to_sheets(ip=detected_ip,
-    #               internet_ok=internet_ok,
-    #               dns_changed=dns_changed)
-
-    # # Optional: log metrics to SQLite
-    # log_metrics(ip=detected_ip,
-    #             internet_ok=internet_ok,
-    #             dns_changed=dns_changed)
-
+        # Optional: log metrics to SQLite
+        # log_metrics(ip=detected_ip,
+        #             internet_ok=internet_ok,
+        #             dns_changed=dns_changed)
+        
+        return True
