@@ -8,16 +8,6 @@ from update_dns.watchdog import check_internet, reset_smart_plug
 # FIXTURES
 # ========
 
-# -------------------------
-# Mock for os.system (ping)
-# -------------------------
-@pytest.fixture
-def mock_ping(monkeypatch):
-    """Patch os.system to simulate ping return codes (0=success, non-zero=failure)"""
-    def _mock_ping(return_code):
-        monkeypatch.setattr("os.system", lambda cmd: return_code)
-    return _mock_ping
-
 # -------------------
 # Minimal Config Mock
 # -------------------
@@ -25,59 +15,87 @@ class MockConfig:
     class Hardware:
         PLUG_IP = "192.168.0.150"
         REBOOT_DELAY = 1
+        INIT_DELAY = 1
 
-# ---------------------------------------------
+# # ---------------------------------------------
+# # Fixture to patch Config and bypass time.sleep
+# # ---------------------------------------------
+# @pytest.fixture(autouse=True)   #apply to every test in module
+# def mock_config_and_no_sleep():
+#     """Automatically patch time.sleep and Config throughout all tests in this module"""
+#     with patch("update_dns.watchdog.time.sleep", return_value=None), \
+#          patch("update_dns.watchdog.Config", MockConfig):
+#         yield
+
 # Fixture to patch Config and bypass time.sleep
-# ---------------------------------------------
-@pytest.fixture(autouse=True)   #apply to every test in module
-def mock_config_and_no_sleep():
-    """Automatically patch time.sleep and Config throughout all tests in this module"""
-    with patch("update_dns.watchdog.time.sleep", return_value=None), \
-         patch("update_dns.watchdog.Config", MockConfig):
-        yield
-
-
-# =================================
-# TEST GROUP: Internet Connectivity
-# =================================
-# Function under test: check_internet()
-# -------------------------------------
-@pytest.mark.parametrize(
-    "host, ping_return_code, expected_result",
-    [
-        ("8.8.8.8", 0, True),
-        ("", 1, False),
-    ],
-)
-def test_check_internet(mock_ping, host, ping_return_code, expected_result):
-    """Verify check_internet() returns True when host is reachable"""
-    mock_ping(ping_return_code)
-    result = check_internet(host)
-
-    assert expected_result is result
+@pytest.fixture(autouse=True)
+def patch_config_and_sleep():
+    """Patch Config and time.sleep for all tests in this module."""
+    with patch("update_dns.watchdog.Config", MockConfig), \
+         patch("update_dns.watchdog.time.sleep", return_value=None) as mock_sleep:
+        yield mock_sleep  # yield mock_sleep if you want to assert the delay
 
 
 # ============================
 # TEST GROUP: Smart Plug Reset
 # ============================
-# Function under test: reset_smart_plug()
-# ---------------------------------------
+# Function: reset_smart_plug()
+# ----------------------------
 @pytest.mark.parametrize(
     "status_plug_off, status_plug_on, expected_result",
     [
-        (200, 200, True),   # Both OK → success
-        (500, 200, False),  # OFF/ON → fails
-        (200, 500, False),  # ON/OFF → fails
-        (500, 500, False),  # Both OFF → fails
+        # ✅ Both relay endpoints respond OK (200)
+        (200, 200, True),
+
+        # ❌ OFF relay fails (500)
+        (500, 200, False),
+
+        # ❌ ON relay fails (500)
+        (200, 500, False), 
+
+        # ❌ Both relay endpoints unreachable (500/500)
+        (500, 500, False), 
     ],
 )
+
 @responses.activate
 def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
-    """Simulate various HTTP GET requests to smart plug API endpoints"""
+    """Verify smart plug reset behavior for different HTTP responses"""
     ip = MockConfig.Hardware.PLUG_IP
+    reboot_delay = MockConfig.Hardware.REBOOT_DELAY
+    init_delay = MockConfig.Hardware.INIT_DELAY
+
+    # Mock HTTP responses for relay OFF/ON commands
     responses.add(responses.GET, f"http://{ip}/relay/0?turn=off", status=status_plug_off)
     responses.add(responses.GET, f"http://{ip}/relay/0?turn=on", status=status_plug_on)
+
     result = reset_smart_plug()
 
-    # assert len(responses.calls) == 2
     assert result is expected_result
+
+
+# =================================
+# TEST GROUP: Internet Connectivity
+# =================================
+# Function: check_internet()
+# --------------------------
+@pytest.mark.parametrize(
+    "host, ping_return_code, expected_result",
+    [
+        # ✅ Host reachable (ping returns 0)
+        ("8.8.8.8", 0, True),
+
+        # ❌ Host unreachable (ping returns non-zero)
+        ("", 1, False),
+    ],
+)
+
+def test_check_internet(host, ping_return_code, expected_result, monkeypatch):
+    """Verify check_internet() correctly reflects host reachability"""
+
+    # Patch os.system inline, only for this test
+    monkeypatch.setattr("os.system", lambda cmd: ping_return_code)
+
+    result = check_internet(host)
+
+    assert expected_result is result
