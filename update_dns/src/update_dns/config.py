@@ -21,11 +21,11 @@ class Config:
         API_KEY_LOCAL = os.getenv("GOOGLE_API_KEY_LOCAL")
         API_KEY_DOCKER = os.getenv("GOOGLE_API_KEY_DOCKER")
 
-    # --- Hardware / Smart Plug ---
+    # --- Hardware ---
     class Hardware:
         PLUG_IP = os.getenv("PLUG_IP")
-        REBOOT_DELAY = os.getenv("REBOOT_DELAY")
-
+        REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
+        INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
 
     # METRICS_DB = os.getenv("METRICS_DB", "metrics.db")
     # AUTOPILOT_INTERVAL = int(os.getenv("AUTOPILOT_INTERVAL", "60"))
