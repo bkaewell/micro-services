@@ -5,7 +5,8 @@ def setup_logging(level=logging.INFO) -> None:
     """Configure global application logging"""
     handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d → %(message)s",
+        fmt="%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d → %(message)s",
+        #fmt="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d → %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler.setFormatter(formatter)
