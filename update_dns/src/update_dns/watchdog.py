@@ -2,27 +2,25 @@ import os
 import time
 import requests
 from .config import Config
-
-from datetime import datetime
-
+from .logger import get_logger
 
 
 def check_internet(host: str="8.8.8.8") -> bool:
     """Ping a host (default: Google DNS 8.8.8.8) to verify internet connectivity"""
     return os.system(f"ping -c 1 -W 2 {host} > /dev/null 2>&1") == 0
 
-
 def reset_smart_plug() -> bool:
     """Toggle smart plug off/on to reset power then wait for devices to reinitialize"""
+    logger = get_logger("watchdog")
     ip = Config.Hardware.PLUG_IP
     reboot_delay = Config.Hardware.REBOOT_DELAY
     init_delay = Config.Hardware.INIT_DELAY
 
     try:
-
         # Power cycle the smart plug to recover network connectivity
-        # After restoring power, allow time for all connected devices (ONT, router, APs)
-        # to fully initialize before continuing the main loop
+        # After restoring power, allow time for all connected devices 
+        # (Optical Network Terminal, Router, APs) to fully initialize 
+        # before continuing the main loop
         off_resp = requests.get(f"http://{ip}/relay/0?turn=off", timeout=3)
         time.sleep(reboot_delay)
 
@@ -30,12 +28,15 @@ def reset_smart_plug() -> bool:
         time.sleep(init_delay)
 
         if off_resp.ok and on_resp.ok:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - watchdog - Router power restored")
+            logger.info("🔌 Router power restored and downstream devices initializing...")
             return True
-        else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - watchdog - ⚠️ Failed to toggle plug state properly")
+        elif not off_resp.ok:
+            logger.error(f"❌ Failed to power OFF smart plug (HTTP {off_resp.status_code})")
+            return False
+        elif not on_resp.ok:
+            logger.error(f"❌ Failed to power ON smart plug (HTTP {on_resp.status_code})")
             return False
     
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - watchdog - ⚠️ Error communicating with plug:", e)
+        logger.exception("⚠️ Error communicating with smart plug")
         return False
