@@ -13,19 +13,10 @@ from update_dns.watchdog import check_internet, reset_smart_plug
 # -------------------
 class MockConfig:
     class Hardware:
-        PLUG_IP = "192.168.0.150"
+        ROUTER_IP="1.1.1.1"
+        PLUG_IP = "2.2.2.2"
         REBOOT_DELAY = 1
         INIT_DELAY = 1
-
-# # ---------------------------------------------
-# # Fixture to patch Config and bypass time.sleep
-# # ---------------------------------------------
-# @pytest.fixture(autouse=True)   #apply to every test in module
-# def mock_config_and_no_sleep():
-#     """Automatically patch time.sleep and Config throughout all tests in this module"""
-#     with patch("update_dns.watchdog.time.sleep", return_value=None), \
-#          patch("update_dns.watchdog.Config", MockConfig):
-#         yield
 
 # Fixture to patch Config and bypass time.sleep
 @pytest.fixture(autouse=True)
@@ -61,13 +52,14 @@ def patch_config_and_sleep():
 @responses.activate
 def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
     """Verify smart plug reset behavior for different HTTP responses"""
-    ip = MockConfig.Hardware.PLUG_IP
+    router_ip = MockConfig.Hardware.ROUTER_IP
+    plug_ip = MockConfig.Hardware.PLUG_IP
     reboot_delay = MockConfig.Hardware.REBOOT_DELAY
     init_delay = MockConfig.Hardware.INIT_DELAY
 
     # Mock HTTP responses for relay OFF/ON commands
-    responses.add(responses.GET, f"http://{ip}/relay/0?turn=off", status=status_plug_off)
-    responses.add(responses.GET, f"http://{ip}/relay/0?turn=on", status=status_plug_on)
+    responses.add(responses.GET, f"http://{plug_ip}/relay/0?turn=off", status=status_plug_off)
+    responses.add(responses.GET, f"http://{plug_ip}/relay/0?turn=on", status=status_plug_on)
 
     result = reset_smart_plug()
 

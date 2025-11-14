@@ -57,19 +57,3 @@ def reset_smart_plug() -> bool:
     except Exception:
         logger.exception("⚠️ Unexpected error during smart plug reset")
         return False
-
-
-
-        if off_resp.ok and on_resp.ok:
-            logger.info("🔌 Router power restored and downstream devices initializing...")
-            return True
-        elif not off_resp.ok:
-            logger.error(f"❌ Failed to power OFF smart plug (HTTP {off_resp.status_code})")
-            return False
-        elif not on_resp.ok:
-            logger.error(f"❌ Failed to power ON smart plug (HTTP {on_resp.status_code})")
-            return False
-    
-    except Exception as e:
-        logger.exception("⚠️ Error communicating with smart plug")
-        return False
