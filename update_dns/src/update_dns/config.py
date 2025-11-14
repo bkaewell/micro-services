@@ -23,6 +23,7 @@ class Config:
 
     # --- Hardware ---
     class Hardware:
+        ROUTER_IP = os.getenv("ROUTER_IP")
         PLUG_IP = os.getenv("PLUG_IP")
         REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
         INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
