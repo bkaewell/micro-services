@@ -4,6 +4,9 @@ import requests
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from .logger import get_logger
+
+logger = get_logger("utils")
 
 
 def is_valid_ip(ip: str) -> bool:
@@ -47,7 +50,7 @@ def get_public_ip() -> str | None:
             if response.status_code == 200:
                 ip = response.text.strip()
                 if is_valid_ip(ip):
-                    print(f"get_public_ip: {ip} (from {service})")
+                    logger.debug(f"Public IP detected via {service}: {ip}")
                     return ip
         except requests.RequestException:
             continue  # Skip on network/timeout error and try next
@@ -72,7 +75,7 @@ def to_local_time(iso_str: str = None) -> str:
     try:
         tz = ZoneInfo(tz_name)
     except Exception as e:
-        print(f"to_local_time: ⚠️ Exception: {e}, defaulting to UTC")
+        logger.warning(f"⚠️ Invalid TZ '{tz_name}', defaulting to UTC: {e}")
         tz = ZoneInfo("UTC")
 
     try:
@@ -84,7 +87,7 @@ def to_local_time(iso_str: str = None) -> str:
             # Get current time in the local timezone
             dt = datetime.now(tz)
     except Exception as e:
-        print(f"to_local_time: ⚠️ Exception: {e}, defaulting to current time in {tz_name}")
+        logger.warning(f"⚠️ Failed to convert time '{iso_str}', using now(): {e}")
         dt = datetime.now(tz)
 
     return dt.strftime("%Y-%m-%d\n%H:%M:%S %Z %z")

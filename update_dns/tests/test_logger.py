@@ -31,5 +31,5 @@ def test_logger_configuration(capsys, level, message, expected_in_output):
         logger.critical(message)
 
     captured = capsys.readouterr()
-    assert message in captured.out
     
+    assert message in captured.out
