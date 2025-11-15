@@ -1,4 +1,5 @@
 import pytest
+import requests
 import responses
 from unittest.mock import patch
 from update_dns.watchdog import check_internet, reset_smart_plug
@@ -64,6 +65,38 @@ def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
     result = reset_smart_plug()
 
     assert result is expected_result
+
+@responses.activate
+@patch("update_dns.watchdog.check_internet", return_value=True)
+def test_reset_smart_plug_router_online(mock_check):
+    """Router becomes reachable – should return True even if plug reset succeeds"""
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=off", status=200)
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=on", status=200)
+
+    assert reset_smart_plug() is True
+    mock_check.assert_called()  # or assert call count
+
+@responses.activate
+@patch("update_dns.watchdog.check_internet", return_value=False)
+def test_reset_smart_plug_router_offline(mock_check):
+    """Router remains unreachable after reset attempts - should return False"""
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=off", status=200)
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=on", status=200)
+
+    assert reset_smart_plug() is False
+    assert mock_check.call_count == 5  # verify retry behavior
+
+
+@patch("requests.get", side_effect=requests.exceptions.RequestException("Boom"))
+def test_reset_smart_plug_request_exception(mock_get):
+    """Simulate network failure during relay calls"""
+    assert reset_smart_plug() is False
+
+
+@patch("update_dns.watchdog.requests.get", side_effect=ValueError("Unexpected"))
+def test_reset_smart_plug_unexpected_exception(mock_get):
+    """Simulate unexpected exception to reach generic exception handler"""
+    assert reset_smart_plug() is False
 
 
 # =================================
