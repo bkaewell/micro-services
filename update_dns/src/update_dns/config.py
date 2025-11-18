@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    """Centralized config for Cloudflare, Google, and Hardware data structures"""
+    """Centralized config for Cloudflare, Google, Hardware, and Feature flag data structures"""
 
     # --- Cloudflare ---
     class Cloudflare:
@@ -25,8 +25,17 @@ class Config:
     class Hardware:
         ROUTER_IP = os.getenv("ROUTER_IP")
         PLUG_IP = os.getenv("PLUG_IP")
-        REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
-        INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
+
+        # Safe integer conversion with defaults
+        try:
+            REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
+        except ValueError:
+            REBOOT_DELAY = 30
+
+        try:
+            INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
+        except ValueError:
+            INIT_DELAY = 30
 
     # --- Feature flags ---
     DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "false").lower() == "true"
