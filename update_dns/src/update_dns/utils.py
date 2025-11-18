@@ -54,7 +54,7 @@ def get_public_ip() -> str | None:
                     logger.info(f"Public IP detected | API service: {service}")
                     return ip
         except requests.RequestException:
-            logger.warning(f"⚠️ Failed to retrieve IP from {service}, proceeding to next service...")
+            logger.warning(f"Failed to retrieve IP from {service}, proceeding to next service...")
             continue  # Skip on network/timeout error and try next
     
     # No service returned a valid IP
@@ -77,7 +77,7 @@ def to_local_time(iso_str: str = None) -> str:
     try:
         tz = ZoneInfo(tz_name)
     except Exception as e:
-        logger.warning(f"⚠️ Invalid TZ '{tz_name}', defaulting to UTC: {e}")
+        logger.warning(f"Invalid TZ '{tz_name}', defaulting to UTC: {e}")
         tz = ZoneInfo("UTC")
 
     try:
@@ -89,7 +89,7 @@ def to_local_time(iso_str: str = None) -> str:
             # Get current time in the local timezone
             dt = datetime.now(tz)
     except Exception as e:
-        logger.warning(f"⚠️ Failed to convert time '{iso_str}', using now(): {e}")
+        logger.warning(f"Failed to convert time '{iso_str}', using now(): {e}")
         dt = datetime.now(tz)
 
     return dt.strftime("%Y-%m-%d\n%H:%M:%S %Z %z")

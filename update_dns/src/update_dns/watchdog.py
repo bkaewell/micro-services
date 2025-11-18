@@ -27,7 +27,7 @@ def reset_smart_plug() -> bool:
         # Power-cycle OFF
         off_resp = requests.get(f"http://{plug_ip}/relay/0?turn=off", timeout=3)
         if not off_resp.ok:
-            logger.error(f"❌ Failed to power OFF smart plug | HTTP {off_resp.status_code})")
+            logger.error(f"Failed to power OFF smart plug | HTTP {off_resp.status_code})")
             return False
 
         logger.info(f"Waiting {reboot_delay}s after power-off...")
@@ -36,7 +36,7 @@ def reset_smart_plug() -> bool:
         # Power-cycle ON
         on_resp = requests.get(f"http://{plug_ip}/relay/0?turn=on", timeout=3)
         if not on_resp.ok:
-            logger.error(f"❌ Failed to power ON smart plug | HTTP {on_resp.status_code})")
+            logger.error(f"Failed to power ON smart plug | HTTP {on_resp.status_code})")
             return False        
         
         logger.info(f"Waiting {init_delay}s for network devices to reinitialize...")
@@ -50,12 +50,12 @@ def reset_smart_plug() -> bool:
                 return True
             time.sleep(3)
 
-        logger.error(f"❌ Router unreachable after {max_attempts} attempts post-reset")
+        logger.error(f"Router unreachable after {max_attempts} attempts post-reset")
         return False
 
     except requests.exceptions.RequestException:
-        logger.exception("🔥 Network error communicating with smart plug")
+        logger.exception("Network error communicating with smart plug")
         return False
     except Exception:
-        logger.exception("🔥 Unexpected error during smart plug reset")
+        logger.exception("Unexpected error during smart plug reset")
         return False

@@ -35,12 +35,12 @@ class NetworkWatchdog:
             self.failed_ping_count = 0
         else:
             self.failed_ping_count += 1
-            self.logger.warning(f"⚠️  Internet check failed ({self.failed_ping_count}/{self.max_consecutive_failures})")
+            self.logger.warning(f"Internet check failed ({self.failed_ping_count}/{self.max_consecutive_failures})")
 
             if self.failed_ping_count >= self.max_consecutive_failures:
                 self.logger.error("Triggering smart plug reset...")
                 if not reset_smart_plug():
-                    self.logger.error("❌  Smart plug reset failed")
+                    self.logger.error("Smart plug reset failed")
                 self.failed_ping_count = 0  # reset counter after attempting recovery
                 return False
 
@@ -53,7 +53,7 @@ class NetworkWatchdog:
             # self.logger.info("DNS record synchronized successfully.")
         except (RuntimeError, ValueError, NotImplementedError) as e:
             print("DNS sync failed", exc_info=e)
-            # self.logger.error("⚠️ DNS sync failed", exc_info=e)
+            # self.logger.error("DNS sync failed", exc_info=e)
             # self.logger.exception("🔥????")
         except Exception as e:
             # Last-resort safeguard for unexpected runtime failures
