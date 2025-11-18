@@ -28,5 +28,8 @@ class Config:
         REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
         INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
 
+    # --- Feature flags ---
+    DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "false").lower() == "true"
+
     # METRICS_DB = os.getenv("METRICS_DB", "metrics.db")
     # AUTOPILOT_INTERVAL = int(os.getenv("AUTOPILOT_INTERVAL", "60"))

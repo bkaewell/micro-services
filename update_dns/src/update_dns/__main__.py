@@ -1,5 +1,7 @@
 import time
+import logging
 
+from .config import Config
 from .agent import NetworkWatchdog
 from .logger import setup_logging, get_logger
 
@@ -18,10 +20,17 @@ def main_loop(interval: int = 60):
         time.sleep(interval)
 
 def main():
-    """Entry point for the maintenance network application"""
+    """
+    Entry point for the maintenance network application
 
-    # Configure global logger once
-    setup_logging()  
+    Configures logging based on DEBUG_ENABLED and starts the supervisor loop
+    """
+
+    if Config.DEBUG_ENABLED:
+        setup_logging(level=logging.DEBUG)
+    else:
+        setup_logging()
+
     logger = get_logger("main")
     logger.info("🚀 Starting network maintenance cycle...")
 
