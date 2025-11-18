@@ -5,8 +5,8 @@ from .logger import setup_logging, get_logger
 
 
 # Supervisor loop running once per minute
-# def main_loop(interval: int = 60):
 def main_loop(interval: int = 60):
+    logger = get_logger("main_loop")
     watchdog = NetworkWatchdog()
 
     # Safe loop for continuous running
@@ -14,7 +14,7 @@ def main_loop(interval: int = 60):
         try:
             watchdog.run_cycle()
         except Exception as e:
-            logger.exception(f"Fatal error: {e}")
+            logger.exception(f"🔥 Fatal error: {e}")
         time.sleep(interval)
 
 def main():
@@ -24,7 +24,7 @@ def main():
     logger.info("🚀 Starting network maintenance cycle...")
 
     #main_loop(interval=60)
-    main_loop(interval=5)
+    main_loop(interval=10)
 
 if __name__ == "__main__":
     main()

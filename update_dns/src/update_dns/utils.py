@@ -50,9 +50,11 @@ def get_public_ip() -> str | None:
             if response.status_code == 200:
                 ip = response.text.strip()
                 if is_valid_ip(ip):
-                    logger.debug(f"Public IP detected via {service}: {ip}")
+                    #logger.debug(f"Public IP detected via {service}: {ip}")
+                    logger.info(f"Public IP detected | API service: {service}")
                     return ip
         except requests.RequestException:
+            logger.warning(f"⚠️ Failed to retrieve IP from {service}, proceeding to next service...")
             continue  # Skip on network/timeout error and try next
     
     # No service returned a valid IP
@@ -91,4 +93,3 @@ def to_local_time(iso_str: str = None) -> str:
         dt = datetime.now(tz)
 
     return dt.strftime("%Y-%m-%d\n%H:%M:%S %Z %z")
-

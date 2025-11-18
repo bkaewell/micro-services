@@ -53,14 +53,14 @@ def patch_config_and_sleep():
 @responses.activate
 def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
     """Verify smart plug reset behavior for different HTTP responses"""
-    router_ip = MockConfig.Hardware.ROUTER_IP
-    plug_ip = MockConfig.Hardware.PLUG_IP
-    reboot_delay = MockConfig.Hardware.REBOOT_DELAY
-    init_delay = MockConfig.Hardware.INIT_DELAY
+    #router_ip = MockConfig.Hardware.ROUTER_IP
+    #plug_ip = MockConfig.Hardware.PLUG_IP
+    #reboot_delay = MockConfig.Hardware.REBOOT_DELAY
+    #init_delay = MockConfig.Hardware.INIT_DELAY
 
     # Mock HTTP responses for relay OFF/ON commands
-    responses.add(responses.GET, f"http://{plug_ip}/relay/0?turn=off", status=status_plug_off)
-    responses.add(responses.GET, f"http://{plug_ip}/relay/0?turn=on", status=status_plug_on)
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=off", status=status_plug_off)
+    responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=on", status=status_plug_on)
 
     result = reset_smart_plug()
 
@@ -69,7 +69,7 @@ def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
 @responses.activate
 @patch("update_dns.watchdog.check_internet", return_value=True)
 def test_reset_smart_plug_router_online(mock_check):
-    """Router becomes reachable – should return True even if plug reset succeeds"""
+    """Router becomes reachable - should return True even if plug reset succeeds"""
     responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=off", status=200)
     responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=on", status=200)
 
@@ -90,12 +90,14 @@ def test_reset_smart_plug_router_offline(mock_check):
 @patch("requests.get", side_effect=requests.exceptions.RequestException("Boom"))
 def test_reset_smart_plug_request_exception(mock_get):
     """Simulate network failure during relay calls"""
+
     assert reset_smart_plug() is False
 
 
 @patch("update_dns.watchdog.requests.get", side_effect=ValueError("Unexpected"))
 def test_reset_smart_plug_unexpected_exception(mock_get):
     """Simulate unexpected exception to reach generic exception handler"""
+
     assert reset_smart_plug() is False
 
 

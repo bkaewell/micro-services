@@ -24,36 +24,38 @@ def reset_smart_plug() -> bool:
         # Terminal, router and Access Points to complete their boot sequences. This ensures 
         # the main loop only resumes once the network stack is expected to be healthy
 
+        # Power-cycle OFF
         off_resp = requests.get(f"http://{plug_ip}/relay/0?turn=off", timeout=3)
         if not off_resp.ok:
-            logger.error(f"❌ Failed to power OFF smart plug | HTTP status: {off_resp.status_code})")
+            logger.error(f"❌ Failed to power OFF smart plug | HTTP {off_resp.status_code})")
             return False
 
-        logger.info(f"🕒 Waiting {reboot_delay}s for power-down...")
+        logger.info(f"Waiting {reboot_delay}s after power-off...")
         time.sleep(reboot_delay)
 
+        # Power-cycle ON
         on_resp = requests.get(f"http://{plug_ip}/relay/0?turn=on", timeout=3)
         if not on_resp.ok:
-            logger.error(f"❌ Failed to power ON smart plug | HTTP status: {on_resp.status_code})")
+            logger.error(f"❌ Failed to power ON smart plug | HTTP {on_resp.status_code})")
             return False        
         
-        logger.info(f"🕒 Waiting {init_delay}s for network devices to come online...")
+        logger.info(f"Waiting {init_delay}s for network devices to reinitialize...")
         time.sleep(init_delay)
 
         # Verify the router is back online
-        for attempt in range(5):
-            #if ping_host(router_ip):
+        max_attempts = 5
+        for attempt in range(max_attempts):
             if check_internet(router_ip):
-                logger.info(f"🌐 Router reachable after {attempt + 1} checks")
+                logger.info(f"Router is reachable on {attempt + 1}/{max_attempts} attempts")
                 return True
             time.sleep(3)
 
-        logger.error("🚫 Router not reachable after reset attempt")
+        logger.error(f"🚫 Router unreachable after {max_attempts} attempts post-reset")
         return False
 
     except requests.exceptions.RequestException:
-        logger.exception("⚠️ Network error communicating with smart plug")
+        logger.exception("🔥 Network error communicating with smart plug")
         return False
     except Exception:
-        logger.exception("⚠️ Unexpected error during smart plug reset")
+        logger.exception("🔥 Unexpected error during smart plug reset")
         return False
