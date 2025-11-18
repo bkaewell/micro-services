@@ -18,11 +18,14 @@ def main_loop(interval: int = 60):
         time.sleep(interval)
 
 def main():
+    """Entry point for the maintenance network application"""
+
     # Configure global logger once
     setup_logging()  
     logger = get_logger("main")
     logger.info("🚀 Starting network maintenance cycle...")
 
+    # Start the supervisor loop
     #main_loop(interval=60)
     main_loop(interval=10)
 

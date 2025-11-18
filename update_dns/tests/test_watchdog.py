@@ -22,7 +22,7 @@ class MockConfig:
 # Fixture to patch Config and bypass time.sleep
 @pytest.fixture(autouse=True)
 def patch_config_and_sleep():
-    """Patch Config and time.sleep for all tests in this module."""
+    """Patch Config and time.sleep for all tests in this module"""
     with patch("update_dns.watchdog.Config", MockConfig), \
          patch("update_dns.watchdog.time.sleep", return_value=None) as mock_sleep:
         yield mock_sleep  # yield mock_sleep if you want to assert the delay
