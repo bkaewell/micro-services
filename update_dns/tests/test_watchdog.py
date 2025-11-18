@@ -82,13 +82,11 @@ def test_reset_smart_plug_router_offline(mock_check):
     assert reset_smart_plug() is False
     assert mock_check.call_count == 5  # verify retry behavior
 
-
 @patch("requests.get", side_effect=requests.exceptions.RequestException("Boom"))
 def test_reset_smart_plug_request_exception(mock_get):
     """Simulate network failure during relay calls"""
 
     assert reset_smart_plug() is False
-
 
 @patch("update_dns.watchdog.requests.get", side_effect=ValueError("Unexpected"))
 def test_reset_smart_plug_unexpected_exception(mock_get):
