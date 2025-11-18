@@ -1,3 +1,4 @@
+from .config import Config
 from .logger import get_logger
 from .cloudflare import sync_dns
 from .utils import get_public_ip
@@ -22,6 +23,10 @@ class NetworkWatchdog:
         self.max_consecutive_failures = max_consecutive_failures
         self.failed_ping_count = 0
         self.logger = get_logger("agent")
+
+        self.detected_ip = ""
+        self.dns_last_modified = ""
+        self.dns_name = Config.Cloudflare.DNS_NAME
 
     def run_cycle(self):
         # --- Phase 1: Network Health Check ---
