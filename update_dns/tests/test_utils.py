@@ -1,8 +1,18 @@
 import os
 import pytest
+import logging
 import responses
 from datetime import datetime, timezone
+
+from update_dns.logger import setup_logging, get_logger
 from update_dns.utils import is_valid_ip, get_public_ip, to_local_time
+
+
+@pytest.fixture(autouse=True)
+def configure_logging():
+    setup_logging()
+    yield   # allow test to run
+
 
 
 # ===================================
@@ -82,20 +92,27 @@ def test_get_public_ip_all_fail():
     ],
 )
 
-def test_to_local_time(monkeypatch, capsys, env_tz, iso_str, expected_tz, expect_warning):
+def test_to_local_time(monkeypatch, caplog, env_tz, iso_str, expected_tz, expect_warning):
     """Validate timezone conversion, fallback logic, and output format"""
     monkeypatch.delenv("TZ", raising=False)
     monkeypatch.setenv("TZ", env_tz)
-    result = to_local_time(iso_str)
-    captured = capsys.readouterr()
+    #result = to_local_time(iso_str)
+    #captured = capsys.readouterr()
 
-    # Validate logical behavior
+    # Capture WARNING-level logs
+    with caplog.at_level(logging.WARNING):
+        result = to_local_time(iso_str)
+
+    # Validate output contains target timezone
     assert expected_tz in result
-    assert ("Exception" in captured.out) == expect_warning
 
-    # Validate format consistency
+    # Check whether warnings were expected
+    warnings_logged = any(record.levelno == logging.WARNING for record in caplog.records)
+    assert warnings_logged == expect_warning
+
+    # Check date and time format
     date_part, time_part = result.split("\n")
-    datetime.strptime(date_part, "%Y-%m-%d")   # Check date formatting
-    time_parts = time_part.split(" ")   # Check time formatting
+    datetime.strptime(date_part, "%Y-%m-%d")   # Validate ISO date parsing
+    time_parts = time_part.split(" ")   # 'HH:MM:SS TZ ±HHMM'
 
-    assert len(time_parts) == 3  # ['HH:MM:SS', 'TZ', '±HHMM']
+    assert len(time_parts) == 3  # Time, TZ, UTC offset
