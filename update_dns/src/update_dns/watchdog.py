@@ -50,7 +50,7 @@ def reset_smart_plug() -> bool:
                 return True
             time.sleep(3)
 
-        logger.error(f"🚫 Router unreachable after {max_attempts} attempts post-reset")
+        logger.error(f"❌ Router unreachable after {max_attempts} attempts post-reset")
         return False
 
     except requests.exceptions.RequestException:

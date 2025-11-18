@@ -268,3 +268,15 @@ poetry run pytest
 poetry run pytest -v
 poetry run pytest tests/test_to_local_time.py
 poetry run pytest -v tests/test_watchdog.py
+
+# Check Container Logs for Exceptions
+docker logs vpn_ddns_cron | tail -n 200
+
+
+# Logging Style Quick Reference
+| Level       | Emoji | 
+| ----------- | ----- |
+| `INFO`      | 🟢    |
+| `WARNING`   | ⚠️    |
+| `ERROR`     | ❌    | 
+| `EXCEPTION` | 🔥    | 

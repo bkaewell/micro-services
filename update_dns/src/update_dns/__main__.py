@@ -4,8 +4,8 @@ from .agent import NetworkWatchdog
 from .logger import setup_logging, get_logger
 
 
-# Supervisor loop running once per minute
 def main_loop(interval: int = 60):
+    """Supervisor loop running once per minute"""
     logger = get_logger("main_loop")
     watchdog = NetworkWatchdog()
 

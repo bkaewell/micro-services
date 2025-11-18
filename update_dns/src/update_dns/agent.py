@@ -25,7 +25,7 @@ class NetworkWatchdog:
 
     def run_cycle(self):
         # --- Phase 1: Network Health Check ---
-        self.logger.info("🟢 Heartbeat alive...")
+        self.logger.info("💚 Heartbeat alive...")
 
         internet_ok = check_internet(self.host)
         detected_ip = get_public_ip()
