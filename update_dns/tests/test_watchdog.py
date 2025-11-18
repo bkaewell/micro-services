@@ -53,10 +53,6 @@ def patch_config_and_sleep():
 @responses.activate
 def test_reset_smart_plug(status_plug_off, status_plug_on, expected_result):
     """Verify smart plug reset behavior for different HTTP responses"""
-    #router_ip = MockConfig.Hardware.ROUTER_IP
-    #plug_ip = MockConfig.Hardware.PLUG_IP
-    #reboot_delay = MockConfig.Hardware.REBOOT_DELAY
-    #init_delay = MockConfig.Hardware.INIT_DELAY
 
     # Mock HTTP responses for relay OFF/ON commands
     responses.add(responses.GET, f"http://{MockConfig.Hardware.PLUG_IP}/relay/0?turn=off", status=status_plug_off)

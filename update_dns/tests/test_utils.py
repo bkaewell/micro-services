@@ -8,11 +8,13 @@ from update_dns.logger import setup_logging, get_logger
 from update_dns.utils import is_valid_ip, get_public_ip, to_local_time
 
 
+# ========
+# FIXTURES
+# ========
 @pytest.fixture(autouse=True)
 def configure_logging():
     setup_logging()
     yield   # allow test to run
-
 
 
 # ===================================
