@@ -2,6 +2,7 @@ from .config import Config
 from .logger import get_logger
 from .cloudflare import sync_dns
 from .utils import get_public_ip
+from .google_sheets import upload_ip
 from .watchdog import check_internet, reset_smart_plug
 # from .sheets import log_to_sheets
 #from .db import log_metrics
@@ -17,23 +18,30 @@ class NetworkWatchdog:
     5. Reset smart plug automatically after 3 consecutive failed pings
     """
     
-    #def __init__(self, host="8.8.8.8", max_consecutive_failures=3):
-    def __init__(self, host="8.8.8.8", max_consecutive_failures=1):
+    def __init__(self, host="8.8.8.8", max_consecutive_failures=3):
         self.host = host
         self.max_consecutive_failures = max_consecutive_failures
         self.failed_ping_count = 0
         self.logger = get_logger("agent")
 
-        self.detected_ip = ""
-        self.dns_last_modified = ""
-        self.dns_name = Config.Cloudflare.DNS_NAME
+        self.detected_ip = ""                       # populated by utils.get_public_ip() via https://api.ipify.org
+        self.dns_last_modified = ""                 # populated by sync_dns()
+        self.dns_name = Config.Cloudflare.DNS_NAME  # populated by config.Config via .env
+
+        # Google Sheets client state (Singleton per instance for TTL/Caching)
+        self.gspread_client = None          # Caches the gspread client; re-auth only on TTL expiry
+        self.last_auth_time: float = 0.0    # Timestamp of last successful auth check (Used by TTL)
+        self.ttl_seconds: int = 3600        # Auth check frequency (seconds); Default 1 hour
+        self.gsheet_id = None               # Caches the permanent Spreadsheet ID after first lookup
+
 
     def run_cycle(self):
         # --- Phase 1: Network Health Check ---
         self.logger.info("💚 Heartbeat alive...")
-
+        
         internet_ok = check_internet(self.host)
         detected_ip = get_public_ip()
+        self.detected_ip = detected_ip
 
         if internet_ok and detected_ip:
             self.logger.info(f"Internet OK | IP: {detected_ip}") 
@@ -53,9 +61,9 @@ class NetworkWatchdog:
         
         # --- Phase 2: DNS Synchronization ---
         try:
-            sync_dns(detected_ip)
+            sync_dns(self)
             # print("✅ DNS record synchronized successfully")
-            # self.logger.info("DNS record synchronized successfully.")
+            self.logger.info("DNS record synchronized successfully.")
         except (RuntimeError, ValueError, NotImplementedError) as e:
             print("DNS sync failed", exc_info=e)
             # self.logger.error("DNS sync failed", exc_info=e)
@@ -66,8 +74,10 @@ class NetworkWatchdog:
             # self.logger.exception(f"🔥 Unexpected failure during DNS sync: {e}")
 
         # Future code
-
         # Update Google Sheets
+        upload_ip(self)
+
+
         # log_to_sheets(ip=detected_ip,
         #               internet_ok=internet_ok,
         #               dns_changed=dns_changed)
