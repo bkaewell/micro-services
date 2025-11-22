@@ -3,6 +3,7 @@ import pathlib
 import gspread
 import requests # For catching ConnectionError
 
+from .cache import GOOGLE_SHEET_ID_FILE
 from typing import Optional
 from gspread import authorize
 from datetime import datetime, timezone
@@ -11,12 +12,6 @@ from google.oauth2.service_account import Credentials
 # Assume Config and logger are imported/defined elsewhere or passed in init
 # from .config import Config 
 # from .logger import get_logger 
-
-# --- Module-Level Persistent Cache Setup (Shared by all instances) ---
-CACHE_DIR = pathlib.Path.home() / ".cache" / "update_dns"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-ID_CACHE_FILE = CACHE_DIR / 'google_sheet_id.txt'
-# Note: In a true library, you'd pass the cache path in init.
 
 class GSheetsService:
     """
@@ -84,14 +79,14 @@ class GSheetsService:
         
         # 2. Get Sheet ID (Persistent Cache)
         if self._gsheet_id is None:
-            if ID_CACHE_FILE.exists():
-                self._gsheet_id = ID_CACHE_FILE.read_text().strip()
+            if GOOGLE_SHEET_ID_FILE.exists():
+                self._gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
                 self._logger.info(f"Loaded Spreadsheet ID from cache: {self._gsheet_id}")
             else:
                 self._logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self._sheet_name}'")
                 sh = client.open(self._sheet_name)
                 self._gsheet_id = sh.id
-                ID_CACHE_FILE.write_text(self._gsheet_id)
+                GOOGLE_SHEET_ID_FILE.write_text(self._gsheet_id)
                 self._logger.info(f"Resolved and cached Spreadsheet ID: {self._gsheet_id}")
 
         # 3. Get Worksheet using cached ID
@@ -127,11 +122,13 @@ class GSheetsService:
         try:
             ws = self._get_worksheet() # Access worksheet
             
-            current_time_utc = datetime.now(timezone.utc).isoformat() 
-            test_data = [[ip_address, current_time_utc]]
+            #from datetime import datetime, timezone
+            from .utils import to_local_time
+            current_time = to_local_time(datetime.now(timezone.utc).isoformat())
+            test_data = [[ip_address, current_time]]
             
             ws.update('B5:C5', test_data, value_input_option='USER_ENTERED')
-            self._logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time: {current_time_utc}")
+            self._logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time: {current_time}")
             
         except requests.exceptions.ConnectionError:
             self._logger.error("Gracefully skipping GSheets status update: Connection aborted; Will retry next cycle")

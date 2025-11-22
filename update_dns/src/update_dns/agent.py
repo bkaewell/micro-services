@@ -7,6 +7,8 @@ from .watchdog import check_internet, reset_smart_plug
 # from .sheets import log_to_sheets
 #from .db import log_metrics
 
+from .google_sheets_service import GSheetsService 
+
 
 class NetworkWatchdog:
     """
@@ -28,12 +30,14 @@ class NetworkWatchdog:
         self.dns_last_modified = ""                 # populated by sync_dns()
         self.dns_name = Config.Cloudflare.DNS_NAME  # populated by config.Config via .env
 
-        # Google Sheets client state (Singleton per instance for TTL/Caching)
-        self.gspread_client = None          # Caches the gspread client; re-auth only on TTL expiry
-        self.last_auth_time: float = 0.0    # Timestamp of last successful auth check (Used by TTL)
-        self.ttl_seconds: int = 3600        # Auth check frequency (seconds); Default 1 hour
-        self.gsheet_id = None               # Caches the permanent Spreadsheet ID after first lookup
 
+        # Initialize the standalone GSheets Service
+        self.gsheets_service = GSheetsService(
+            config_google=Config.Google,
+            sheet_name=Config.Google.SHEET_NAME,
+            worksheet_name=Config.Google.WORKSHEET,
+            logger_instance=self.logger    # Inject the agent's logger
+        )
 
     def run_cycle(self):
         # --- Phase 1: Network Health Check ---
@@ -75,7 +79,14 @@ class NetworkWatchdog:
 
         # Future code
         # Update Google Sheets
-        upload_ip(self)
+
+        # self.gsheets_service.append_ip_log(
+        #     ip_address=self.detected_ip, 
+        #     hostname=os.environ.get("HOSTNAME", "local")
+        # )
+        
+        self.gsheets_service.update_status(ip_address=self.detected_ip)
+
 
 
         # log_to_sheets(ip=detected_ip,
