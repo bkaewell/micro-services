@@ -1,6 +1,6 @@
-import pathlib
 import json
-from typing import Dict, Any, Union
+import pathlib
+from typing import Dict, Any
 
 # --- 1. Centralized Cache Directory Setup ---
 # When running locally, pathlib.Path.home() points to your macOS home directory.
@@ -15,23 +15,26 @@ GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
 
 # --- 3. Cloudflare IP Cache Functions ---
 def _read_json_file(file_path: pathlib.Path) -> Dict[str, Any]:
-    """Helper function to safely read and parse a JSON file"""
-    if file_path.exists():
-        try:
-            with open(file_path, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            # Log error if needed, but return empty dict to proceed gracefully
-            return {}
-    return {}
+    """Helper function to safely read and parse a JSON file using pathlib"""
+
+    if not file_path.exists():
+        return {}
+    
+    try:
+        # Get the content as a single string
+        content = file_path.read_text()
+        return json.loads(content)
+    except (json.JSONDecodeError, OSError):
+        # OSError handles permission issues or other file I/O errors (like IOError)
+        return {}
 
 def _write_json_file(file_path: pathlib.Path, data: Dict[str, Any]):
-    """Helper function to safely write data to a JSON file"""
+    """Helper function to safely write data to a JSON file using pathlib"""
     try:
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=4)
-    except IOError:
-        # Log error if file write fails
+        content = json.dumps(data, indent=4)
+        file_path.write_text(content)
+    except OSError:
+        # Log error if file write fails (like IOError)
         pass
 
 def get_cloudflare_ip() -> str:
