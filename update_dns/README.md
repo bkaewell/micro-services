@@ -280,3 +280,51 @@ docker logs vpn_ddns_cron | tail -n 200
 | `WARNING`   | ⚠️    |
 | `ERROR`     | ❌    | 
 | `EXCEPTION` | 🔥    | 
+
+
+Get into the OSI model network architecture (7 layers) for the purpose of this script...
+
+Check Method	Why It's Best for Recovery:
+check_internet() (Simple Ping/DNS)	This is the minimum viable test. You only need confirmation that Layer 3 (Network) and possibly basic Layer 4 (Transport) are operational. It requires fewer network resources and is faster than HTTPS.
+
+get_public_ip() (HTTPS API Call)	This is an application-layer test that checks Layers 5-7 (Session, Presentation, Application). If the router is still slow or resolving DNS poorly right after a reboot, this more complex check might fail even if the connection is fundamentally back online.
+
+
+
+## 🛡️ Self-Healing Dynamic DNS & Network Watchdog 🧭
+
+This project employs a robust, multi-layered approach to guarantee network stability and accurate DNS synchronization, leveraging the **OSI 7-Layer Model** to intelligently diagnose and recover from failures.
+
+### The Problem: False Negatives and Unreliable Checks
+
+In dynamic DNS (DDNS) systems, a simple internet failure can temporarily halt service. Traditional checks often rely on low-level pings, which can return "OK" even if high-level services are failing, leading to false negatives and missed DNS updates.
+
+### The Solution: Layered Validation and Methodical Recovery
+
+Our agent executes the network check and self-healing in three distinct phases, moving up and down the network stack:
+
+#### 1. Primary Health Check (Layers 5-7: Application)
+
+* **Action:** The main loop's first task is to execute **`get_public_ip()`**. This involves an HTTPS request to an external API (like IPify).
+* **Rationale:** Success requires the entire network stack to be functional: DNS resolution, TCP handshakes, SSL negotiation, and application-layer communication. If this **Layer 7** test succeeds, we have the highest confidence that the internet is fully operational for the DNS update.
+* **Failure Trigger:** If this high-level check fails, it signals a systemic network issue, triggering the watchdog.
+
+#### 2. Watchdog Recovery Check (Layers 3 & 4: Transport/Network)
+
+If the primary check fails, the **Watchdog** system attempts a self-healing reboot of the smart plug, followed by a two-phase network verification:
+
+* **Phase A: Router Check (LAN Health)**
+    * **Action:** Ping the local **router IP** (e.g., `192.168.1.1`).
+    * **Rationale:** This confirms the local physical connection (Layer 1/2) is back and the router's **Layer 3** stack is responding on the LAN side.
+* **Phase B: External Check (WAN Health)**
+    * **Action:** Ping a reliable external host like **`8.8.8.8`**.
+    * **Rationale:** This confirms the router has successfully established its **WAN link** with the ISP and can forward packets to the internet (a full **Layer 3** confirmation). 
+
+[Image of the OSI Model showing Network and Application Layers]
+
+
+Only when both the local and external checks pass does the Watchdog declare the system healthy and allow the main DNS loop to resume.
+
+#### 3. Diagnostic Logging & Resilience
+
+This methodical approach minimizes false negatives and provides better diagnostic logging during self-healing: The log clearly shows which layer (Application, Router, or WAN) failed, leading to faster troubleshooting. The recovery process is resilient, checking the local network *before* wasting attempts on the external WAN link.
