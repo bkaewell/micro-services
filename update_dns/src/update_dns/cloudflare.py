@@ -7,11 +7,108 @@ from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 def sync_dns(self):
 
-    logger = get_logger("cloudflare")
+    logger = get_logger("cloudflare")    # Keep here or use agent's NetworkWatchdog's class member 'self' ??
+    logger.info("Entering Cloudflare script...")
+
 
     # Get IP from local cache
     cached_ip = get_cloudflare_ip()
     logger.info(f"cached_ip={cached_ip}")
+
+    if cached_ip != self.detected_ip:
+        logger.info("Cached IP does NOT match detected IP")
+        logger.critical(f" ... {self.config_cloudflare}")
+
+
+        api_base_url = self.config_cloudflare.API_BASE_URL
+        api_token = self.config_cloudflare.API_TOKEN
+        zone_id = self.config_cloudflare.ZONE_ID
+        dns_name = self.config_cloudflare.DNS_NAME
+        record_type = "A"   # Assume IPv4
+
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type" : "application/json",
+        }
+
+        list_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}&type={record_type}"
+        try:
+            resp = requests.get(list_url, headers=headers, timeout=5)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            #raise RuntimeError(f"Failed to fetch DNS record: {e}")
+            logger.error("Failed to fetch DNS record: {e}")
+
+        # print(f"update_dns_record: DNS records URL: {list_url}")
+        logger.info(f"DNS records URL: {list_url}")
+
+
+        data = resp.json()
+        logger.info("DNS records JSON response:\n%s", json.dumps(data, indent=2))
+
+        records = data.get("result") or []
+        if not records:
+            raise RuntimeError(f"No DNS record found for {dns_name} ({record_type})")
+
+        record = records[0]  # The Cloudflare API returns a list; we take the first
+        record_id = record.get("id")
+        dns_record_ip = record.get("content")
+        dns_last_modified = record.get("modified_on")
+        logger.info(
+            "record_id=%s dns_record_ip=%s dns_last_modified=%s",
+            record_id, dns_record_ip, dns_last_modified
+        )
+
+        update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
+
+        payload = {
+            "type": record_type,
+            "name": dns_name,
+            "content": self.detected_ip,
+            "ttl": 60,   # Time-to-Live 
+            "proxied": False,   # Grey cloud (not proxied thru Cloudflare)
+        }
+
+        try:
+            resp = requests.put(update_url, headers=headers, json=data, timeout=5)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to update DNS record: {e}")
+
+        logger.info(f"Updated '{dns_name}': {dns_record_ip} → {self.detected_ip}")       #####
+
+        response = requests.put(
+            f"{url}/RECORD_ID",
+            headers=headers,
+            json={"content": ip_address, "type": "A", "name": "example.domain.com"},
+        )
+
+        if response.ok:
+            print(f"✅ Updated Cloudflare DNS to {ip_address}")
+        else:
+            print(f"❌ Failed DNS update: {response.text}")
+
+        #return response.ok
+
+        if response.ok:
+            # Update local cache (only on successful HTTP PUT)
+            update_cloudflare_ip(self.detected_ip)
+            logger.info(f"self.detected_ip={self.detected_ip}")
+
+        # UPDATE SELF class member variable to pass to Google Sheets??????????????????
+
+    else:
+        logger.info("IP unchanged, skipping...")
+        logger.info("Cached IP does match detected IP, skipping...")
+        # UPDATE SELF class member variable to pass to Google Sheets??????????????????
+
+        ####################################################################
+        # Does heartbeat (1 min) help verify internet health by updating google sheet with a timestamp
+        # once per minute????
+        ####################################################################
+
+
+
 
 
 
@@ -33,11 +130,4 @@ def sync_dns(self):
 
     # Crucially: After the successful PUT request, you call update_cloudflare_ip(detected_ip)
 
-
-
-
-
-    # Update local cache (only on successful HTTP PUT)
-    update_cloudflare_ip(self.detected_ip)
-    logger.info(f"self.detected_ip={self.detected_ip}")
-
+    return True
