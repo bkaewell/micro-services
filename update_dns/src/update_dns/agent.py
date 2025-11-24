@@ -25,11 +25,10 @@ class NetworkWatchdog:
        (if the watchdog flag is enabled)
     """
 
-    def __init__(self, host="8.8.8.8", max_consecutive_failures=3, watchdog_enabled=False):
-        self.host = host
+    def __init__(self, max_consecutive_failures=3):
         self.max_consecutive_failures = max_consecutive_failures
         self.failed_ping_count = 0
-        self.watchdog_enabled = True   # Define in .env and Config.py
+        self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.logger = get_logger("agent")
 
         self.detected_ip = ""                       # populated by utils.get_public_ip() via https://api.ipify.org
