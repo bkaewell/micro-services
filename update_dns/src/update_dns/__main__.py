@@ -4,6 +4,7 @@ import logging
 from .config import Config
 from .agent import NetworkWatchdog
 from .logger import setup_logging, get_logger
+from update_dns.sanity import run_sanity_checks
 
 
 def main_loop(interval: int = 60):
@@ -16,8 +17,12 @@ def main_loop(interval: int = 60):
         try:
             watchdog.run_cycle()
         except Exception as e:
-            logger.exception(f"🔥 Fatal error: {e}")
+            logger.exception(f"?????????????Fatal error: {e}")
+
+        logger.debug("Preparing to sleep for 60 seconds...")
         time.sleep(interval)
+        logger.info("Waking up and starting next cycle immediately\n\n\n")
+
 
 def main():
     """
@@ -30,10 +35,11 @@ def main():
         setup_logging(level=logging.DEBUG)
     else:
         setup_logging()
-
     logger = get_logger("main")
-    logger.info("🚀 Starting network maintenance cycle...")
 
+    run_sanity_checks()
+
+    logger.info("🚀 Starting network maintenance cycle...")
     # Start the supervisor loop
     #main_loop(interval=60)
     main_loop(interval=10)
