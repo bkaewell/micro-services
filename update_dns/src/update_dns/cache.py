@@ -1,19 +1,26 @@
 import json
 import pathlib
+
 from typing import Dict, Any
 
-# --- 1. Centralized Cache Directory Setup ---
+from .logger import get_logger
+
+# Define the logger once for the entire module
+logger = get_logger("cache")
+
+
+# --- Centralized Cache Directory Setup ---
 # When running locally, pathlib.Path.home() points to your macOS home directory.
 # When running in Docker, it points to the container user's home directory (e.g., /home/user or /root),
 # which is the correct, writeable location for application data within the container.
 CACHE_DIR = pathlib.Path.home() / ".cache" / "update_dns"
 CACHE_DIR.mkdir(parents=True, exist_ok=True) 
 
-# --- 2. Specific Cache File Paths ---
+# --- Specific Cache File Paths ---
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
 GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
 
-# --- 3. Cloudflare IP Cache Functions ---
+# --- Cloudflare IP Cache Functions ---
 def _read_json_file(file_path: pathlib.Path) -> Dict[str, Any]:
     """Helper function to safely read and parse a JSON file using pathlib"""
 

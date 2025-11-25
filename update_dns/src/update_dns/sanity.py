@@ -2,12 +2,15 @@ import re
 import requests
 
 from pathlib import Path
-from update_dns.config import Config
-from update_dns.logger import get_logger
-from update_dns.utils import is_valid_ip
-from update_dns.watchdog import check_internet
 
+from .config import Config
+from .logger import get_logger
+from .utils import is_valid_ip
+from .watchdog import check_internet
+
+# Define the logger once for the entire module
 logger = get_logger("sanity")
+
 
 def print_summary():
     # --- Quick Summary Printout ---

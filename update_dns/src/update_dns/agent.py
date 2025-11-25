@@ -4,7 +4,6 @@ from .cloudflare import sync_dns
 from .utils import get_public_ip
 from .watchdog import reset_smart_plug
 from .google_sheets_service import GSheetsService 
-
 # from .sheets import log_to_sheets
 #from .db import log_metrics
 
@@ -26,14 +25,13 @@ class NetworkWatchdog:
     """
 
     def __init__(self, max_consecutive_failures=3):
+
+        # Define the logger once for the entire class
+        self.logger = get_logger("agent")
+
         self.max_consecutive_failures = max_consecutive_failures
         self.failed_ping_count = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
-        self.logger = get_logger("agent")
-
-        self.detected_ip = ""                       # populated by utils.get_public_ip() via https://api.ipify.org
-        self.dns_last_modified = ""                 # populated by sync_dns()
-        self.dns_name = Config.Cloudflare.DNS_NAME  # populated by config.Config via .env
 
         # Cloudflare
         self.config_cloudflare = Config.Cloudflare
@@ -42,9 +40,14 @@ class NetworkWatchdog:
         self.gsheets_service = GSheetsService(
             config_google=Config.Google,
             sheet_name=Config.Google.SHEET_NAME,
-            worksheet_name=Config.Google.WORKSHEET,
-            logger_instance=self.logger    # Inject the agent's logger
+            worksheet_name=Config.Google.WORKSHEET
         )
+
+        # Outputs 
+        self.detected_ip = ""                       # populated by utils.get_public_ip() via https://api.ipify.org
+        self.dns_last_modified = ""                 # populated by sync_dns()
+        self.dns_name = Config.Cloudflare.DNS_NAME  # populated by config.Config via .env
+
 
     def run_cycle(self):
         """ Executes the main monitoring and update logic """
@@ -75,7 +78,7 @@ class NetworkWatchdog:
 
             try:
                 sync_dns(self)
-                # print("✅ DNS record synchronized successfully")
+                # print("DNS record synchronized successfully")
                 self.logger.info("DNS record synchronized successfully.")
             except (RuntimeError, ValueError, NotImplementedError) as e:
                 print("DNS sync failed", exc_info=e)

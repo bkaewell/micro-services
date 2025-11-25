@@ -3,38 +3,44 @@ import pathlib
 import gspread
 import requests # For catching ConnectionError
 
-from .cache import GOOGLE_SHEET_ID_FILE
 from typing import Optional
 from gspread import authorize
 from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials 
 
+from .logger import get_logger
+from .cache import GOOGLE_SHEET_ID_FILE
+
 # Assume Config and logger are imported/defined elsewhere or passed in init
 # from .config import Config 
-# from .logger import get_logger 
+
 
 class GSheetsService:
     """
     Standalone service for Google Sheets access with TTL caching and
     Spreadsheet ID persistence. Designed for easy reuse across microservices
     """
-    
-    def __init__(self, config_google, sheet_name: str = None, worksheet_name: str = None, logger_instance=None):
+    def __init__(self, 
+                 config_google, 
+                 sheet_name: str = None, 
+                 worksheet_name: str = None):
         """
         Initializes the service with configuration and sets up internal state.
         """
-        self._config = config_google
-        self._logger = logger_instance if logger_instance else logging.getLogger(__name__) # Use standard logger if none provided
+
+        # Define the logger once for the entire class
+        self.logger = get_logger("google_sheets_service")
+        
+        self.config = config_google
         
         # Internal State Management
-        self._client: Optional[gspread.Client] = None
-        self._gsheet_id: Optional[str] = None
-        self._worksheet: Optional[gspread.Worksheet] = None
+        self.client: Optional[gspread.Client] = None
+        self.gsheet_id: Optional[str] = None
+        self.worksheet: Optional[gspread.Worksheet] = None
         
         # Configuration
-        self._sheet_name: str = sheet_name
-        self._worksheet_name: str = worksheet_name
-
+        self.sheet_name: str = sheet_name
+        self.worksheet_name: str = worksheet_name
 
     def _get_client(self) -> None:
         """
@@ -43,58 +49,58 @@ class GSheetsService:
         """
 
         # Check 1: If client already exists, return immediately
-        if self._client is not None:
-            self._logger.info("Using cached gspread client")
-            return # self._client is cached
+        if self.client is not None:
+            self.logger.info("Using cached gspread client")
+            return # self.client is cached
 
         # Check 2: Client does not exist, perform full, expensive authentication.
-        self._logger.info("Client missing. Performing initial, full authentication with Google services")
+        self.logger.info("Client missing. Performing initial, full authentication with Google services")
 
         try:
             # Create credentials object from dictionary
             creds = Credentials.from_service_account_info(
-                self._config.SHEETS_CREDENTIALS,
+                self.config.SHEETS_CREDENTIALS,
                 scopes=['https://www.googleapis.com/auth/spreadsheets', 
                         'https://www.googleapis.com/auth/drive',
                 ]
             )
             # Authorize the client with the credentials object
-            self._client = authorize(creds) 
-            self._logger.info("New gspread client initialized")
+            self.client = authorize(creds) 
+            self.logger.info("New gspread client initialized")
         
         except Exception as e:
-            self._logger.error(f"Failed to authenticate gspread client: {e}")
+            self.logger.error(f"Failed to authenticate gspread client: {e}")
             raise
 
     def _get_worksheet(self) -> gspread.Worksheet:
         """Initializes the worksheet object, using cached ID if available"""
         
         # If the worksheet object is already initialized, return it immediately
-        if self._worksheet:
-            return self._worksheet
+        if self.worksheet:
+            return self.worksheet
         
         # 1. Ensure client is ready
         self._get_client() 
-        client = self._client # Use internal client state
+        client = self.client # Use internal client state
         
         # 2. Get Sheet ID (Persistent Cache)
-        if self._gsheet_id is None:
+        if self.gsheet_id is None:
             if GOOGLE_SHEET_ID_FILE.exists():
-                self._gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
-                self._logger.info(f"Loaded Spreadsheet ID from cache: {self._gsheet_id}")
+                self.gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
+                self.logger.info(f"Loaded Spreadsheet ID from cache: {self.gsheet_id}")
             else:
-                self._logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self._sheet_name}'")
-                sh = client.open(self._sheet_name)
-                self._gsheet_id = sh.id
-                GOOGLE_SHEET_ID_FILE.write_text(self._gsheet_id)
-                self._logger.info(f"Resolved and cached Spreadsheet ID: {self._gsheet_id}")
+                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.sheet_name}'")
+                sh = client.open(self.sheet_name)
+                self.gsheet_id = sh.id
+                GOOGLE_SHEET_ID_FILE.write_text(self.gsheet_id)
+                self.logger.info(f"Resolved and cached Spreadsheet ID: {self.gsheet_id}")
 
         # 3. Get Worksheet using cached ID
-        sh = client.open_by_key(self._gsheet_id)
-        self._worksheet = sh.worksheet(self._worksheet_name)
-        self._logger.info(f"Accessed worksheet '{self._worksheet_name}' using cached ID")
+        sh = client.open_by_key(self.gsheet_id)
+        self.worksheet = sh.worksheet(self.worksheet_name)
+        self.logger.info(f"Accessed worksheet '{self.worksheet_name}' using cached ID")
         
-        return self._worksheet
+        return self.worksheet
 
     def append_ip_log(self, ip_address: str, hostname: str):
         """Public method to append a row to the log sheet"""
@@ -108,12 +114,12 @@ class GSheetsService:
                 gspread.utils.ISO_8601_OFFSET 
             ]
             ws.append_row(data_for_log, value_input_option='USER_ENTERED')
-            self._logger.info(f"Appended IP '{ip_address}' to main log.")
+            self.logger.info(f"Appended IP '{ip_address}' to main log.")
             
         except requests.exceptions.ConnectionError:
-            self._logger.error("Gracefully skipping GSheets upload: Connection aborted; Will retry next cycle")
+            self.logger.error("Gracefully skipping GSheets upload: Connection aborted; Will retry next cycle")
         except Exception as e:
-            self._logger.error(f"Fatal error during GSheets write: {e.__class__.__name__}: {e}; Check configuration/scopes")
+            self.logger.error(f"Fatal error during GSheets write: {e.__class__.__name__}: {e}; Check configuration/scopes")
             raise
 
     def update_status(self, ip_address: str):
@@ -128,10 +134,10 @@ class GSheetsService:
             test_data = [[ip_address, current_time]]
             
             ws.update('B5:C5', test_data, value_input_option='USER_ENTERED')
-            self._logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time: {current_time}")
+            self.logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time: {current_time}")
             
         except requests.exceptions.ConnectionError:
-            self._logger.error("Gracefully skipping GSheets status update: Connection aborted; Will retry next cycle")
+            self.logger.error("Gracefully skipping GSheets status update: Connection aborted; Will retry next cycle")
         except Exception as e:
-            self._logger.error(f"Fatal error during GSheets status write: {e.__class__.__name__}: {e}")
+            self.logger.error(f"Fatal error during GSheets status write: {e.__class__.__name__}: {e}")
             raise

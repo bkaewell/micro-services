@@ -5,6 +5,10 @@ from .config import Config
 from .logger import get_logger
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 
+# Define the logger once for the entire module
+logger = get_logger("cloudflare")
+
+
 def sync_dns(self):
 
     logger = get_logger("cloudflare")    # Keep here or use agent's NetworkWatchdog's class member 'self' ??
@@ -30,7 +34,7 @@ def sync_dns(self):
             "Content-Type" : "application/json",
         }
 
-        # COLLECTION RESOURCE ENDPOINT (Read/List Operation)
+        # COLLECTION RESOURCE ENDPOINT (Read Operation)
         # Used with GET to query the collection of DNS records, filtered by name and type
         # Purpose: Extract the unique 'record_id' needed for the update operation
         list_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}&type={record_type}"
@@ -61,7 +65,7 @@ def sync_dns(self):
             record_id, dns_record_ip, dns_last_modified
         )
 
-        # SINGLE RESOURCE ENDPOINT (Update/Modify Operation)
+        # SINGLE RESOURCE ENDPOINT (Update Operation)
         # Used with PUT/PATCH to target a specific resource using its unique identifier
         # Requires the 'record_id' discovered in the preceding GET request
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"

@@ -1,6 +1,8 @@
 import sys
 import logging
 
+
+# Why not, make it fun 
 LOG_LEVEL_EMOJIS = {
     logging.DEBUG: "🧱",
     logging.INFO: " 🟢",
@@ -9,6 +11,7 @@ LOG_LEVEL_EMOJIS = {
     logging.CRITICAL: "🔥",  # For severe errors, typically logged via exception()
 }
 
+# Shorten default log level names for uniform 4-5 character output
 LEVEL_NAME_MAP = {
     "WARNING": "WARN",
     "CRITICAL": "FATAL",
@@ -16,7 +19,7 @@ LEVEL_NAME_MAP = {
 
 class EmojiFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        """Formatter that prepends an emoji per log level and shortens level names"""
+        """Formatter that prepends an emoji per log level and shortens log level names"""
         record.levelemoji = LOG_LEVEL_EMOJIS.get(record.levelno, "")
         record.levelname = LEVEL_NAME_MAP.get(record.levelname, record.levelname)
         return super().format(record)

@@ -4,8 +4,10 @@ import requests
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 from .logger import get_logger
 
+# Define the logger once for the entire module
 logger = get_logger("utils")
 
 

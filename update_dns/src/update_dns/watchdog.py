@@ -1,8 +1,12 @@
 import os
 import time
 import requests
+
 from .config import Config
 from .logger import get_logger
+
+# Define the logger once for the entire module
+logger = get_logger("watchdog")
 
 # Watchdog module specifically designed to monitor the health of a primary system
 # (internet connection and DNS service) and trigger a pre-defined recovery action
@@ -52,7 +56,6 @@ def reset_smart_plug() -> bool:
     Power-cycle the smart plug with response validation and controlled delays. 
     Verifies network recovery in two phases: Local Router and External Host
     """
-    logger = get_logger("watchdog")
     router_ip = Config.Hardware.ROUTER_IP
     plug_ip = Config.Hardware.PLUG_IP
     reboot_delay = Config.Hardware.REBOOT_DELAY

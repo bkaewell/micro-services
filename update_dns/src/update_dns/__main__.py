@@ -3,8 +3,8 @@ import logging
 
 from .config import Config
 from .agent import NetworkWatchdog
-from .logger import setup_logging, get_logger
-from update_dns.sanity import run_sanity_checks
+from .sanity import run_sanity_checks
+from .logger import get_logger, setup_logging
 
 
 def main_loop(interval: int = 60):
@@ -41,8 +41,8 @@ def main():
 
     logger.info("🚀 Starting network maintenance cycle...")
     # Start the supervisor loop
-    #main_loop(interval=60)
-    main_loop(interval=10)
+    main_loop(interval=60)
+    #main_loop(interval=10)
 
 if __name__ == "__main__":
     main()
