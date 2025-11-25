@@ -19,7 +19,6 @@ def sync_dns(self):
         logger.info("Cached IP does NOT match detected IP")
         logger.critical(f" ... {self.config_cloudflare}")
 
-
         api_base_url = self.config_cloudflare.API_BASE_URL
         api_token = self.config_cloudflare.API_TOKEN
         zone_id = self.config_cloudflare.ZONE_ID
@@ -31,6 +30,8 @@ def sync_dns(self):
             "Content-Type" : "application/json",
         }
 
+        # Query a collection of DNS records belonging to a 
+        # specific zone with these filters (?name=..., &type=...)
         list_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}&type={record_type}"
         try:
             resp = requests.get(list_url, headers=headers, timeout=5)
@@ -59,6 +60,7 @@ def sync_dns(self):
             record_id, dns_record_ip, dns_last_modified
         )
 
+        # Target and modify a single, specific DNS record
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
 
         payload = {
@@ -70,30 +72,17 @@ def sync_dns(self):
         }
 
         try:
-            resp = requests.put(update_url, headers=headers, json=data, timeout=5)
+            resp = requests.put(update_url, headers=headers, json=payload, timeout=5)
             resp.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"Failed to update DNS record: {e}")
 
-        logger.info(f"Updated '{dns_name}': {dns_record_ip} → {self.detected_ip}")       #####
+        logger.info(f"Updated '{dns_name}': {dns_record_ip} → {self.detected_ip}")
 
-        response = requests.put(
-            f"{url}/RECORD_ID",
-            headers=headers,
-            json={"content": ip_address, "type": "A", "name": "example.domain.com"},
-        )
-
-        if response.ok:
-            print(f"✅ Updated Cloudflare DNS to {ip_address}")
-        else:
-            print(f"❌ Failed DNS update: {response.text}")
-
-        #return response.ok
-
-        if response.ok:
-            # Update local cache (only on successful HTTP PUT)
+        # Update local cache (only on successful HTTP PUT)
+        if resp.ok:
             update_cloudflare_ip(self.detected_ip)
-            logger.info(f"self.detected_ip={self.detected_ip}")
+            logger.info(f"Updated cached IP | {self.detected_ip}")
 
         # UPDATE SELF class member variable to pass to Google Sheets??????????????????
 
