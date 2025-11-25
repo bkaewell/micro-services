@@ -30,8 +30,9 @@ def sync_dns(self):
             "Content-Type" : "application/json",
         }
 
-        # Query a collection of DNS records belonging to a 
-        # specific zone with these filters (?name=..., &type=...)
+        # COLLECTION RESOURCE ENDPOINT (Read/List Operation)
+        # Used with GET to query the collection of DNS records, filtered by name and type
+        # Purpose: Extract the unique 'record_id' needed for the update operation
         list_url = f"{api_base_url}/zones/{zone_id}/dns_records?name={dns_name}&type={record_type}"
         try:
             resp = requests.get(list_url, headers=headers, timeout=5)
@@ -60,7 +61,9 @@ def sync_dns(self):
             record_id, dns_record_ip, dns_last_modified
         )
 
-        # Target and modify a single, specific DNS record
+        # SINGLE RESOURCE ENDPOINT (Update/Modify Operation)
+        # Used with PUT/PATCH to target a specific resource using its unique identifier
+        # Requires the 'record_id' discovered in the preceding GET request
         update_url = f"{api_base_url}/zones/{zone_id}/dns_records/{record_id}"
 
         payload = {

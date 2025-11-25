@@ -328,3 +328,20 @@ Only when both the local and external checks pass does the Watchdog declare the 
 #### 3. Diagnostic Logging & Resilience
 
 This methodical approach minimizes false negatives and provides better diagnostic logging during self-healing: The log clearly shows which layer (Application, Router, or WAN) failed, leading to faster troubleshooting. The recovery process is resilient, checking the local network *before* wasting attempts on the external WAN link.
+
+
+
+
+
+### 🧩 Connecting the REST Endpoints
+
+The Cloudflare API design necessitates a two-step process to update a DNS record:
+
+1.  We use the **Collection Resource Endpoint (`list_url`)** with an `HTTP GET` to identify *which* DNS record (by name and type) we want to change.
+2.  The resulting JSON response yields the **`record_id`**. This ID is the critical piece of **connective tissue** that transforms the vague query URL into the specific **Single Resource Endpoint (`update_url`)** used for the `HTTP PUT` or `PATCH` operation. This ensures we update the correct, unique DNS entry.
+
+| URL Type | API Request Method | Data Included in URL | Primary Purpose |
+| :--- | :--- | :--- | :--- |
+| **`list_url`** | `GET` | Zone ID + Query Parameters (`name`, `type`) | **Find** the record and get its unique **ID**. |
+| **`update_url`** | `PUT`/`PATCH` | Zone ID + **Record ID** | **Modify** the specific record. |
+
