@@ -29,7 +29,7 @@ def main():
 
     Configures logging and starts the supervisor loop
     """
-    # ONE-TIME LOGGING SETUP (Always runs first)
+    # One-time logging setup (Always runs first)
     if Config.DEBUG_ENABLED:
         setup_logging(level=logging.DEBUG)
     else:
@@ -37,18 +37,17 @@ def main():
         
     logger = get_logger("main")
 
-    # CONFIGURATION AND SANITY CHECKS (before the loop starts)
+    # Config and basic sanity checks (before the loop starts)
     run_sanity_checks()
 
-    # INITIALIZE CORE COMPONENTS
-    # Load interval from Config/ENV if applicable (e.g., Config.APP.INTERVAL)
+    # Initialize core components
     #cycle_interval = Config.APP.INTERVAL if hasattr(Config.APP, 'INTERVAL') else 60
     watchdog = NetworkWatchdog()
     cycle_interval = 10
     
     logger.info("🚀 Starting network maintenance cycle...")
     
-    # START LOOP, PASSING INITIALIZED COMPONENTS
+    # Start loop, passing initialized components
     main_loop(watchdog, cycle_interval)
 
 

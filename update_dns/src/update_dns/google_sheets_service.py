@@ -9,10 +9,8 @@ from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials 
 
 from .logger import get_logger
+from .utils import to_local_time
 from .cache import GOOGLE_SHEET_ID_FILE
-
-# Assume Config and logger are imported/defined elsewhere or passed in init
-# from .config import Config 
 
 
 class GSheetsService:
@@ -21,28 +19,25 @@ class GSheetsService:
     Spreadsheet ID persistence. Designed for easy reuse across microservices
     """
     def __init__(self, 
-                 config_google, 
-                 sheet_name: str = None, 
-                 worksheet_name: str = None):
+                 config_google
+                 ):
         """
         Initializes the service with configuration and sets up internal state.
         """
 
         # Define the logger once for the entire class
         self.logger = get_logger("google_sheets_service")
-        
+
+        # Configuration
         self.config = config_google
-        
+
         # Internal State Management
         self.client: Optional[gspread.Client] = None
         self.gsheet_id: Optional[str] = None
         self.worksheet: Optional[gspread.Worksheet] = None
-        
-        # Configuration
-        self.sheet_name: str = sheet_name
-        self.worksheet_name: str = worksheet_name
 
-    def _get_client(self) -> None:
+
+    def get_client(self) -> None:
         """
         Ensures the gspread client is authenticated (Singleton pattern).
         Relies on google-auth for automatic, background token refresh
@@ -72,7 +67,8 @@ class GSheetsService:
             self.logger.error(f"Failed to authenticate gspread client: {e}")
             raise
 
-    def _get_worksheet(self) -> gspread.Worksheet:
+
+    def get_worksheet(self) -> gspread.Worksheet:
         """Initializes the worksheet object, using cached ID if available"""
         
         # If the worksheet object is already initialized, return it immediately
@@ -80,7 +76,7 @@ class GSheetsService:
             return self.worksheet
         
         # 1. Ensure client is ready
-        self._get_client() 
+        self.get_client() 
         client = self.client # Use internal client state
         
         # 2. Get Sheet ID (Persistent Cache)
@@ -89,24 +85,25 @@ class GSheetsService:
                 self.gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
                 self.logger.info(f"Loaded Spreadsheet ID from cache: {self.gsheet_id}")
             else:
-                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.sheet_name}'")
-                sh = client.open(self.sheet_name)
+                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.config.SHEET_NAME}'")
+                sh = client.open(self.config.SHEET_NAME)
                 self.gsheet_id = sh.id
                 GOOGLE_SHEET_ID_FILE.write_text(self.gsheet_id)
                 self.logger.info(f"Resolved and cached Spreadsheet ID: {self.gsheet_id}")
 
         # 3. Get Worksheet using cached ID
         sh = client.open_by_key(self.gsheet_id)
-        self.worksheet = sh.worksheet(self.worksheet_name)
-        self.logger.info(f"Accessed worksheet '{self.worksheet_name}' using cached ID")
+        self.worksheet = sh.worksheet(self.config.WORKSHEET)
+        self.logger.info(f"Accessed worksheet '{self.config.WORKSHEET}' using cached ID")
         
         return self.worksheet
+
 
     def append_ip_log(self, ip_address: str, hostname: str):
         """Public method to append a row to the log sheet"""
         
         try:
-            ws = self._get_worksheet() # Access worksheet (triggers auth/TTL/cache checks)
+            ws = self.get_worksheet() # Access worksheet (triggers auth/TTL/cache checks)
             
             data_for_log = [
                 ip_address, 
@@ -122,19 +119,19 @@ class GSheetsService:
             self.logger.error(f"Fatal error during GSheets write: {e.__class__.__name__}: {e}; Check configuration/scopes")
             raise
 
+
     def update_status(self, ip_address: str):
         """Public method to perform the test write to B5:C5"""
         
         try:
-            ws = self._get_worksheet() # Access worksheet
+            ws = self.get_worksheet() # Access worksheet
             
-            #from datetime import datetime, timezone
-            from .utils import to_local_time
-            current_time = to_local_time(datetime.now(timezone.utc).isoformat())
+            current_time_utc = datetime.now(timezone.utc).isoformat()
+            current_time = to_local_time(current_time_utc)
             test_data = [[ip_address, current_time]]
             
             ws.update('B5:C5', test_data, value_input_option='USER_ENTERED')
-            self.logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time: {current_time}")
+            self.logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time (UTC): {current_time_utc}")
             
         except requests.exceptions.ConnectionError:
             self.logger.error("Gracefully skipping GSheets status update: Connection aborted; Will retry next cycle")

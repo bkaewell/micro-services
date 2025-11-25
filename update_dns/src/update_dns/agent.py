@@ -38,9 +38,7 @@ class NetworkWatchdog:
 
         # Initialize the standalone GSheets Service
         self.gsheets_service = GSheetsService(
-            config_google=Config.Google,
-            sheet_name=Config.Google.SHEET_NAME,
-            worksheet_name=Config.Google.WORKSHEET
+            config_google=Config.Google
         )
 
         # Outputs 
