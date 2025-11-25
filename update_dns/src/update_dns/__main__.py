@@ -7,42 +7,50 @@ from .sanity import run_sanity_checks
 from .logger import get_logger, setup_logging
 
 
-def main_loop(interval: int = 60):
-    """Supervisor loop running once per minute"""
-    logger = get_logger("main_loop")
-    watchdog = NetworkWatchdog()
+def main_loop(watchdog: NetworkWatchdog, interval: int):
+    """Supervisor loop running once per configured interval."""
+    # Use the logger instance that was already configured in main()
+    logger = get_logger("main_loop") 
 
-    # Safe loop for continuous running
     while True:
         try:
             watchdog.run_cycle()
         except Exception as e:
-            logger.exception(f"?????????????Fatal error: {e}")
+            logger.exception(f"Fatal error: {e}")
 
-        logger.debug("Preparing to sleep for 60 seconds...")
+        logger.debug(f"Preparing to sleep for {interval} seconds...")
         time.sleep(interval)
-        logger.info("Waking up and starting next cycle immediately\n\n\n")
+        logger.debug("Waking up and starting next cycle immediately\n\n\n")
 
 
 def main():
     """
-    Entry point for the maintenance network application
+    Entry point for the network maintenance application
 
-    Configures logging based on DEBUG_ENABLED and starts the supervisor loop
+    Configures logging and starts the supervisor loop
     """
-
+    # ONE-TIME LOGGING SETUP (Always runs first)
     if Config.DEBUG_ENABLED:
         setup_logging(level=logging.DEBUG)
     else:
         setup_logging()
+        
     logger = get_logger("main")
 
+    # CONFIGURATION AND SANITY CHECKS (before the loop starts)
     run_sanity_checks()
 
+    # INITIALIZE CORE COMPONENTS
+    # Load interval from Config/ENV if applicable (e.g., Config.APP.INTERVAL)
+    #cycle_interval = Config.APP.INTERVAL if hasattr(Config.APP, 'INTERVAL') else 60
+    watchdog = NetworkWatchdog()
+    cycle_interval = 10
+    
     logger.info("🚀 Starting network maintenance cycle...")
-    # Start the supervisor loop
-    main_loop(interval=60)
-    #main_loop(interval=10)
+    
+    # START LOOP, PASSING INITIALIZED COMPONENTS
+    main_loop(watchdog, cycle_interval)
+
 
 if __name__ == "__main__":
     main()
