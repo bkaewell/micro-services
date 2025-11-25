@@ -120,18 +120,23 @@ class GSheetsService:
             raise
 
 
-    def update_status(self, ip_address: str):
-        """Public method to perform the test write to B5:C5"""
+    def update_status(
+            self, 
+            dns_name: str,
+            dns_last_modified: str,
+            ip_address: str
+    ):
+        """Public method to perform the test write to A5:D5"""
         
         try:
             ws = self.get_worksheet() # Access worksheet
             
             current_time_utc = datetime.now(timezone.utc).isoformat()
             current_time = to_local_time(current_time_utc)
-            test_data = [[ip_address, current_time]]
+            test_data = [[dns_name, ip_address, current_time, dns_last_modified]]
             
-            ws.update('B5:C5', test_data, value_input_option='USER_ENTERED')
-            self.logger.info(f"Test write to B5:C5 complete; Status: STATUS_OK, Time (UTC): {current_time_utc}")
+            ws.update('A5:D5', test_data, value_input_option='USER_ENTERED')
+            self.logger.info(f"Test write to A5:D5 complete; Time (UTC): {current_time_utc}")
             
         except requests.exceptions.ConnectionError:
             self.logger.error("Gracefully skipping GSheets status update: Connection aborted; Will retry next cycle")

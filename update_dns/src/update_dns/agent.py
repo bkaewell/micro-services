@@ -42,9 +42,9 @@ class NetworkWatchdog:
         )
 
         # Outputs 
-        self.detected_ip = ""                       # populated by utils.get_public_ip() via https://api.ipify.org
-        self.dns_last_modified = ""                 # populated by sync_dns()
-        self.dns_name = Config.Cloudflare.DNS_NAME  # populated by config.Config via .env
+        self.detected_ip = ""
+        self.dns_last_modified = ""
+        self.dns_name = Config.Cloudflare.DNS_NAME
 
 
     def run_cycle(self):
@@ -95,7 +95,11 @@ class NetworkWatchdog:
             #     hostname=os.environ.get("HOSTNAME", "local")
             # )
             
-            self.gsheets_service.update_status(ip_address=self.detected_ip)
+            self.gsheets_service.update_status(
+                self.dns_name, 
+                self.dns_last_modified, 
+                self.detected_ip
+            )
 
             return True
 
