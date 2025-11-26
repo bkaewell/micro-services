@@ -42,8 +42,8 @@ class CloudflareClient:
             "Content-Type": "application/json",
         }
         self.record_type = "A"   # Fixed type
-        self.ttl = 60    # Time-to-Live
-        self.proxied = False   # Grey cloud icon (not proxied thru Cloudflare)
+        self.ttl = 60            # Time-to-Live
+        self.proxied = False     # Grey cloud icon (not proxied thru Cloudflare)
 
     # Private helper for URL construction
     def _build_resource_url(
