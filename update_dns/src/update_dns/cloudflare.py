@@ -29,3 +29,43 @@ class CloudflareClient:
         self.ttl = 60    # Time-to-Live
         self.proxied = False   # Grey cloud icon (not proxied thru Cloudflare)
 
+    # Private helper for URL construction
+    def _build_resource_url(
+        self,
+        is_collection: bool = True, 
+        record_id: str = None
+    ) -> str:
+        """
+        Constructs the appropriate Cloudflare DNS resource URL based on the operation type
+
+        Args:
+            is_collection: True for the List/Collection endpoint (GET) 
+                           False for the Single Resource endpoint (PUT/PATCH/DELETE)
+            record_id: The unique ID of the target record (required if is_collection is False)
+
+        Returns:
+            The complete, correctly formatted API endpoint URL
+        """
+
+        # Common Base Path for all DNS record operations within the zone
+        base_path = (
+            f"{self.api_base_url}/zones/"
+            f"{self.zone_id}/dns_records"
+        )
+
+        if is_collection:
+            # Collection Resource Endpoint (GET operation)
+            # Hardcoded filters for the specific DNS name and type
+            filters = (
+                f"?name={self.dns_name}"
+                f"&type={self.record_type}"
+            )
+            return base_path + filters
+            
+        else:
+            # Single Resource Endpoint (PUT/PATCH/DELETE operation)
+            if not record_id:
+                raise ValueError("record_id must be provided for single resource operations")
+                    
+            # Append the unique resource ID to the path
+            return base_path + f"/{record_id}"
