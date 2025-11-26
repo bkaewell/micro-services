@@ -3,7 +3,6 @@ import json
 import requests
 
 from .logger import get_logger
-from .utils import to_local_time
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 
@@ -86,3 +85,121 @@ class CloudflareClient:
             # Append the unique resource ID to the path
             return base_path + f"/{record_id}"
 
+
+    def get_dns_record_info(self) -> dict:
+        """
+        Fetches the current Cloudflare DNS record info (ID, IP, modified_on)
+        
+        Raises:
+            RuntimeError: If the API request fails or no record is found
+        """
+        is_collection = True
+        list_url = self._build_resource_url(is_collection)
+        #self.logger.debug(f"Fetching record details from: {list_url}")
+        self.logger.info(f"Fetching record details from: {list_url}")
+        
+        try:
+            resp = requests.get(list_url, headers=self.headers, timeout=5)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            raise RuntimeError(f"API GET request failed for {self.dns_name}: {e}")
+
+        get_resp_data = resp.json()
+        
+        # The 'result' field contains a LIST of matching records
+        records_list = get_resp_data.get("result") or []
+        
+        if not records_list:
+            raise RuntimeError(f"No DNS record found for {self.dns_name} ({self.record_type})")
+
+        # Return the first (and only) matching record object
+        return records_list[0]
+
+
+    def update_dns_record(self, record_id: str, new_ip: str) -> dict:
+        """
+        Executes the PUT request to update the DNS record
+        
+        Returns:
+            The updated DNS record object from the PUT response body
+        Raises:
+            RuntimeError: If the API PUT request fails
+        """
+        is_collection = False
+        update_url = self._build_resource_url(is_collection, record_id)
+        
+        payload = {
+            "type": self.record_type,
+            "name": self.dns_name,
+            "content": new_ip, 
+            "ttl": self.ttl,
+            "proxied": self.proxied,
+        }
+        
+        try:
+            resp = requests.put(update_url, headers=self.headers, json=payload, timeout=5)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            raise RuntimeError(f"API PUT failed for record {record_id}: {e}")
+
+        # Efficiency: Extract the new record from the PUT response body
+        put_resp_data = resp.json()
+        new_dns_record = put_resp_data.get("result")
+        
+        if not new_dns_record:
+            self.logger.warning("Successful PUT but response body was incomplete.")
+            return {} 
+
+        return new_dns_record
+
+
+    # --- Orchestrator Method (Control Flow) ---
+    def sync_dns(self, detected_ip: str, cached_ip: str) -> dict | None:
+        """
+        Orchestrates the DNS synchronization
+        
+        Returns:
+            dict: The new DNS record details (with 'modified_on') if updated
+            None: If the IP was unchanged (skipped), indicating no API interaction occurred
+        Raises:
+            RuntimeError: If any Cloudflare API operation fails
+        """
+        self.logger.info("Starting Cloudflare sync for detected IP")
+        
+        # IP check and early exit
+        if cached_ip == detected_ip:
+            self.logger.info("IP unchanged, skipping DNS update...")
+            return None 
+
+        self.logger.info(f"IP Mismatch: Cached={cached_ip} | Detected={detected_ip}. Initiating DNS update...")
+
+        # GET current record info
+        try:
+            current_dns_record = self.get_dns_record_info()
+            record_id = current_dns_record.get("id")
+            dns_record_ip = current_dns_record.get("content")
+            #self.logger.debug(f"Current Cloudflare record: ID={record_id}, IP={dns_record_ip}")
+            self.logger.info(f"Current Cloudflare record: ID={record_id}, IP={dns_record_ip}")
+            
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
+
+        # PUT new IP
+        try:
+            new_dns_record = self.update_dns_record(
+                record_id=record_id, 
+                new_ip=detected_ip
+            )
+            
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to update DNS record: {e}")
+
+        # Success and cleanup
+        if new_dns_record:
+            self.logger.info(f"DNS UPDATED: '{self.dns_name}': {dns_record_ip} → {detected_ip}")
+            # Return the full updated record info
+            return new_dns_record 
+        
+            # return new_dns_record, self.dns_name, dns_last_modified
+
+        return {} # Should not be reached in a normal flow
