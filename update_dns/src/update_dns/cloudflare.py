@@ -1,7 +1,7 @@
+import os
 import json
 import requests
 
-from .config import Config
 from .logger import get_logger
 from .utils import to_local_time
 from .cache import get_cloudflare_ip, update_cloudflare_ip
@@ -10,21 +10,37 @@ from .cache import get_cloudflare_ip, update_cloudflare_ip
 class CloudflareClient:
     """Handles all communication and logic specific to the Cloudflare DNS API"""
     
-    def __init__(self, config):
-        """Initializes the client with configuration and logging dependency"""
+    def __init__(self):
+        """Initializes the client by resolving all config dependencies from os.environ"""
 
         # Define the logger once for the entire class
         self.logger = get_logger("cloudflare")
-        self.config = config
+
+        # Read required Cloudflare environment variables from .env
+        self.api_base_url = os.getenv("CLOUDFLARE_API_BASE_URL")
+        self.api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+        self.zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
+        self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
+
+        # Add checks here to ensure values are not None and raise an error if they are
+        required_vars = [
+            self.api_base_url, 
+            self.api_token, 
+            self.zone_id, 
+            self.dns_name
+        ]
+
+        if not all(required_vars):
+            raise EnvironmentError(
+                "Missing required Cloudflare environment variables in .env file "
+                "(API_BASE_URL, API_TOKEN, ZONE_ID, DNS_NAME)"
+            )
 
         # Pre-calculated and necessary instance variables
         self.headers = {
-            "Authorization": f"Bearer {config.API_TOKEN}",
+            "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
         }
-        self.api_base_url = config.API_BASE_URL
-        self.zone_id = config.ZONE_ID
-        self.dns_name = config.DNS_NAME
         self.record_type = "A"   # Fixed type
         self.ttl = 60    # Time-to-Live
         self.proxied = False   # Grey cloud icon (not proxied thru Cloudflare)
@@ -69,3 +85,4 @@ class CloudflareClient:
                     
             # Append the unique resource ID to the path
             return base_path + f"/{record_id}"
+
