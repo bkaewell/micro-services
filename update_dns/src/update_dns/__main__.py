@@ -8,7 +8,8 @@ from .logger import get_logger, setup_logging
 
 
 def main_loop(watchdog: NetworkWatchdog, interval: int):
-    """Supervisor loop running once per configured interval."""
+    """Supervisor loop running once per configured interval"""
+
     # Use the logger instance that was already configured in main()
     logger = get_logger("main_loop") 
 
@@ -20,7 +21,7 @@ def main_loop(watchdog: NetworkWatchdog, interval: int):
 
         logger.debug(f"Preparing to sleep for {interval} seconds...")
         time.sleep(interval)
-        logger.debug("Waking up and starting next cycle immediately\n\n\n")
+        logger.debug("Waking up and starting next cycle immediately\n\n")
 
 
 def main():

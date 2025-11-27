@@ -2,6 +2,8 @@ import os
 import json
 import requests
 
+from dotenv import load_dotenv   # NEEDED??????????
+
 from .logger import get_logger
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 
@@ -15,7 +17,12 @@ class CloudflareClient:
         # Define the logger once for the entire class
         self.logger = get_logger("cloudflare")
 
-        # Read required Cloudflare environment variables from .env
+
+        # Load .env once (handles local or Docker environments)
+        load_dotenv()   # NEEDED??????????
+
+
+        # Configuration
         self.api_base_url = os.getenv("CLOUDFLARE_API_BASE_URL")
         self.api_token = os.getenv("CLOUDFLARE_API_TOKEN")
         self.zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
@@ -203,3 +210,4 @@ class CloudflareClient:
             # return new_dns_record, self.dns_name, dns_last_modified
 
         return {} # Should not be reached in a normal flow
+

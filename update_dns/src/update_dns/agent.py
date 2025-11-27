@@ -35,14 +35,10 @@ class NetworkWatchdog:
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
 
         # Initialize the Cloudflare client
-        #self.config_cloudflare = Config.Cloudflare
-        #self.cloudflare_client = CloudflareClient(self.config_cloudflare)
         self.cloudflare_client = CloudflareClient()
 
         # Initialize the standalone GSheets service
-        self.gsheets_service = GSheetsService(
-            config_google=Config.Google
-        )
+        self.gsheets_service = GSheetsService()
 
         # Outputs 
         self.detected_ip = ""

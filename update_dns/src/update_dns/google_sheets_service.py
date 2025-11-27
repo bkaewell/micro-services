@@ -1,10 +1,13 @@
+import os
 import time
+import json
 import pathlib
 import gspread
 import requests # For catching ConnectionError
 
 from typing import Optional
 from gspread import authorize
+from dotenv import load_dotenv   # NEEDED??????????
 from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials 
 
@@ -18,18 +21,23 @@ class GSheetsService:
     Standalone service for Google Sheets access with TTL caching and
     Spreadsheet ID persistence. Designed for easy reuse across microservices
     """
-    def __init__(self, 
-                 config_google
-                 ):
+    def __init__(self):
         """
-        Initializes the service with configuration and sets up internal state.
+        Initializes the service with configuration and sets up internal state
         """
 
         # Define the logger once for the entire class
         self.logger = get_logger("google_sheets_service")
 
+
+        # Load .env once (handles local or Docker environments)
+        load_dotenv()   # NEEDED??????????
+
         # Configuration
-        self.config = config_google
+        self.gsheet_name = os.getenv("GOOGLE_SHEET_NAME")
+        self.gsheet_worksheet = os.getenv("GOOGLE_WORKSHEET")
+        self.gsheet_creds = json.loads(os.getenv("GOOGLE_SHEETS_CREDENTIALS"))
+
 
         # Internal State Management
         self.client: Optional[gspread.Client] = None
@@ -54,7 +62,7 @@ class GSheetsService:
         try:
             # Create credentials object from dictionary
             creds = Credentials.from_service_account_info(
-                self.config.SHEETS_CREDENTIALS,
+                self.gsheet_creds,
                 scopes=['https://www.googleapis.com/auth/spreadsheets', 
                         'https://www.googleapis.com/auth/drive',
                 ]
@@ -85,16 +93,16 @@ class GSheetsService:
                 self.gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
                 self.logger.info(f"Loaded Spreadsheet ID from cache: {self.gsheet_id}")
             else:
-                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.config.SHEET_NAME}'")
-                sh = client.open(self.config.SHEET_NAME)
+                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.gsheet_name}'")
+                sh = client.open(self.gsheet_name)
                 self.gsheet_id = sh.id
                 GOOGLE_SHEET_ID_FILE.write_text(self.gsheet_id)
                 self.logger.info(f"Resolved and cached Spreadsheet ID: {self.gsheet_id}")
 
         # 3. Get Worksheet using cached ID
         sh = client.open_by_key(self.gsheet_id)
-        self.worksheet = sh.worksheet(self.config.WORKSHEET)
-        self.logger.info(f"Accessed worksheet '{self.config.WORKSHEET}' using cached ID")
+        self.worksheet = sh.worksheet(self.gsheet_worksheet)
+        self.logger.info(f"Accessed worksheet '{self.gsheet_worksheet}' using cached ID")
         
         return self.worksheet
 
