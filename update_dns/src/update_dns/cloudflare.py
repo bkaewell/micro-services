@@ -134,7 +134,7 @@ class CloudflareClient:
         """
         is_collection = False
         update_url = self._build_resource_url(is_collection, record_id)
-        
+
         payload = {
             "type": self.record_type,
             "name": self.dns_name,
@@ -161,7 +161,7 @@ class CloudflareClient:
 
 
     # --- Orchestrator Method (Control Flow) ---
-    def sync_dns(self, detected_ip: str, cached_ip: str) -> dict | None:
+    def sync_dns(self, cached_ip: str, detected_ip: str) -> dict | None:
         """
         Orchestrates the DNS synchronization
         
@@ -178,20 +178,20 @@ class CloudflareClient:
             self.logger.info("IP unchanged, skipping DNS update...")
             return None 
 
-        self.logger.info(f"IP Mismatch: Cached={cached_ip} | Detected={detected_ip}. Initiating DNS update...")
+        self.logger.info(f"IP changed: Cached={cached_ip} | Detected={detected_ip}. Initiating DNS update...")
 
-        # GET current record info
+        # "GET" current record info
         try:
-            current_dns_record = self.get_dns_record_info()
-            record_id = current_dns_record.get("id")
-            dns_record_ip = current_dns_record.get("content")
+            dns_record = self.get_dns_record_info()
+            record_id = dns_record.get("id")
+            dns_record_ip = dns_record.get("content")
             #self.logger.debug(f"Current Cloudflare record: ID={record_id}, IP={dns_record_ip}")
             self.logger.info(f"Current Cloudflare record: ID={record_id}, IP={dns_record_ip}")
             
         except RuntimeError as e:
             raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
 
-        # PUT new IP
+        # "PUT" new IP
         try:
             new_dns_record = self.update_dns_record(
                 record_id=record_id, 
@@ -204,10 +204,40 @@ class CloudflareClient:
         # Success and cleanup
         if new_dns_record:
             self.logger.info(f"DNS UPDATED: '{self.dns_name}': {dns_record_ip} → {detected_ip}")
-            # Return the full updated record info
+            # Return the full updated record info            
             return new_dns_record 
-        
-            # return new_dns_record, self.dns_name, dns_last_modified
 
         return {} # Should not be reached in a normal flow
 
+
+
+# DNS records JSON response:
+# {
+#   "result": [
+#     {
+#       "id": "******",
+#       "name": "vpn.",
+#       "type": "A",
+#       "content": "100.34.48.69",
+#       "proxiable": true,
+#       "proxied": false,
+#       "ttl": 60,
+#       "settings": {},
+#       "meta": {},
+#       "comment": null,
+#       "tags": [],
+#       "created_on": "2025-08-26T02:33:04.952328Z",
+#       "modified_on": "2025-11-25T02:13:54.401647Z"
+#     }
+#   ],
+#   "success": true,
+#   "errors": [],
+#   "messages": [],
+#   "result_info": {
+#     "page": 1,
+#     "per_page": 100,
+#     "count": 1,
+#     "total_count": 1,
+#     "total_pages": 1
+#   }
+# }

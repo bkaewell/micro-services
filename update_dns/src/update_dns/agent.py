@@ -13,16 +13,18 @@ class NetworkWatchdog:
     """
     Manages a dynamic DNS update cycle with self-healing capabilities
 
+    The primary goal is to maintain the local DNS record (in Cloudflare) 
+    in sync with the current public IP address    
+
     The main loop (run_cycle) executes the following sequence:
     1. Check network health by attempting to detect the current public IP
-    2. If successful, update the cached public IP and proceed to DNS synchronization
-    3. Compare the detected IP with the DNS record settings (hosted in Cloudflare)
-    4. If the IP has changed, update the Cloudflare 'A' record (IPv4 address)
-    5. Update the status log in the Google Sheet
-    6. If public IP detection fails, track consecutive failures
-    7. If consecutive failures exceed a defined threshold (i.e., 3 attempts), 
-       trigger the self-healing process to power-cycle the smart plug 
-       (if the watchdog flag is enabled)
+    2. If successful, delegate DNS synchronization
+       (IP comparison/update/caching) to the Cloudflare client
+    3. Log the cycle status (including the DNS record's last modified timestamp) 
+       to the Google Sheet service
+    4. If public IP detection fails, track consecutive failures
+    5. If consecutive failures exceed a defined threshold, trigger the self-healing 
+       process to power-cycle the smart plug (if the watchdog flag is enabled)
     """
 
     def __init__(self, max_consecutive_failures=3):
@@ -43,13 +45,27 @@ class NetworkWatchdog:
         # Outputs 
         self.detected_ip = ""
         self.dns_last_modified = ""
-        #self.dns_name = Config.Cloudflare.DNS_NAME
+        self.dns_name = ""
 
 
     def run_cycle(self):
         """
-        Executes the main monitoring and update logic: Checks network,
-        syncs DNS, and updates the status log
+        Executes the full monitoring and update logic sequence.
+
+        The method handles three distinct phases:
+        1. Phase 1 (Health Check): Attempts to retrieve the public IP. If successful, 
+           resets the failure counter
+        2. Phase 2 (Core Task): Calls `cloudflare_client.sync_dns()` to update the 
+           DNS record only if the IP has changed. On success, the local IP cache 
+           is updated. Logs the final status to Google Sheets
+        3. Phase 3 (Failure Handling): If the network check fails, increments the 
+           failure counter. If the counter meets the threshold and the watchdog is enabled, 
+           it attempts to self-heal by resetting the smart plug
+
+        Returns:
+            bool: True if the public IP detection was successful and the cycle completed 
+                  without critical error (DNS sync may still have soft failed)
+                  False if the network check failed or a critical sync error occurred
         """
 
         self.logger.info("💚 Heartbeat alive...")
@@ -64,55 +80,40 @@ class NetworkWatchdog:
         # One full HTTPS request, if successful, the entire network stack 
         # (DNS resolution, routing, and application layer protocols) is functional
 
-        detected_ip = get_public_ip()
-        self.detected_ip = detected_ip   # Store for Cloudflare update
+        self.detected_ip = get_public_ip()
+        #self.detected_ip = "192.168.1.1"   # For testing only
 
-        # The Internet is OK if and only if we have a detected IP string
-        internet_ok = bool(detected_ip)
-
-        if internet_ok:
-            self.logger.info(f"Internet OK | IP: {detected_ip}") 
+        if self.detected_ip:
+            self.logger.info(f"Internet OK | IP: {self.detected_ip}") 
             self.failed_ping_count = 0
 
             # --- Phase 2: Core Task (DNS update and status log) ---
             try:
                 # Get cached IP to pass to the client
-                #cached_ip = self.cloudflare_client.get_cloudflare_ip() 
                 cached_ip = get_cloudflare_ip()
                 
                 # Call the dedicated client method
                 update_result = self.cloudflare_client.sync_dns(
-                    detected_ip=self.detected_ip,
-                    cached_ip=cached_ip
+                    cached_ip=cached_ip,
+                    detected_ip=self.detected_ip
                 )
                 
                 # Handle Update Data / Success or Skip
                 if update_result:
-                    # Update occurred (update_result is the new record dict)
-                    new_modified_on = update_result.get('modified_on')
-                    self.dns_last_modified = to_local_time(new_modified_on)
+                    # This block executes only if the DNS record was successfully updated
+                    # Update the NetworkWatchdog's state with the result
+                    self.dns_name = update_result.get('name')
+                    self.dns_last_modified = to_local_time(update_result.get('modified_on'))
+
+                    # Persist the newly confirmed IP to local cache for next comparison
                     update_cloudflare_ip(self.detected_ip)
                     self.logger.info("DNS synchronization completed successfully")
-                    
+
                 elif update_result is None: 
                     # Update skipped (IP matched)
                     self.logger.info("DNS sync skipped (IP unchanged)")
                     # When skipped, the last_modified time is not guaranteed to be current, 
                     # but we proceed with logging the current system status
-
-
-
-
-                # # Handle Update Data / Success
-                # # The client should return a dict containing the new 'modified_on' timestamp
-                # if update_data and update_data.get('modified_on'):
-                #     # Update the NetworkWatchdog's state with the result
-                #     self.dns_last_modified = update_data['modified_on']
-                #     self.logger.info("DNS synchronization handled successfully")
-                # elif update_data is not None: 
-                #     # Case where IP matched and update was skipped (update_data might be {} or specific skip signal)
-                #     self.logger.info("DNS sync skipped (IP unchanged)")
-
 
             except (RuntimeError, ValueError) as e:
                 # Catch API/logic failures raised by CloudflareClient
@@ -123,22 +124,18 @@ class NetworkWatchdog:
                 self.logger.exception(f"🔥 Unexpected fatal failure during DNS sync: {e}")
                 return False
 
-
-            # Future code
             # Update Google Sheets
 
             # self.gsheets_service.append_ip_log(
             #     ip_address=self.detected_ip, 
             #     hostname=os.environ.get("HOSTNAME", "local")
-            # )
+            #)
             
-
-
-            # self.gsheets_service.update_status(
-            #     self.dns_name, 
-            #     self.dns_last_modified, 
-            #     self.detected_ip
-            # )
+            self.gsheets_service.update_status(
+                self.dns_name, 
+                self.dns_last_modified, 
+                self.detected_ip
+            )
 
             return True
 
