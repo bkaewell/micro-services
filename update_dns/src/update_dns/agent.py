@@ -1,3 +1,7 @@
+import time
+
+from datetime import datetime, timezone
+
 from .config import Config
 from .logger import get_logger
 from .utils import get_public_ip, to_local_time
@@ -87,6 +91,21 @@ class NetworkWatchdog:
             self.logger.info(f"Internet OK | IP: {self.detected_ip}") 
             self.failed_ping_count = 0
 
+            # Capture current time for the heartbeat log
+            current_time_utc = datetime.now(timezone.utc).isoformat()
+            current_time = to_local_time(current_time_utc)
+
+            # Only update status with current heartbeat info (IP and time)
+            # This is the high-frequency, minimum data update
+            self.gsheets_service.update_status(
+                dns_name=self.dns_name, 
+                ip_address=self.detected_ip,
+                current_time=current_time,
+                dns_last_modified=None   # Do not update
+            )
+
+            update_occurred = False   # Flag to track if the DNS was updated
+
             # --- Phase 2: Core Task (DNS update and status log) ---
             try:
                 # Get cached IP to pass to the client
@@ -100,14 +119,16 @@ class NetworkWatchdog:
                 
                 # Handle Update Data / Success or Skip
                 if update_result:
-                    # This block executes only if the DNS record was successfully updated
-                    # Update the NetworkWatchdog's state with the result
+                    # Cloudflare update was successful
                     self.dns_name = update_result.get('name')
                     self.dns_last_modified = to_local_time(update_result.get('modified_on'))
 
                     # Persist the newly confirmed IP to local cache for next comparison
                     update_cloudflare_ip(self.detected_ip)
+                    self.logger.info(f"Cache UPDATED: {cached_ip} → {get_cloudflare_ip()}")
                     self.logger.info("DNS synchronization completed successfully")
+
+                    update_occurred = True   # Set flag
 
                 elif update_result is None: 
                     # Update skipped (IP matched)
@@ -131,11 +152,16 @@ class NetworkWatchdog:
             #     hostname=os.environ.get("HOSTNAME", "local")
             #)
             
-            self.gsheets_service.update_status(
-                self.dns_name, 
-                self.dns_last_modified, 
-                self.detected_ip
-            )
+            if update_occurred:
+
+                # Update status with the DNS modification time
+                # This is the low-frequency, audit-logging update
+                self.gsheets_service.update_status(
+                    dns_name=self.dns_name, 
+                    ip_address=None,   # Ignore, previously updated
+                    current_time=None, # Ignore, previously updated
+                    dns_last_modified=self.dns_last_modified   # The new value
+                )
 
             return True
 
