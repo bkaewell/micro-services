@@ -1,8 +1,6 @@
 import time
 import logging
 
-from datetime import datetime
-
 from .config import Config
 from .agent import NetworkWatchdog
 from .sanity import run_sanity_checks
@@ -11,10 +9,10 @@ from .logger import get_logger, setup_logging
 
 def main_loop(
         watchdog: NetworkWatchdog, 
-        interval: int = 60, 
+        interval: int = 60,
         buffer: float | None = None,
     ):
-    """Supervisor loop running once per interval"""
+    """Supervisor loop running once per interval (seconds)"""
 
     # Use the logger instance that was already configured in main()
     logger = get_logger("main_loop")

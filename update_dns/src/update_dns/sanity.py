@@ -1,7 +1,4 @@
-import re
 import requests
-
-from pathlib import Path
 
 from .config import Config
 from .logger import get_logger

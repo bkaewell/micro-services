@@ -1,19 +1,16 @@
 import os
 import time
 import json
-import pathlib
 import gspread
 import requests # For catching ConnectionError
 
 from typing import Optional
 from gspread import authorize
 from dotenv import load_dotenv
-from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials 
 from google.auth import exceptions as auth_exceptions
 
 from .logger import get_logger
-from .utils import to_local_time
 from .cache import GOOGLE_SHEET_ID_FILE
 
 
