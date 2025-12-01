@@ -43,6 +43,10 @@ def main_loop(
                 f"({elapsed:.3f}s > {threshold:.3f}s)\n\n"
             )
 
+            # Reconnect external services that rely on persistent connections/tokens
+            # Rebuild the GSheets connection/auth
+            watchdog.gsheets_service.reconnect()
+
 
 def main():
     """
