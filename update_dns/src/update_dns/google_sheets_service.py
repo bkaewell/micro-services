@@ -46,26 +46,37 @@ class GSheetsService:
         self.worksheet: Optional[gspread.Worksheet] = None
 
 
-    def get_client(self) -> None:
+    def get_client(self, force_new: bool = False) -> None:
         """
-        Ensures the gspread client is authenticated (Singleton pattern).
+        Ensures the gspread client is authenticated (Singleton pattern)
         Relies on google-auth for automatic, background token refresh
+
+        Args:
+            force_new: If True (usually triggered by a system anomaly), 
+                       forces the destruction of the existing client
+                       and performs a full (expensive) re-auth
         """
 
-        # Check 1: If client already exists, return immediately
-        if self.client is not None:
+        # Check 1: If client already exists AND we are not forcing a 
+        # new connection, return immediately
+        if self.client is not None and not force_new:
             self.logger.info("Using cached gspread client")
             return # self.client is cached
 
-        # Check 2: Client does not exist, perform full, expensive authentication.
-        self.logger.info("Client missing. Performing initial, full authentication with Google services")
+        # Check 2: Client does not exist OR we are focing re-authentication
+        if force_new:
+            self.logger.warning("Forcing client re-authentication due to system anomaly")
+        else:
+            self.logger.info("Client missing; Performing initial, full authentication with Google services")
 
+        # Google Services Authentication logic
         try:
             # Create credentials object from dictionary
             creds = Credentials.from_service_account_info(
                 self.gsheet_creds,
-                scopes=['https://www.googleapis.com/auth/spreadsheets', 
-                        'https://www.googleapis.com/auth/drive',
+                scopes=[
+                    'https://www.googleapis.com/auth/spreadsheets', 
+                    'https://www.googleapis.com/auth/drive',
                 ]
             )
             # Authorize the client with the credentials object
@@ -84,28 +95,56 @@ class GSheetsService:
         if self.worksheet:
             return self.worksheet
         
-        # 1. Ensure client is ready
-        self.get_client() 
+        # Verify client integrity and is ready
+        self.get_client()   # Will NOT force a new client here unless one doesn't exist
         client = self.client # Use internal client state
         
-        # 2. Get Sheet ID (Persistent Cache)
+        # Spreadsheet ID caching (minimizes API calls)
         if self.gsheet_id is None:
+            # Check 1: Local file cache
             if GOOGLE_SHEET_ID_FILE.exists():
                 self.gsheet_id = GOOGLE_SHEET_ID_FILE.read_text().strip()
                 self.logger.info(f"Loaded Spreadsheet ID from cache: {self.gsheet_id}")
+            # Check 2: API lookup and write
             else:
-                self.logger.info(f"Spreadsheet ID not cached. Looking up sheet name: '{self.gsheet_name}'")
+                self.logger.info(f"Spreadsheet ID not cached; Looking up sheet name: '{self.gsheet_name}'")
                 sh = client.open(self.gsheet_name)
                 self.gsheet_id = sh.id
                 GOOGLE_SHEET_ID_FILE.write_text(self.gsheet_id)
                 self.logger.info(f"Resolved and cached Spreadsheet ID: {self.gsheet_id}")
 
-        # 3. Get Worksheet using cached ID
-        sh = client.open_by_key(self.gsheet_id)
+        # Get Worksheet using cached ID
+        sh = client.open_by_key(self.gsheet_id)   # Most efficient way to access spreadsheet
         self.worksheet = sh.worksheet(self.gsheet_worksheet)
         self.logger.info(f"Accessed worksheet '{self.gsheet_worksheet}' using cached ID")
         
         return self.worksheet
+
+
+    def reconnect(self):
+        """
+        Forces the GSheets service to destroy its current client and authentication
+        session, then rebuilds it; Used to clear stale TCP connections and expired 
+        OAuth tokens after long periods of inactivity
+        """
+        self.logger.critical("GSheets Service: Forcing full reconnect after system anomaly!")
+
+        # Force the client to be rebuilt
+        self.get_client(force_new=True)
+
+        # Reset the worksheet state - this ensures the next call to get_worksheet()
+        # will perform a fresh API lookup (open_by_key) using the new client,
+        # which also helps clear connection state
+        self.worksheet = None
+
+
+        # Call get_worksheet() now to preload the fresh worksheet object
+        try:
+            self.get_worksheet()
+            self.logger.critical("GSheets Service: Reconnection successful")
+        except Exception as e:
+            self.logger.error(f"Failed to restore worksheet after reconnection: {e}")
+            # Do not raise here; let the next run_cycle handle the failure via its main try/except
 
 
     def append_ip_log(self, ip_address: str, hostname: str):
