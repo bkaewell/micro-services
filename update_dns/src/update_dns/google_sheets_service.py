@@ -7,7 +7,7 @@ import requests # For catching ConnectionError
 
 from typing import Optional
 from gspread import authorize
-from dotenv import load_dotenv   # NEEDED??????????
+from dotenv import load_dotenv
 from datetime import datetime, timezone
 from google.oauth2.service_account import Credentials 
 from google.auth import exceptions as auth_exceptions
@@ -30,9 +30,8 @@ class GSheetsService:
         # Define the logger once for the entire class
         self.logger = get_logger("google_sheets_service")
 
-
-        # Load .env once (handles local or Docker environments)
-        load_dotenv()   # NEEDED??????????
+        # Load .env
+        load_dotenv()
 
         # Configuration
         self.gsheet_name = os.getenv("GOOGLE_SHEET_NAME")
@@ -192,8 +191,11 @@ class GSheetsService:
 
         # Catch network failures and Google API/authorization errors (high-level)
         except(
-            requests.RequestException,   # Catches network failures              
-            gspread.exceptions.APIError, # Catches permission failures
+            # Network and HTTP/API failures (i.e. Timeout, Connection Reset, 4xx/5xx responses)
+            requests.RequestException,
+            # Google Sheets specific errors (i.e. Permission Denied, Invalid Range)          
+            gspread.exceptions.APIError,
+            # Failure to renew OAuth access token
             auth_exceptions.RefreshError
         ) as e:
             self.logger.error(
@@ -209,33 +211,3 @@ class GSheetsService:
                 f"{e.__class__.__name__}: {e}"
             )
             raise # Re-raise to crash the process and ensure the scheduler sees the failure
-
-
-
-
-        # # 1. Catch specific network/transport errors (low-level)
-        # except requests.exceptions.ConnectionError as e:
-        #     # Reliably catches connection timeout/abort/reset errors
-        #     self.logger.error(
-        #         f"Gracefully skipping GSheets status update: " 
-        #         f"Connection aborted; Will retry next cycle " 
-        #         f"({e.__class__.__name__})"
-        #     )
-
-        # # 2. Catch Google API/Authorization errors (high-level)
-        # except (gspread.exceptions.APIError, auth_exceptions.RefreshError) as e:
-        #     # This covers authorization failures, permission denials, and sometimes transport issues
-        #     self.logger.error(
-        #         f"Gracefully skipping GSheets status update: "
-        #         f"API/Auth Error; Check credentials "
-        #         f"({e.__class__.__name__}: {e})"
-        #     )
-
-        # # 3. Final catch-all for unexpected issues
-        # except Exception as e:
-        #     self.logger.error(
-        #         f"Fatal error during GSheets status write: "
-        #         f"{e.__class__.__name__}: {e}"
-        #     )
-        #     raise # Re-raise to crash the cycle and ensure the scheduler sees the failure
-
