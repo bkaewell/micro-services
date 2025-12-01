@@ -2,7 +2,7 @@ import os
 import json
 import requests
 
-from dotenv import load_dotenv   # NEEDED??????????
+from dotenv import load_dotenv
 
 from .logger import get_logger
 from .cache import get_cloudflare_ip, update_cloudflare_ip
@@ -17,10 +17,8 @@ class CloudflareClient:
         # Define the logger once for the entire class
         self.logger = get_logger("cloudflare")
 
-
-        # Load .env once (handles local or Docker environments)
-        load_dotenv()   # NEEDED??????????
-
+        # Load .env 
+        load_dotenv()
 
         # Configuration
         self.api_base_url = os.getenv("CLOUDFLARE_API_BASE_URL")

@@ -17,10 +17,8 @@ def print_summary():
     logger.info("===== Runtime Summary =====")
     logger.info(f"Router IP:                     {Config.Hardware.ROUTER_IP}")
     logger.info(f"Smart Plug IP:                 {Config.Hardware.PLUG_IP}")
-    logger.info(f"Running in Docker:             {Config.RUNNING_IN_DOCKER}")
     logger.info(f"Debug Flag:                    {Config.DEBUG_ENABLED}")
     logger.info(f"Watchdog Self-Healing Flag:    {Config.WATCHDOG_ENABLED}")
-    #logger.info(f"Google API Key Path:           {creds_path}")
     logger.info("==========================\n")
 
 def run_sanity_checks() -> None:
