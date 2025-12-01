@@ -66,13 +66,12 @@ def main():
     run_sanity_checks()
 
     # Initialize core components
-    #cycle_interval = Config.APP.INTERVAL if hasattr(Config.APP, 'INTERVAL') else 60
     watchdog = NetworkWatchdog()
-    cycle_interval = 60
+    cycle_interval = Config.CYCLE_INTERVAL
     buffer = cycle_interval * 0.10   # default 10% margin for production
-    logger.info("🚀 Starting network maintenance cycle...")
     
     # Start loop, passing initialized components
+    logger.info("🚀 Starting network maintenance cycle...")
     main_loop(watchdog, cycle_interval, buffer)
 
 

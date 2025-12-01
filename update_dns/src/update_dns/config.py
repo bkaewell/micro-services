@@ -1,5 +1,4 @@
 import os
-import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -7,7 +6,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    """Centralized config for Hardware and Feature flag data structures"""
+    """Centralized config for Operational Parameters and Hardware data structures"""
+
+    # --- Operational Parameters ---
+
+    # Safe integer conversion with default
+    try:
+        CYCLE_INTERVAL = int(os.getenv("CYCLE_INTERVAL", 60))
+    except ValueError:
+        CYCLE_INTERVAL = 60
+
+    DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "false").lower() == "true"
+    WATCHDOG_ENABLED = os.getenv("WATCHDOG_ENABLED", "false").lower() == "true"
+    # METRICS_DB = os.getenv("METRICS_DB", "metrics.db")
+    # AUTOPILOT_INTERVAL = int(os.getenv("AUTOPILOT_INTERVAL", "60"))
 
     # --- Hardware ---
     class Hardware:
@@ -25,9 +37,3 @@ class Config:
         except ValueError:
             INIT_DELAY = 30
 
-    # --- Feature flags ---
-    DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "false").lower() == "true"
-    RUNNING_IN_DOCKER = Path("/.dockerenv").exists() or os.getenv("DOCKER", "false").lower() == "true"
-    WATCHDOG_ENABLED = os.getenv("WATCHDOG_ENABLED", "false").lower() == "true"
-    # METRICS_DB = os.getenv("METRICS_DB", "metrics.db")
-    # AUTOPILOT_INTERVAL = int(os.getenv("AUTOPILOT_INTERVAL", "60"))
