@@ -12,49 +12,63 @@ def main_loop(
         interval: int = 60,
         buffer: float | None = None,
     ):
-    """Supervisor loop running once per interval (seconds)"""
+    """
+    Supervisor loop running once per interval
+    """
 
     logger = get_logger("main_loop")
 
     if buffer is None:
-        buffer = interval * 0.10   # default 10% margin
+        buffer = interval * 0.10   # Default 10% margin
 
-    # Compute the threshold for detecting excessive sleep;
-    # Actual sleep longer than this indicates a possible system anomaly
+    # Compute the threshold for detecting a system suspension/wakeup event for 
+    # recovery purposes. If the total elapsed time between cycle completions 
+    # exceeds this value, it indicates the OS suspended the process (e.g., 
+    # system sleep or hibernation).
     threshold = interval + buffer
 
     # Track the completion time of the previous cycle
     last_cycle_end = time.monotonic()   # Initialize to start time
 
     while True:
-        # --- Detect Anomaly BEFORE Running Cycle ---
+        # --- Detect System Anomaly BEFORE Running Cycle ---
         current_time = time.monotonic()
         
-        # Calculate the total time elapsed since the loop finished its work/sleep in the prior iteration
-        # Work ~1 second, Sleep 60 seconds
+        # Calculate the total time elapsed since the loop finished its 
+        # work/sleep in the prior iteration. Given the low latency, the work 
+        # duration is typically less than 0.3 seconds, allowing the system to 
+        # sleep for the remaining time (~59 seconds).
         elapsed_since_last_cycle = current_time - last_cycle_end
 
         if elapsed_since_last_cycle > threshold:
             logger.critical(
-                f"SYSTEM WAKEUP ANOMALY detected: Total elapsed time " 
-                f"({elapsed_since_last_cycle:.1f}s) exceeded threshold ({threshold:.1f}s)"
+                f"Latency spike detected (nominal={interval}s): "
+                f"elapsed=({elapsed_since_last_cycle:.1f}s) > "
+                f"threshold=({threshold:.1f}s) - forcing service reconnect..."
             )
 
-            # Reconnect services BEFORE running the cycle to clean stale connections
+            # Reconnect services BEFORE each cycle to clear stale connections
             watchdog.gsheets_service.reconnect()
-        
+
         # --- Run the Cycle ---
         try:
             watchdog.run_cycle()
         except Exception as e:
-            logger.exception(f"Unhandled exception during cycle: {e}")
+            logger.exception(f"Unhandled exception during run cycle: {e}")
 
         # --- Manage Timing and State Update ---
         
-        # Calculate the required delay based on the interval and latency (current cycle time)
+        # Calculate the required sleep delay based on the interval and latency 
+        # of the current cycle time
         cycle_duration = time.monotonic() - current_time
         sleep_duration = max(0, interval - cycle_duration)
-        logger.critical(f"Sleep Duration: {sleep_duration}\n")
+
+        #####################
+        #####################
+        # FOR DEBUG INFO ONLY
+        #####################
+        #####################
+        logger.critical(f"Sleep Duration: {sleep_duration:.2f}s\n")
 
         # Update the time marker to the time we finished the current cycle
         last_cycle_end = time.monotonic()
@@ -62,40 +76,6 @@ def main_loop(
         # Sleep for the calculated remaining duration
         time.sleep(sleep_duration)
 
-    
-
-
-    # logger = get_logger("main_loop")
-
-    # if buffer is None:
-    #     buffer = interval * 0.10   # default 10% margin
-
-    # # Compute the threshold for detecting excessive sleep;
-    # # Actual sleep longer than this indicates a possible system anomaly
-    # threshold = interval + buffer
-
-    # while True:
-    #     try:
-    #         watchdog.run_cycle()
-    #     except Exception as e:
-    #         logger.exception(f"Unhandled exception during cycle: {e}")
-
-    #     # Monitor the actual sleep time
-    #     start = time.monotonic()
-    #     time.sleep(interval)
-    #     elapsed = time.monotonic() - start
-
-    #     if elapsed > threshold:
-    #         logger.warning(
-    #             f"Sleep interval anomaly: actual sleep exceeded threshold " 
-    #             f"({elapsed:.3f}s > {threshold:.3f}s)\n\n"
-    #         )
-
-    #         # Reconnect external services that rely on persistent connections/tokens
-    #         # Rebuild the GSheets connection/auth
-    #         watchdog.gsheets_service.reconnect()
-        
-    #     print("\n")
 
 def main():
     """
