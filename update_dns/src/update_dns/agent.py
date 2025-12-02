@@ -152,8 +152,6 @@ class NetworkWatchdog:
                     current_time=None, # Ignore, previously updated
                     dns_last_modified=self.dns_last_modified   # The new value
                 )
-
-            print("\n")
             return True
 
         else:

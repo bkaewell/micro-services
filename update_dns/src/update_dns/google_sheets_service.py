@@ -2,13 +2,10 @@ import os
 import time
 import json
 import gspread
-import requests # For catching ConnectionError
+import requests
 
 from typing import Optional
-from gspread import authorize
 from dotenv import load_dotenv
-from gspread.utils import rowcol_to_a1
-from google.oauth2.service_account import Credentials 
 from google.auth import exceptions as auth_exceptions
 
 from .logger import get_logger
@@ -20,6 +17,10 @@ class GSheetsService:
     Standalone service for Google Sheets access with TTL caching and
     Spreadsheet ID persistence. Designed for easy reuse across microservices
     """
+
+    # Set a robust timeout constant for all external API requests
+    TIMEOUT_SECONDS = 15
+
     def __init__(self):
         """
         Initializes the service with configuration and sets up internal state
@@ -58,59 +59,59 @@ class GSheetsService:
         self.worksheet: Optional[gspread.Worksheet] = None
         self.target_row = None
 
+        self._create_client()
 
-    def get_client(self, force_new: bool = False) -> None:
+
+    def _create_client(self) -> gspread.Client:
         """
-        Ensures the gspread client is authenticated (Singleton pattern)
-        Relies on google-auth for automatic, background token refresh
-
-        Args:
-            force_new: If True (usually triggered by a system anomaly), 
-                       forces the destruction of the existing client
-                       and performs a full (expensive) re-auth
+        Creates and returns a new gspread client configured with credentials.
+        Applies timeout using set_timeout() method.
         """
 
-        # Check 1: If client already exists AND we are not forcing a 
-        # new connection, return immediately
-        if self.client is not None and not force_new:
-            self.logger.info("Using cached gspread client")
-            return # self.client is cached
+        SCOPES = [
+            'https://www.googleapis.com/auth/spreadsheets', 
+            'https://www.googleapis.com/auth/drive',
+        ]
 
-        # Check 2: Client does not exist OR we are focing re-authentication
-        if force_new:
-            self.logger.warning("Forcing client re-authentication due to system anomaly")
-        else:
-            self.logger.info("Client missing; Performing initial, full authentication with Google services")
-
-        # Google Services Authentication logic
         try:
-            # Create credentials object from dictionary
-            creds = Credentials.from_service_account_info(
+            # Create client using the service account credentials
+            client = gspread.service_account_from_dict(
                 self.gsheet_creds,
-                scopes=[
-                    'https://www.googleapis.com/auth/spreadsheets', 
-                    'https://www.googleapis.com/auth/drive',
-                ]
+                SCOPES
             )
-            # Authorize the client with the credentials object
-            self.client = authorize(creds) 
-            self.logger.info("New gspread client initialized")
+
+            client.set_timeout(self.TIMEOUT_SECONDS)
+            self.client = client
+            self.logger.info(f"New gspread client initialized with {self.TIMEOUT_SECONDS}s timeout")
+            return self.client
         
         except Exception as e:
             self.logger.error(f"Failed to authenticate gspread client: {e}")
             raise
 
 
+    def get_client(self) -> gspread.Client:
+        """Returns the existing client or creates a new one"""
+        if self.client is None:
+            return self._create_client()
+        return self.client
+
+
     def get_worksheet(self) -> gspread.Worksheet:
         """Initializes the worksheet object, using cached ID if available"""
         
-        # If the worksheet object is already initialized, return it immediately
+        # If the worksheet object is already initialized, return it immediately (Cache Hit)
         if self.worksheet:
             return self.worksheet
         
-        # Verify client integrity and is ready
-        self.get_client()   # Will NOT force a new client here unless one doesn't exist
-        client = self.client # Use internal client state
+        # # Verify client integrity and is ready
+        # self.get_client()   # Will NOT force a new client here unless one doesn't exist
+        # client = self.client # Use internal client state
+
+        # Get the authenticated client instance. This will either return the
+        # cached client or create a new one with the timeout
+        client = self.get_client() 
+
         
         # Spreadsheet ID caching (minimizes API calls)
         if self.gsheet_id is None:
@@ -127,7 +128,8 @@ class GSheetsService:
                 self.logger.info(f"Resolved and cached Spreadsheet ID: {self.gsheet_id}")
 
         # Get Worksheet using cached ID
-        sh = client.open_by_key(self.gsheet_id)   # Most efficient way to access spreadsheet
+        # Use the client to open the sheet by key (most efficient API method)
+        sh = client.open_by_key(self.gsheet_id)
         self.worksheet = sh.worksheet(self.gsheet_worksheet)
         self.logger.info(f"Accessed worksheet '{self.gsheet_worksheet}' using cached ID")
         
@@ -142,22 +144,33 @@ class GSheetsService:
         """
         self.logger.critical("GSheets Service: Forcing full reconnect after system anomaly!")
 
-        # Force the client to be rebuilt
-        self.get_client(force_new=True)
+        # Explicitly destroy the old client/connection state
+        self.client = None
 
-        # Reset the worksheet state - this ensures the next call to get_worksheet()
-        # will perform a fresh API lookup (open_by_key) using the new client,
-        # which also helps clear connection state
+        # Rebuild the client immediately (with timeout applied)
+        try:
+            self._create_client() # Calls the function that always creates a new client
+        except Exception as e:
+            # If client creation fails (i.e. bad credentials), log and stop
+            # self.logger.error(f"FATAL: Reconnect failed during client creation: {e}")
+            # self.logger.fatal(f"Reconnect failed during client creation: {e}")
+            self.logger.error(f"Reconnect failed during client creation: {e}")            
+            raise # Re-raise this fatal error
+
+        # Reset the worksheet state (Crucial for clearing stale connection pointers)
         self.worksheet = None
 
-
-        # Call get_worksheet() now to preload the fresh worksheet object
+        # Call get_worksheet() to preload and test the new connection chain
         try:
             self.get_worksheet()
             self.logger.critical("GSheets Service: Reconnection successful")
         except Exception as e:
-            self.logger.error(f"Failed to restore worksheet after reconnection: {e}")
-            # Do not raise here; let the next run_cycle handle the failure via its main try/except
+            # If opening the sheet fails (i.e. API is still down), log gracefully
+            self.logger.error(
+                f"Failed to restore worksheet after client reconnection. "
+                f"Will retry on next cycle. Error: {e.__class__.__name__}"
+            )
+            # Do not raise here; let the next run_cycle handle the temp failure
 
 
     def _ensure_target_row(self) -> int:
@@ -255,3 +268,4 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
+
