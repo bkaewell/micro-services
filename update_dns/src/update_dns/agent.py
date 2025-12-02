@@ -49,7 +49,6 @@ class NetworkWatchdog:
         # Outputs 
         self.detected_ip = ""
         self.dns_last_modified = ""
-        self.dns_name = ""
 
 
     def run_cycle(self):
@@ -98,7 +97,6 @@ class NetworkWatchdog:
             # Only update status with current heartbeat info (IP and time)
             # This is the high-frequency, minimum data update
             self.gsheets_service.update_status(
-                dns_name=self.dns_name, 
                 ip_address=self.detected_ip,
                 current_time=current_time,
                 dns_last_modified=None   # Do not update
@@ -120,7 +118,6 @@ class NetworkWatchdog:
                 # Handle Update Data / Success or Skip
                 if update_result:
                     # Cloudflare update was successful
-                    self.dns_name = update_result.get('name')
                     self.dns_last_modified = to_local_time(update_result.get('modified_on'))
 
                     # Persist the newly confirmed IP to local cache for next comparison
@@ -146,23 +143,17 @@ class NetworkWatchdog:
                 return False
 
             # Update Google Sheets
-
-            # self.gsheets_service.append_ip_log(
-            #     ip_address=self.detected_ip, 
-            #     hostname=os.environ.get("HOSTNAME", "local")
-            #)
-            
             if update_occurred:
 
                 # Update status with the DNS modification time
                 # This is the low-frequency, audit-logging update
                 self.gsheets_service.update_status(
-                    dns_name=self.dns_name, 
                     ip_address=None,   # Ignore, previously updated
                     current_time=None, # Ignore, previously updated
                     dns_last_modified=self.dns_last_modified   # The new value
                 )
 
+            print("\n")
             return True
 
         else:
@@ -185,10 +176,6 @@ class NetworkWatchdog:
             # Always return False if the cycle failed (IP detection failed)
             return False
         
-
-        # log_to_sheets(ip=detected_ip,
-        #               internet_ok=internet_ok,
-        #               dns_changed=dns_changed)
 
         # Optional: log metrics to SQLite
         # log_metrics(ip=detected_ip,

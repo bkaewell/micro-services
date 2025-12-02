@@ -7,6 +7,7 @@ import requests # For catching ConnectionError
 from typing import Optional
 from gspread import authorize
 from dotenv import load_dotenv
+from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials 
 from google.auth import exceptions as auth_exceptions
 
@@ -34,12 +35,28 @@ class GSheetsService:
         self.gsheet_name = os.getenv("GOOGLE_SHEET_NAME")
         self.gsheet_worksheet = os.getenv("GOOGLE_WORKSHEET")
         self.gsheet_creds = json.loads(os.getenv("GOOGLE_SHEETS_CREDENTIALS"))
+        self.gsheet_dns = os.getenv("CLOUDFLARE_DNS_NAME")
 
+        # Add checks here to ensure values are not None and raise an error if they are
+        required_vars = [
+            self.gsheet_name, 
+            self.gsheet_worksheet, 
+            self.gsheet_creds,
+            self.gsheet_dns 
+        ]
+
+        if not all(required_vars):
+            raise EnvironmentError(
+                "Missing required Google environment variables in .env file "
+                "(GOOGLE_SHEET_NAME, GOOGLE_WORKSHEET, " \
+                "GOOGLE_SHEETS_CREDENTIALS, CLOUDFLARE_DNS_NAME)"
+            )
 
         # Internal State Management
         self.client: Optional[gspread.Client] = None
         self.gsheet_id: Optional[str] = None
         self.worksheet: Optional[gspread.Worksheet] = None
+        self.target_row = None
 
 
     def get_client(self, force_new: bool = False) -> None:
@@ -143,68 +160,98 @@ class GSheetsService:
             # Do not raise here; let the next run_cycle handle the failure via its main try/except
 
 
-    def append_ip_log(self, ip_address: str, hostname: str):
-        """Public method to append a row to the log sheet"""
+    def _ensure_target_row(self) -> int:
+        """
+        Calculates and stores the target row index (1-based) if not already set.
+        This operation is only performed once per agent lifetime.
+        """
+        if self.target_row is not None:
+            return self.target_row
+
+        ws = self.get_worksheet()
+        dns_name = self.gsheet_dns
         
         try:
-            ws = self.get_worksheet() # Access worksheet (triggers auth/TTL/cache checks)
+            # Search for the DNS name; Returns Cell object or None
+            cell = ws.find(dns_name, in_column=1)
+
+            # --- Found ---
+            if cell:
+                self.target_row = cell.row
+                self.logger.info(f"DNS '{dns_name}' detected at persistent row {self.target_row}.")
+                return self.target_row
+
+            # --- Not Found (cell is None) ---
+            self.logger.info(f"DNS '{dns_name}' not found; appending new row...")
             
-            data_for_log = [
-                ip_address, 
-                hostname, 
-                gspread.utils.ISO_8601_OFFSET 
-            ]
-            ws.append_row(data_for_log, value_input_option='USER_ENTERED')
-            self.logger.info(f"Appended IP '{ip_address}' to main log.")
+            # Append the new row data.
+            ws.append_row([dns_name, None, None, None])
             
-        except requests.exceptions.ConnectionError:
-            self.logger.error("Gracefully skipping GSheets upload: Connection aborted; Will retry next cycle")
-        except Exception as e:
-            self.logger.error(f"Fatal error during GSheets write: {e.__class__.__name__}: {e}; Check configuration/scopes")
+            # Rerun the search *without* a range limit to find the new cell.
+            self.logger.warning("Rerunning search to find newly appended row.")
+            new_cell = ws.find(dns_name, in_column=1) 
+            
+            if new_cell:
+                self.target_row = new_cell.row
+                self.logger.info(f"DNS '{dns_name}' successfully appended at row {self.target_row}.")
+                return self.target_row
+            
+            # Critical fallback if second find fails
+            self.logger.error("Failed to find appended DNS row. Cannot update sheet.")
+            raise Exception("Failed to establish sheet row for DNS key.")
+
+        except gspread.exceptions.GSpreadException as e:
+            self.logger.error(f"Critical GSpread error during row establishment: {e.__class__.__name__}")
             raise
 
 
     def update_status(
             self, 
-            dns_name: str,
             ip_address: str,
             current_time: time,
             dns_last_modified: str
-    ):
-        """Public method to perform the test write to A5:D5"""
-        
-        try:
-            ws = self.get_worksheet() # Access worksheet
-            test_data = [[dns_name, ip_address, current_time, dns_last_modified]]
+        ):
+            """
+            Uses the persistently stored target_row to efficiently perform partial updates.
+            """
+            try:
+                # Verify the target row is found/established (only runs heavy logic once)
+                target_row = self._ensure_target_row()
+                ws = self.get_worksheet()
+                
+                updates = []
+                
+                # Update Column B (IP), Column C (Last Updated Time), and Column A (DNS Name)
+                if ip_address is not None:
+                    updates.append(gspread.Cell(target_row, 1, self.gsheet_dns)) # A: DNS
+                    updates.append(gspread.Cell(target_row, 2, ip_address))      # B: IP
+                    updates.append(gspread.Cell(target_row, 3, current_time))    # C: Last Updated
+                    
+                # Update Column D (Last Modified) - Only updated on actual IP change
+                if dns_last_modified is not None:
+                    updates.append(gspread.Cell(target_row, 4, dns_last_modified)) # D: Last Modified
+                
+                if updates:
+                    ws.update_cells(updates, value_input_option='USER_ENTERED')
+                    self.logger.info(f"Updated persistent row {target_row} for {self.gsheet_dns}")
+
+            # --- EXCEPTION HANDLING ---
+            # Catch network failures and Google API/authorization errors (high-level)
+            except(
+                requests.RequestException,   # Network and HTTP/API
+                gspread.exceptions.APIError, # Google Sheets
+                auth_exceptions.RefreshError # OAuth Access Token Renewal
+            ) as e:
+                self.logger.error(
+                    f"Gracefully skipping GSheets status update: " 
+                    f"Connection aborted or API/Auth issue; "
+                    f"Will retry next cycle ({e.__class__.__name__}: {e})"
+                )
             
-            # Perform updates
-            if ip_address is not None:
-                ws.update('A5:C5', test_data, value_input_option='USER_ENTERED')
-                self.logger.info(f"Test write to A5:C5 complete; Time: {current_time}")
-
-            if dns_last_modified is not None:
-                ws.update('A6:D6', test_data, value_input_option='USER_ENTERED')
-                self.logger.info(f"Test write to A5:D5 complete; Time: {current_time}")
-
-        # Catch network failures and Google API/authorization errors (high-level)
-        except(
-            # Network and HTTP/API failures (i.e. Timeout, Connection Reset, 4xx/5xx responses)
-            requests.RequestException,
-            # Google Sheets specific errors (i.e. Permission Denied, Invalid Range)          
-            gspread.exceptions.APIError,
-            # Failure to renew OAuth access token
-            auth_exceptions.RefreshError
-        ) as e:
-            self.logger.error(
-                f"Gracefully skipping GSheets status update: " 
-                f"Connection aborted or API/Auth issue; "
-                f"Will retry next cycle ({e.__class__.__name__}: {e})"
-            )
-
-        # The crucial safety net for truly unexpected system failures
-        except Exception as e:
-            self.logger.error(
-                f"Fatal error during GSheets status write: "
-                f"{e.__class__.__name__}: {e}"
-            )
-            raise # Re-raise to crash the process and ensure the scheduler sees the failure
+            # The crucial safety net for truly unexpected system failures
+            except Exception as e:
+                self.logger.error(
+                    f"Fatal error during GSheets status write: "
+                    f"{e.__class__.__name__}: {e}"
+                )
+                raise # Re-raise to crash the process and ensure the scheduler sees the failure
