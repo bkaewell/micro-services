@@ -5,7 +5,7 @@ import responses
 from datetime import datetime, timezone
 
 from update_dns.logger import setup_logging, get_logger
-from update_dns.utils import is_valid_ip, get_public_ip, to_local_time
+from update_dns.utils import is_valid_ip, get_ip, to_local_time
 
 
 # ========
@@ -43,33 +43,33 @@ def test_is_valid_ip(ip, expected_result):
     assert expected_result is result
 
 
-# =======================================================
-# TEST GROUP: Public IP Fetch (Fallback / Sequence Logic)
-# =======================================================
-# Function: get_public_ip()
+# =========================================================
+# TEST GROUP: External IP Fetch (Fallback / Sequence Logic)
+# =========================================================
+# Function: get_ip()
 # -------------------------
 @responses.activate
-def test_get_public_ip_success():
+def test_get_ip_success():
     """Primary API service returns valid IP"""
     responses.add(responses.GET, "https://api.ipify.org", body="8.8.8.8", status=200)
     
-    assert get_public_ip() == "8.8.8.8"
+    assert get_ip() == "8.8.8.8"
 
 @responses.activate
-def test_get_public_ip_fallback_success():
+def test_get_ip_fallback_success():
     """Primary API fails; secondary API returns valid IP"""
     responses.add(responses.GET, "https://api.ipify.org", body="x", status=408)
     responses.add(responses.GET, "https://ifconfig.me/ip", body="8.8.8.8", status=200)
     
-    assert get_public_ip() == "8.8.8.8"
+    assert get_ip() == "8.8.8.8"
 
 @responses.activate
-def test_get_public_ip_all_fail():
+def test_get_ip_all_fail():
     """All API services fail → return None"""
     for url in ["https://api.ipify.org", "https://ifconfig.me/ip"]:
         responses.add(responses.GET, url, body="x", status=408)
     
-    assert get_public_ip() is None
+    assert get_ip() is None
 
 
 # ================================

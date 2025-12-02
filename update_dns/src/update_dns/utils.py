@@ -29,12 +29,12 @@ def is_valid_ip(ip: str) -> bool:
         return False
 
 
-def get_public_ip() -> str | None:
+def get_ip() -> str | None:
     """
-    Fetch the public IP address (IPv4)
+    Fetch the external IP address
 
     Returns: 
-        Public IP address as a string or None if no service succeeds     
+        External IP address as a string or None if no service succeeds     
     """
 
     # API endpoints (redundant, outputs plain text, ranked by reliability)
@@ -52,8 +52,7 @@ def get_public_ip() -> str | None:
             if response.status_code == 200:
                 ip = response.text.strip()
                 if is_valid_ip(ip):
-                    #logger.debug(f"Public IP detected via {service}: {ip}")
-                    logger.info(f"Public IP detected | API service: {service}")
+                    logger.debug(f"🌐 External IP acquired ({service})")
                     return ip
         except requests.RequestException:
             logger.warning(f"Failed to retrieve IP from {service}, proceeding to next service...")

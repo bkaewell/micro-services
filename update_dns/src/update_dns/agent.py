@@ -1,10 +1,8 @@
-import time
-
 from datetime import datetime, timezone
 
 from .config import Config
 from .logger import get_logger
-from .utils import get_public_ip, to_local_time
+from .utils import get_ip, to_local_time
 from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
 from .google_sheets_service import GSheetsService 
@@ -18,15 +16,15 @@ class NetworkWatchdog:
     Manages a dynamic DNS update cycle with self-healing capabilities
 
     The primary goal is to maintain the local DNS record (in Cloudflare) 
-    in sync with the current public IP address    
+    in sync with the current IP address    
 
     The main loop (run_cycle) executes the following sequence:
-    1. Check network health by attempting to detect the current public IP
+    1. Check network health by attempting to detect the current IP
     2. If successful, delegate DNS synchronization
        (IP comparison/update/caching) to the Cloudflare client
     3. Log the cycle status (including the DNS record's last modified timestamp) 
        to the Google Sheet service
-    4. If public IP detection fails, track consecutive failures
+    4. If IP detection fails, track consecutive failures
     5. If consecutive failures exceed a defined threshold, trigger the self-healing 
        process to power-cycle the smart plug (if the watchdog flag is enabled)
     """
@@ -56,7 +54,7 @@ class NetworkWatchdog:
         Executes the full monitoring and update logic sequence.
 
         The method handles three distinct phases:
-        1. Phase 1 (Health Check): Attempts to retrieve the public IP. If successful, 
+        1. Phase 1 (Health Check): Attempts to retrieve the external IP. If successful, 
            resets the failure counter
         2. Phase 2 (Core Task): Calls `cloudflare_client.sync_dns()` to update the 
            DNS record only if the IP has changed. On success, the local IP cache 
@@ -66,28 +64,30 @@ class NetworkWatchdog:
            it attempts to self-heal by resetting the smart plug
 
         Returns:
-            bool: True if the public IP detection was successful and the cycle completed 
+            bool: True if the IP detection was successful and the cycle completed 
                   without critical error (DNS sync may still have soft failed)
                   False if the network check failed or a critical sync error occurred
         """
 
-        self.logger.info("💚 Heartbeat alive...")
+        self.logger.info("💚 Heartbeat OK")
         
         # --- Phase 1: Network Health Check ---
 
         # The primary goal is to rely solely on the result of 
-        # get_public_ip() to determine the overall network health
+        # get_ip() to determine the overall network health
 
         # Source of truth for connectivity
 
         # One full HTTPS request, if successful, the entire network stack 
         # (DNS resolution, routing, and application layer protocols) is functional
 
-        self.detected_ip = get_public_ip()
-        #self.detected_ip = "192.168.1.1"   # For testing only
+        #self.detected_ip = get_ip()
+        self.detected_ip = "192.168.1.1"   # For testing only
 
         if self.detected_ip:
-            self.logger.info(f"Internet OK | IP: {self.detected_ip}") 
+            #self.logger.info(f"Internet OK | IP: {self.detected_ip}") 
+            self.logger.info("🌐 IP OK")
+
             self.failed_ping_count = 0
 
             # Capture current time for the heartbeat log

@@ -45,7 +45,7 @@ def _write_json_file(file_path: pathlib.Path, data: Dict[str, Any]):
         pass
 
 def get_cloudflare_ip() -> str:
-    """Reads the last known public IP from the Cloudflare cache file"""
+    """Reads the last known IP from the Cloudflare cache file"""
     data = _read_json_file(CLOUDFLARE_IP_FILE)
     return data.get("last_ip", "")
 
