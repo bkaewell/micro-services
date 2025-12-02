@@ -94,4 +94,4 @@ def to_local_time(iso_str: str = None) -> str:
         logger.warning(f"Failed to convert time '{iso_str}', using now(): {e}")
         dt = datetime.now(tz)
 
-    return dt.strftime("%Y-%m-%d\n%H:%M:%S %Z %z")
+    return dt.strftime("%m/%d/%y @ %H:%M:%S %Z")
