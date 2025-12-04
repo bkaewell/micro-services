@@ -345,3 +345,65 @@ The Cloudflare API design necessitates a two-step process to update a DNS record
 | **`list_url`** | `GET` | Zone ID + Query Parameters (`name`, `type`) | **Find** the record and get its unique **ID**. |
 | **`update_url`** | `PUT`/`PATCH` | Zone ID + **Record ID** | **Modify** the specific record. |
 
+Lessons Learned:
+- A robust agent must enforce short, non-negotiable timeouts on all external I/O operations (API calls). This prevents cascading failures and indefinite hangs (Never rely on the default timeout of an HTTP client library)
+- .reconnect(force_new=True)
+
+
+
+
+
+# ⚙️ Scheduling Philosophy and Anomaly Detection
+
+This service is designed to perform its core task—checking the public IP and updating the heartbeat status—at a precise, fixed interval (currently **60 seconds**). Maintaining this tight schedule is crucial for reliable external monitoring.
+
+To achieve stability and predictability, we iterated through two common scheduler philosophies before settling on the current design.
+
+---
+
+## Phase 1: Exploring "Philosophy 2: Constant Sleep" (Latency Focus)
+Our initial approach focused on minimizing latency within the cycle's `work` phase (`run_cycle`). This philosophy maintains a constant sleep duration and lets the schedule slip if the work takes too long.
+
+### Metrics
+
+| Metric          | Calculation                     | Purpose                       |
+|-----------------|---------------------------------|-------------------------------|
+| Work Duration   | `time.monotonic() - start_time` | Measures API/network latency. |
+| Sleep Duration  | `interval` (always 60s)         | Fixed sleep duration.         |
+
+### Trade-Off
+**Pro:** Clearly exposes upstream latency issues. For example, if the Google Sheets API takes 6 seconds, the total cycle becomes **66 seconds**, making latency obvious via schedule drift.
+
+**Con (Deciding Factor):** Causes **schedule drift**. If network operations are slow, the agent falls further behind with every cycle (e.g., updates at 0s → 66s → 132s → ...). This violates the requirement for consistent throughput.
+
+---
+
+## Final Design: "Philosophy 1: Variable Sleep" (Throughput Focus)
+We chose a scheduler that prioritizes constant cycle throughput so the IP check and heartbeat validation occur reliably once per minute—even if network latency fluctuates.
+
+This approach uses a **variable sleep duration** to compensate for network operation time.
+
+### Metrics
+
+| Metric          | Calculation                           | Purpose                       |
+|-----------------|-----------------------------------------|-------------------------------|
+| Cycle Duration  | `time.monotonic() - start_time`         | Measures total cycle work.    |
+| Sleep Duration  | `max(0, interval - cycle_duration)`     | Adjusts to hit 60-second mark |
+
+### Benefits
+- **Guaranteed Heartbeat:** If work takes 6 seconds, sleep becomes 54 seconds, starting the next cycle at exactly 60 seconds.
+- **External Reliability:** Heartbeats in Google Sheets remain consistently ~60 seconds apart.
+
+---
+
+## Anomaly Detection
+To avoid masking true system issues (like suspension/wake), a threshold check is used before starting each cycle.
+
+The threshold is:
+```
+interval (60s) + buffer (6s) = 66s
+```
+If the time elapsed since the last cycle exceeds **66 seconds**, the system triggers a **SYSTEM WAKEUP ANOMALY**.
+
+This forces a `reconnect()` on the Google Sheets client to clean up stale TCP sessions, ensuring reliability after suspension.
+```
