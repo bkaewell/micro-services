@@ -47,6 +47,7 @@ class NetworkWatchdog:
         # Outputs 
         self.detected_ip = ""
         self.dns_last_modified = ""
+        self.count = 0
 
 
     def run_cycle(self):
@@ -69,7 +70,16 @@ class NetworkWatchdog:
                   False if the network check failed or a critical sync error occurred
         """
 
-        self.logger.info("💚 Heartbeat OK")
+        # Capture current local time for the heartbeat log
+        current_time_utc = datetime.now(timezone.utc).isoformat()
+        current_time_str = to_local_time(current_time_utc)
+
+        # Parse it back to a datetime (ignore the timezone label)
+        current_time = datetime.strptime(current_time_str, "%m/%d/%y @ %H:%M:%S %Z")
+
+        heartbeat_date = current_time.strftime("%a %b %d %Y")  # Tue Dec 03 2025
+
+        self.logger.info(f"💚 Heartbeat OK ... {heartbeat_date}")
         
         # --- Phase 1: Network Health Check ---
 
@@ -81,28 +91,27 @@ class NetworkWatchdog:
         # One full HTTPS request, if successful, the entire network stack 
         # (DNS resolution, routing, and application layer protocols) is functional
 
-        #self.detected_ip = get_ip()
-        self.detected_ip = "192.168.1.1"   # For testing only
+        self.detected_ip = get_ip()
 
         if self.detected_ip:
-            #self.logger.info(f"Internet OK | IP: {self.detected_ip}") 
             self.logger.info("🌐 IP OK")
-
             self.failed_ping_count = 0
 
             # Capture current time for the heartbeat log
-            current_time_utc = datetime.now(timezone.utc).isoformat()
-            current_time = to_local_time(current_time_utc)
+            #current_time_utc = datetime.now(timezone.utc).isoformat()
+            #current_time = to_local_time(current_time_utc)
 
             # Only update status with current heartbeat info (IP and time)
             # This is the high-frequency, minimum data update
             self.gsheets_service.update_status(
                 ip_address=self.detected_ip,
-                current_time=current_time,
+                current_time=current_time_str,
                 dns_last_modified=None   # Do not update
             )
-
-            update_occurred = False   # Flag to track if the DNS was updated
+            self.logger.info(
+                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | ip={self.detected_ip} "
+                f"| time={current_time}"
+            )
 
             # --- Phase 2: Core Task (DNS update and status log) ---
             try:
@@ -119,39 +128,36 @@ class NetworkWatchdog:
                 if update_result:
                     # Cloudflare update was successful
                     self.dns_last_modified = to_local_time(update_result.get('modified_on'))
+                    self.logger.info(f"🐾 🌤️  Cloudflare DNS updated | {cached_ip} → {self.detected_ip}")
 
-                    # Persist the newly confirmed IP to local cache for next comparison
+                    # Update status with the DNS modification time
+                    # This is the low-frequency, audit-logging update
+                    self.gsheets_service.update_status(
+                        ip_address=None,   # Ignore, previously updated
+                        current_time=None, # Ignore, previously updated
+                        dns_last_modified=self.dns_last_modified   # The new value
+                    )
+                    self.logger.info(
+                        f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | "
+                        f"last_modified={self.dns_last_modified}"
+                    )
+
+                    # Update local cache file with new IP
                     update_cloudflare_ip(self.detected_ip)
-                    self.logger.info(f"Cache UPDATED: {cached_ip} → {get_cloudflare_ip()}")
-                    self.logger.info("DNS synchronization completed successfully")
-
-                    update_occurred = True   # Set flag
 
                 elif update_result is None: 
-                    # Update skipped (IP matched)
-                    self.logger.info("DNS sync skipped (IP unchanged)")
-                    # When skipped, the last_modified time is not guaranteed to be current, 
-                    # but we proceed with logging the current system status
+                    # DNS No-op
+                    self.logger.info("🐾 🌤️  Cloudflare DNS OK")
 
             except (RuntimeError, ValueError) as e:
                 # Catch API/logic failures raised by CloudflareClient
-                self.logger.error(f"DNS sync failed: {e}")
+                self.logger.error(f"Cloudflare DNS sync failed: {e}")
                 return False
             except Exception as e:
                 # Last-resort safeguard
-                self.logger.exception(f"🔥 Unexpected fatal failure during DNS sync: {e}")
+                self.logger.exception(f"Unexpected fatal failure during Cloudflare DNS sync: {e}")
                 return False
 
-            # Update Google Sheets
-            if update_occurred:
-
-                # Update status with the DNS modification time
-                # This is the low-frequency, audit-logging update
-                self.gsheets_service.update_status(
-                    ip_address=None,   # Ignore, previously updated
-                    current_time=None, # Ignore, previously updated
-                    dns_last_modified=self.dns_last_modified   # The new value
-                )
             return True
 
         else:

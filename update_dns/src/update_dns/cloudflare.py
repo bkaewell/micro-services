@@ -93,15 +93,14 @@ class CloudflareClient:
 
     def get_dns_record_info(self) -> dict:
         """
-        Fetches the current Cloudflare DNS record info (ID, IP, modified_on)
+        Fetch the live Cloudflare DNS record (ID, IP, modified_on)
         
         Raises:
-            RuntimeError: If the API request fails or no record is found
+            RuntimeError: If the Cloudflare API request fails or returns no records
         """
         is_collection = True
         list_url = self._build_resource_url(is_collection)
-        #self.logger.debug(f"Fetching record details from: {list_url}")
-        self.logger.info(f"Fetching record details from: {list_url}")
+        self.logger.debug(f"Initiating record pull → {list_url}")
         
         try:
             resp = requests.get(list_url, headers=self.headers, timeout=5)
@@ -110,9 +109,9 @@ class CloudflareClient:
             raise RuntimeError(f"API GET request failed for {self.dns_name}: {e}")
 
         get_resp_data = resp.json()
-        self.logger.debug(f"GETTT JSON response:\n{json.dumps(get_resp_data, indent=2)}")
+        self.logger.debug(f"Live JSON received:\n{json.dumps(get_resp_data, indent=2)}")
         
-        # The 'result' field contains a list of matching records
+        # Extract results (collection/list format)
         records_list = get_resp_data.get("result") or []
         
         if not records_list:
@@ -174,18 +173,17 @@ class CloudflareClient:
         
         # Local cache check (rate limiting / early exit, fast filter)
         if cached_ip == detected_ip:
-            self.logger.info("IP unchanged, skipping DNS update...")
+            self.logger.debug("🐾 🌤️  DNS OK | IP unchanged")
             return None 
 
-        self.logger.info(f"IP changed: Cached={cached_ip} | Detected={detected_ip}. Initiating DNS update...")
+        self.logger.debug(f"IP change detected | {cached_ip} → {detected_ip} | Updating DNS...")
 
         # Live Cloudflare GET (integrity check)
         try:
             live_dns_record = self.get_dns_record_info()
             live_dns_id = live_dns_record.get("id")
             live_dns_ip = live_dns_record.get("content")   # Live IP from Cloudflare
-            #self.logger.debug(f"Current Cloudflare record: ID={live_dns_id}, IP={live_dns_ip}")
-            self.logger.info(f"Current GET Cloudflare record: ID={live_dns_id}, IP={live_dns_ip}")
+            self.logger.debug(f"Cloudflare record | id={live_dns_id} | ip={live_dns_ip}")
 
         except RuntimeError as e:
             raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
@@ -195,11 +193,11 @@ class CloudflareClient:
         if live_dns_ip == detected_ip:
 
             # Cache was stale, but Cloudflare was already correct
-            self.logger.warning("Cache was stale and fixing it; Cloudflare record already matches detected IP")
+            self.logger.warning("Stale cache corrected | Cloudflare already on latest IP")
             
             # Update cache
             update_cloudflare_ip(detected_ip)
-            self.logger.info(f"Cache UPDATED: {cached_ip} → {get_cloudflare_ip()}")
+            self.logger.info(f"Cache updated | {cached_ip} → {get_cloudflare_ip()}")
 
             # Cloudflare processes the request as a no-op (no actual change is 
             # made to the database)
@@ -217,11 +215,11 @@ class CloudflareClient:
 
         # Success and cleanup
         if new_dns_record:
-            self.logger.info(f"DNS UPDATED: '{self.dns_name}': {live_dns_ip} → {detected_ip}")
+            self.logger.info(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
             # Return the full updated DNS record info      
             return new_dns_record 
 
-        return {} # Should not be reached in a normal flow
+        return {} # Should never occur under normal flow
 
 # For reference:
 
@@ -232,7 +230,7 @@ class CloudflareClient:
 #       "id": "******",
 #       "name": "vpn.",
 #       "type": "A",
-#       "content": "100.34.48.69",
+#       "content": "101.34.48.69",
 #       "proxiable": true,
 #       "proxied": false,
 #       "ttl": 60,
