@@ -46,8 +46,32 @@ class CloudflareClient:
             "Content-Type": "application/json",
         }
         self.record_type = "A"   # Fixed type
-        self.ttl = 60            # Time-to-Live
+
+        #ttl: TTL
+        #(default: 1)
+        #Time To Live (TTL) of the DNS record in seconds. Setting to 1 means 'automatic'. 
+        #Value must be between 60 and 86400, with the minimum reduced to 30 for Enterprise zones.
+        self.ttl = 1            # Time-to-Live
+        #self.ttl = 60            # Time-to-Live
         self.proxied = False     # Grey cloud icon (not proxied thru Cloudflare)
+
+
+    def doh_lookup(self):
+        url = "https://cloudflare-dns.com/dns-query"
+        params = {"name": self.dns_name, "type": "A"}
+        headers = {"Accept": "application/dns-json"}
+
+        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+
+        answers = data.get("Answer", [])
+        if not answers:
+            return None
+
+        # Get first A-record
+        return answers[0].get("data")
+
 
     # Private helper for URL construction
     def _build_resource_url(
