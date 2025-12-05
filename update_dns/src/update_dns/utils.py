@@ -4,6 +4,7 @@ import requests
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Any, Optional, Dict
 
 from .logger import get_logger
 
@@ -60,6 +61,55 @@ def get_ip() -> str | None:
     
     # No service returned a valid IP
     return None
+
+
+def doh_lookup(hostname : str) -> Optional[str]:
+    """
+    Performs a DNS-over-HTTPS (DoH) lookup for a given hostname using 
+    Cloudflare's 1.1.1.1 service.
+
+    Validates public DNS IP post-update via non-cached verification layer.
+
+    Args:
+        hostname: The Fully Qualified Domain Name (FQDN) to query 
+        (e.g., 'vpn.test.io').
+
+    Returns:
+        The resolved A-record IP address (str) or None if the lookup fails.
+    """
+    url = "https://cloudflare-dns.com/dns-query"
+    params = {"name": hostname, "type": "A"}
+    headers = {"Accept": "application/dns-json"}
+    timeout = 5 # seconds
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+
+        data: Dict[str, Any] = resp.json()
+
+        answers = data.get("Answer", [])
+        if not answers:
+            logger.warning(
+                f"DoH query succeeded for {hostname}, but no A-record was returned"
+            )
+            return None
+
+        # Get the 'data' field (IP address) from the first A-record
+        ip = answers[0].get("data")
+        logger.debug(f"DoH resolved IP for {hostname}: {ip}")
+        return ip 
+
+    except requests.exceptions.Timeout:
+        logger.error(f"DoH lookup timed out after {timeout}s for {hostname}")
+        return None
+    except requests.exceptions.RequestException as e:
+        # Catches ConnectionError, HTTPError, TooManyRedirects, etc.
+        logger.error(f"DoH request failed for {hostname}: {type(e).__name__} - {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during DoH lookup for {hostname}")
+        return None
 
 
 def to_local_time(iso_str: str = None) -> str:

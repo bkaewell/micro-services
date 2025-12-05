@@ -56,23 +56,6 @@ class CloudflareClient:
         self.proxied = False     # Grey cloud icon (not proxied thru Cloudflare)
 
 
-    def doh_lookup(self):
-        url = "https://cloudflare-dns.com/dns-query"
-        params = {"name": self.dns_name, "type": "A"}
-        headers = {"Accept": "application/dns-json"}
-
-        resp = requests.get(url, params=params, headers=headers, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-
-        answers = data.get("Answer", [])
-        if not answers:
-            return None
-
-        # Get first A-record
-        return answers[0].get("data")
-
-
     # Private helper for URL construction
     def _build_resource_url(
         self,
