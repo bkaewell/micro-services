@@ -25,6 +25,7 @@ class CloudflareClient:
         self.api_token = os.getenv("CLOUDFLARE_API_TOKEN")
         self.zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
         self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
+        self.dns_record_id = os.getenv("CLOUDFLARE_DNS_RECORD_ID")
 
         # Add checks here to ensure values are not None and raise an error if they are
         required_vars = [
@@ -128,7 +129,7 @@ class CloudflareClient:
         return records_list[0]
 
 
-    def update_dns_record(self, record_id: str, new_ip: str) -> dict:
+    def update_dns_record(self, new_ip: str) -> dict:
         """
         Executes the PUT request to update the DNS record
         
@@ -137,8 +138,18 @@ class CloudflareClient:
         Raises:
             RuntimeError: If the API PUT request fails
         """
-        is_collection = False
-        update_url = self._build_resource_url(is_collection, record_id)
+
+
+        # is_collection = False
+        # update_url = self._build_resource_url(is_collection, record_id)
+
+
+        # Common Base Path for all DNS record operations within the zone
+        base_path = (
+            f"{self.api_base_url}/zones/"
+            f"{self.zone_id}/dns_records"
+        )
+        update_url = base_path + f"/{self.dns_record_id}"
 
         payload = {
             "type": self.record_type,
@@ -152,7 +163,7 @@ class CloudflareClient:
             resp = requests.put(update_url, headers=self.headers, json=payload, timeout=5)
             resp.raise_for_status()
         except requests.RequestException as e:
-            raise RuntimeError(f"API PUT failed for record {record_id}: {e}")
+            raise RuntimeError(f"API PUT failed for record {self.dns_record_id}: {e}")
 
         # Efficiency: Extract the new record from the PUT response body
         put_resp_data = resp.json()
@@ -167,7 +178,7 @@ class CloudflareClient:
 
 
     # --- Orchestrator Method (Control Flow) ---
-    def sync_dns(self, cached_ip: str, detected_ip: str) -> dict | None:
+    def sync_dns(self, detected_ip: str) -> dict | None:
         """
         Orchestrates the DNS synchronization
         
@@ -177,56 +188,78 @@ class CloudflareClient:
         Raises:
             RuntimeError: If any Cloudflare API operation fails
         """
-        
-        # Local cache check (rate limiting / early exit, fast filter)
-        if cached_ip == detected_ip:
-            self.logger.debug("🐾 🌤️  DNS OK | IP unchanged")
-            return None 
 
-        self.logger.debug(f"IP change detected | {cached_ip} → {detected_ip} | Updating DNS...")
-
-        # Live Cloudflare GET (integrity check)
+        # PUT update, Just use one single API call per update cycle
         try:
-            live_dns_record = self.get_dns_record_info()
-            live_dns_id = live_dns_record.get("id")
-            live_dns_ip = live_dns_record.get("content")   # Live IP from Cloudflare
-            self.logger.debug(f"Cloudflare record | id={live_dns_id} | ip={live_dns_ip}")
-
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
-
-
-        # Integrity check and final decision
-        if live_dns_ip == detected_ip:
-
-            # Cache was stale, but Cloudflare was already correct
-            self.logger.warning("Stale cache corrected | Cloudflare already on latest IP")
-            
-            # Update cache
-            update_cloudflare_ip(detected_ip)
-            self.logger.info(f"Cache updated | {cached_ip} → {get_cloudflare_ip()}")
-
-            # Cloudflare processes the request as a no-op (no actual change is 
-            # made to the database)
-            return None
-        
-        # PUT update (only if detected IP is different than live Cloudflare IP)
-        try:
-            new_dns_record = self.update_dns_record(
-                record_id=live_dns_id, 
-                new_ip=detected_ip
-            )
-            
+            new_dns_record = self.update_dns_record(detected_ip)
         except RuntimeError as e:
             raise RuntimeError(f"Failed to update DNS record: {e}")
 
         # Success and cleanup
         if new_dns_record:
-            self.logger.info(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
+            #self.logger.debug(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
             # Return the full updated DNS record info      
             return new_dns_record 
 
         return {} # Should never occur under normal flow
+
+
+
+
+
+
+
+
+
+        # # Local cache check (rate limiting / early exit, fast filter)
+        # if cached_ip == detected_ip:
+        #     self.logger.debug("🐾 🌤️  DNS OK | IP unchanged")
+        #     return None 
+
+        # self.logger.debug(f"IP change detected | {cached_ip} → {detected_ip} | Updating DNS...")
+
+        # # Live Cloudflare GET (integrity check)
+        # try:
+        #     live_dns_record = self.get_dns_record_info()
+        #     live_dns_id = live_dns_record.get("id")
+        #     live_dns_ip = live_dns_record.get("content")   # Live IP from Cloudflare
+        #     self.logger.debug(f"Cloudflare record | id={live_dns_id} | ip={live_dns_ip}")
+
+        # except RuntimeError as e:
+        #     raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
+
+
+        # # Integrity check and final decision
+        # if live_dns_ip == detected_ip:
+
+        #     # Cache was stale, but Cloudflare was already correct
+        #     self.logger.warning("Stale cache corrected | Cloudflare already on latest IP")
+            
+        #     # Update cache
+        #     update_cloudflare_ip(detected_ip)
+        #     self.logger.info(f"Cache updated | {cached_ip} → {get_cloudflare_ip()}")
+
+        #     # Cloudflare processes the request as a no-op (no actual change is 
+        #     # made to the database)
+        #     return None
+        
+        # # PUT update (only if detected IP is different than live Cloudflare IP)
+        # try:
+        #     new_dns_record = self.update_dns_record(
+        #         record_id=live_dns_id, 
+        #         new_ip=detected_ip
+        #     )
+            
+        # except RuntimeError as e:
+        #     raise RuntimeError(f"Failed to update DNS record: {e}")
+
+        # # Success and cleanup
+        # if new_dns_record:
+        #     self.logger.info(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
+        #     # Return the full updated DNS record info      
+        #     return new_dns_record 
+
+        # return {} # Should never occur under normal flow
 
 # For reference:
 
