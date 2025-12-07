@@ -6,7 +6,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Optional, Dict
 
+from .config import Config
 from .logger import get_logger
+
 
 # Define the logger once for the entire module
 logger = get_logger("utils")
@@ -14,13 +16,13 @@ logger = get_logger("utils")
 
 def is_valid_ip(ip: str) -> bool:
     """
-    Validate an IP address using socket
+    Validate an IP address using socket.
 
     Args:
-        ip: IP address string to validate   
+        ip: IP address string to validate.   
 
     Returns: 
-        True if the IP address is valid, False otherwise
+        True if the IP address is valid, False otherwise.
     """
 
     try:
@@ -32,10 +34,10 @@ def is_valid_ip(ip: str) -> bool:
 
 def get_ip() -> str | None:
     """
-    Fetch the external IP address
+    Fetch the external IP address.
 
     Returns: 
-        External IP address as a string or None if no service succeeds     
+        External IP address as a string or None if no service succeeds.  
     """
 
     # API endpoints (redundant, outputs plain text, ranked by reliability)
@@ -49,7 +51,7 @@ def get_ip() -> str | None:
     # Try API endpoints in order until one succeeds
     for service in ip_services:
         try:
-            response = requests.get(service, timeout=5)
+            response = requests.get(service, timeout=Config.API_TIMEOUT)
             if response.status_code == 200:
                 ip = response.text.strip()
                 if is_valid_ip(ip):
@@ -80,10 +82,9 @@ def doh_lookup(hostname : str) -> Optional[str]:
     url = "https://cloudflare-dns.com/dns-query"
     params = {"name": hostname, "type": "A"}
     headers = {"Accept": "application/dns-json"}
-    timeout = 5 # seconds
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+        resp = requests.get(url, params=params, headers=headers, timeout=Config.API_TIMEOUT)
         resp.raise_for_status()
 
         data: Dict[str, Any] = resp.json()
@@ -101,7 +102,7 @@ def doh_lookup(hostname : str) -> Optional[str]:
         return ip 
 
     except requests.exceptions.Timeout:
-        logger.error(f"DoH lookup timed out after {timeout}s for {hostname}")
+        logger.error(f"DoH lookup timed out after {Config.API_TIMEOUT}s for {hostname}")
         return None
     except requests.exceptions.RequestException as e:
         # Catches ConnectionError, HTTPError, TooManyRedirects, etc.
@@ -114,14 +115,15 @@ def doh_lookup(hostname : str) -> Optional[str]:
 
 def to_local_time(iso_str: str = None) -> str:
     """
-    Convert an ISO8601 string or return the current datetime in the timezone from TZ env var (default UTC),
-    formatted as 'YYYY-MM-DD\\nHH:MM:SS TZ ±HHMM'
+    Convert an ISO8601 string or return the current datetime in the timezone 
+    from TZ env var (default UTC), formatted as 'YYYY-MM-DD\\nHH:MM:SS TZ'.
     
     Args:
-        iso_str (str, optional): ISO8601 string to convert (i.e. '2025-09-05T02:33:15.640385Z')
+        iso_str (str, optional): ISO8601 string to convert 
+        (i.e. '2025-09-05T02:33:15.640385Z').
     
     Returns:
-        str: Formatted datetime string
+        str: Formatted datetime string.
     """
 
     tz_name = os.getenv("TZ", "UTC")
@@ -144,3 +146,35 @@ def to_local_time(iso_str: str = None) -> str:
         dt = datetime.now(tz)
 
     return dt.strftime("%m/%d/%y @ %H:%M:%S %Z")
+
+
+def get_local_time(iso_utc_str: str = None):
+    """
+    Returns a tuple: (aware_datetime_obj, formatted_string)
+
+    formatted_string example:
+        "12/07/25 @ 17:57:54 EST"
+    """
+    tz_name = os.getenv("TZ", "UTC")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception as e:
+        logger.warning(f"Invalid TZ '{tz_name}', defaulting to UTC: {e}")
+        tz = ZoneInfo("UTC")
+
+    # --- Convert input or use now() ---
+    if iso_utc_str:
+        try:
+            dt = datetime.fromisoformat(iso_utc_str.replace("Z", "+00:00"))
+            dt = dt.astimezone(tz)
+        except Exception as e:
+            logger.warning(f"Failed to convert time '{iso_utc_str}', using now(): {e}")
+            dt = datetime.now(tz)
+    else:
+        dt = datetime.now(tz)
+
+    formatted = dt.strftime("%m/%d/%y @ %H:%M:%S %Z")
+    return dt, formatted
+
+
+
