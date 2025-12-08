@@ -2,14 +2,15 @@ from datetime import datetime, timezone
 
 from .config import Config
 from .logger import get_logger
-from .utils import get_ip, to_local_time
+from .time_service import TimeService
 from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
-from .google_sheets_service import GSheetsService 
+from .google_sheets_service import GSheetsService
+from .utils import get_ip, doh_lookup
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 # from .sheets import log_to_sheets
 #from .db import log_metrics
-
+import time
 
 class NetworkWatchdog:
     """
@@ -34,132 +35,131 @@ class NetworkWatchdog:
         # Define the logger once for the entire class
         self.logger = get_logger("agent")
 
-        self.max_consecutive_failures = max_consecutive_failures
-        self.failed_ping_count = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
+        self.failed_ping_count = 0
+        self.max_consecutive_failures = max_consecutive_failures
 
-        # Initialize the Cloudflare client
+        # Initialize Cloudflare and GSheets client
         self.cloudflare_client = CloudflareClient()
-
-        # Initialize the standalone GSheets service
         self.gsheets_service = GSheetsService()
 
-        # Outputs 
-        self.detected_ip = ""
-        self.dns_last_modified = ""
+        # Load timezone and time utilities once
+        self.time = TimeService()
+
+        # Preload cache from DNS over HTTPS (DoH) 
+        # Authoritatively initialized from truth
+        try:
+            doh_ip = doh_lookup(self.cloudflare_client.dns_name)
+            if doh_ip:
+                update_cloudflare_ip(doh_ip)
+                self.logger.info(f"Cache preloaded from DoH: {doh_ip}")
+            else:
+                self.logger.warning("Preload: DoH returned no IP; cache remains as-is.")
+        except Exception as exc:
+            self.logger.error(f"Preload: DoH cache initialization failed: {exc}")
+
+
+
+        #############
+        # For testing
+        #############
         self.count = 0
 
 
-    def run_cycle(self):
+    def run_cycle2(self):
         """
-        Executes the full monitoring and update logic sequence.
+        Single monitoring and DNS update cycle.
 
-        The method handles three distinct phases:
-        1. Phase 1 (Health Check): Attempts to retrieve the external IP. If successful, 
-           resets the failure counter
-        2. Phase 2 (Core Task): Calls `cloudflare_client.sync_dns()` to update the 
-           DNS record only if the IP has changed. On success, the local IP cache 
-           is updated. Logs the final status to Google Sheets
-        3. Phase 3 (Failure Handling): If the network check fails, increments the 
-           failure counter. If the counter meets the threshold and the watchdog is enabled, 
-           it attempts to self-heal by resetting the smart plug
-
-        Returns:
-            bool: True if the IP detection was successful and the cycle completed 
-                  without critical error (DNS sync may still have soft failed)
-                  False if the network check failed or a critical sync error occurred
+        Workflow:
+        1. Detect external IP
+        2. Verify DNS via DoH (authoritative source)
+        3. Update Cloudflare only if necessary
+        4. Update cache and log to Google Sheets
         """
 
-        # Capture current local time for the heartbeat log
-        current_time_utc = datetime.now(timezone.utc).isoformat()
-        current_time_str = to_local_time(current_time_utc)
+        # --- Get current local time once ---
+        dt_local, dt_str = self.time.now_local()
+        heartbeat = self.time.heartbeat_string(dt_local)
+        self.logger.info(f"💚 Heartbeat OK ... {heartbeat}")
 
-        # Parse it back to a datetime (ignore the timezone label)
-        current_time = datetime.strptime(current_time_str, "%m/%d/%y @ %H:%M:%S %Z")
+        # --- PHASE 1: Network Health Check ---
+        detected_ip = get_ip()
 
-        heartbeat_date = current_time.strftime("%a %b %d %Y")  # Tue Dec 03 2025
+        #################
+        #################
+        #For testing only
+        #################
+        #################
+        # self.count += 1
+        # if self.count % 3 == 0:
+        #     detected_ip = "192.168.1.1"   # For testing only
+        # else:
+        #     detected_ip = get_ip()
 
-        self.logger.info(f"💚 Heartbeat OK ... {heartbeat_date}")
-        
-        # --- Phase 1: Network Health Check ---
-
-        # The primary goal is to rely solely on the result of 
-        # get_ip() to determine the overall network health
-
-        # Source of truth for connectivity
-
-        # One full HTTPS request, if successful, the entire network stack 
-        # (DNS resolution, routing, and application layer protocols) is functional
-
-        self.detected_ip = get_ip()
-
-        if self.detected_ip:
+        if detected_ip:
             self.logger.info("🌐 IP OK")
             self.failed_ping_count = 0
 
-            # Capture current time for the heartbeat log
-            #current_time_utc = datetime.now(timezone.utc).isoformat()
-            #current_time = to_local_time(current_time_utc)
-
-            # Only update status with current heartbeat info (IP and time)
-            # This is the high-frequency, minimum data update
+            # --- High-frequency heartbeat (IP/timestamp) to Google Sheet ---
             self.gsheets_service.update_status(
-                ip_address=self.detected_ip,
-                current_time=current_time_str,
-                dns_last_modified=None   # Do not update
+                ip_address=detected_ip,
+                current_time=dt_str,
+                dns_last_modified=None
             )
             self.logger.info(
-                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | ip={self.detected_ip} "
-                f"| time={current_time}"
+                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name}"
+                f" | ip={detected_ip} | time={dt_str}"
             )
 
-            # --- Phase 2: Core Task (DNS update and status log) ---
-            try:
-                # Get cached IP to pass to the client
-                cached_ip = get_cloudflare_ip()
-                
-                # Call the dedicated client method
-                update_result = self.cloudflare_client.sync_dns(
-                    cached_ip=cached_ip,
-                    detected_ip=self.detected_ip
-                )
-                
-                # Handle Update Data / Success or Skip
-                if update_result:
-                    # Cloudflare update was successful
-                    self.dns_last_modified = to_local_time(update_result.get('modified_on'))
-                    self.logger.info(f"🐾 🌤️  Cloudflare DNS updated | {cached_ip} → {self.detected_ip}")
+            # --- Early-exit: cache match -> fastest path (no DoH call) ---
+            cached_ip = get_cloudflare_ip()
+            if cached_ip and cached_ip == detected_ip:
+                self.logger.info("🐾 🌤️  Cloudflare DNS OK | source: cached IP")
+                return True
 
-                    # Update status with the DNS modification time
-                    # This is the low-frequency, audit-logging update
+            # --- DoH check (authoritative) ---
+            doh_ip = doh_lookup(self.cloudflare_client.dns_name)
+            self.logger.debug(f"DoH resolved IP: {doh_ip} (detected: {detected_ip})")
+
+            # If DoH matches detected IP -> DNS as seen by world is correct
+            if doh_ip and doh_ip == detected_ip:
+                self.logger.info("🐾 🌤️  Cloudflare DNS OK | source: DoH IP")
+                update_cloudflare_ip(detected_ip)
+                return True
+
+            # --- STATE 2: Out-of-Sync, Cloudflare DNS Update Needed ---
+            try:
+                update_result = self.cloudflare_client.sync_dns(detected_ip)
+
+                if update_result:
+                    update_cloudflare_ip(detected_ip)
+                    dns_last_modified = self.time.iso_to_local_string(update_result.get('modified_on'))
+                    self.logger.info(f"🐾 🌤️  Cloudflare DNS updated | {doh_ip} → {detected_ip}")
+
+                    # Low-frequency audit log
                     self.gsheets_service.update_status(
-                        ip_address=None,   # Ignore, previously updated
-                        current_time=None, # Ignore, previously updated
-                        dns_last_modified=self.dns_last_modified   # The new value
+                        ip_address=None,
+                        current_time=None,
+                        dns_last_modified=dns_last_modified
                     )
                     self.logger.info(
                         f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | "
-                        f"last_modified={self.dns_last_modified}"
+                        f"dns_last_modified={dns_last_modified}"
                     )
 
-                    # Update local cache file with new IP
-                    update_cloudflare_ip(self.detected_ip)
-
-                elif update_result is None: 
-                    # DNS No-op
-                    self.logger.info("🐾 🌤️  Cloudflare DNS OK")
+                elif update_result is None:
+                    self.logger.info("🐾 Cloudflare authoritative already matches detected IP")
+                    update_cloudflare_ip(detected_ip)  # fix stale cache if needed
 
             except (RuntimeError, ValueError) as e:
-                # Catch API/logic failures raised by CloudflareClient
-                self.logger.error(f"Cloudflare DNS sync failed: {e}")
+                self.logger.error(f"Cloudflare sync failed: {e}")
                 return False
             except Exception as e:
-                # Last-resort safeguard
-                self.logger.exception(f"Unexpected fatal failure during Cloudflare DNS sync: {e}")
+                self.logger.error(f"Unexpected failure during DNS sync: {e}")
                 return False
 
             return True
-
+        
         else:
             # --- Phase 3: Failure Handling & Watchdog ---
             self.failed_ping_count += 1
@@ -178,11 +178,12 @@ class NetworkWatchdog:
                 self.failed_ping_count = 0 
 
             # Always return False if the cycle failed (IP detection failed)
-            return False
-        
+            return False 
+
 
         # Optional: log metrics to SQLite
         # log_metrics(ip=detected_ip,
         #             internet_ok=internet_ok,
         #             dns_changed=dns_changed)
+
         
