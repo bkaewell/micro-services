@@ -1,9 +1,6 @@
-import os
 import socket
 import requests
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from typing import Any, Optional, Dict
 
 from .config import Config
@@ -12,7 +9,6 @@ from .logger import get_logger
 
 # Define the logger once for the entire module
 logger = get_logger("utils")
-
 
 def is_valid_ip(ip: str) -> bool:
     """
@@ -30,7 +26,6 @@ def is_valid_ip(ip: str) -> bool:
         return True
     except socket.error:
         return False
-
 
 def get_ip() -> str | None:
     """
@@ -63,7 +58,6 @@ def get_ip() -> str | None:
     
     # No service returned a valid IP
     return None
-
 
 def doh_lookup(hostname : str) -> Optional[str]:
     """
@@ -111,4 +105,3 @@ def doh_lookup(hostname : str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Unexpected error during DoH lookup for {hostname}")
         return None
-
