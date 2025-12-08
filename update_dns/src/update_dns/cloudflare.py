@@ -189,77 +189,14 @@ class CloudflareClient:
             RuntimeError: If any Cloudflare API operation fails
         """
 
-        # PUT update, Just use one single API call per update cycle
+        # Single PUT operation (update DNS record)
         try:
             new_dns_record = self.update_dns_record(detected_ip)
         except RuntimeError as e:
-            raise RuntimeError(f"Failed to update DNS record: {e}")
+            raise RuntimeError(f"Failed to update DNS record → {detected_ip}: {e}") from e
 
-        # Success and cleanup
-        if new_dns_record:
-            #self.logger.debug(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
-            # Return the full updated DNS record info      
-            return new_dns_record 
+        return new_dns_record
 
-        return {} # Should never occur under normal flow
-
-
-
-
-
-
-
-
-
-        # # Local cache check (rate limiting / early exit, fast filter)
-        # if cached_ip == detected_ip:
-        #     self.logger.debug("🐾 🌤️  DNS OK | IP unchanged")
-        #     return None 
-
-        # self.logger.debug(f"IP change detected | {cached_ip} → {detected_ip} | Updating DNS...")
-
-        # # Live Cloudflare GET (integrity check)
-        # try:
-        #     live_dns_record = self.get_dns_record_info()
-        #     live_dns_id = live_dns_record.get("id")
-        #     live_dns_ip = live_dns_record.get("content")   # Live IP from Cloudflare
-        #     self.logger.debug(f"Cloudflare record | id={live_dns_id} | ip={live_dns_ip}")
-
-        # except RuntimeError as e:
-        #     raise RuntimeError(f"Failed to fetch DNS record info: {e}") 
-
-
-        # # Integrity check and final decision
-        # if live_dns_ip == detected_ip:
-
-        #     # Cache was stale, but Cloudflare was already correct
-        #     self.logger.warning("Stale cache corrected | Cloudflare already on latest IP")
-            
-        #     # Update cache
-        #     update_cloudflare_ip(detected_ip)
-        #     self.logger.info(f"Cache updated | {cached_ip} → {get_cloudflare_ip()}")
-
-        #     # Cloudflare processes the request as a no-op (no actual change is 
-        #     # made to the database)
-        #     return None
-        
-        # # PUT update (only if detected IP is different than live Cloudflare IP)
-        # try:
-        #     new_dns_record = self.update_dns_record(
-        #         record_id=live_dns_id, 
-        #         new_ip=detected_ip
-        #     )
-            
-        # except RuntimeError as e:
-        #     raise RuntimeError(f"Failed to update DNS record: {e}")
-
-        # # Success and cleanup
-        # if new_dns_record:
-        #     self.logger.info(f"🐾 🌤️  DNS updated | {live_dns_ip} → {detected_ip} | {self.dns_name}")
-        #     # Return the full updated DNS record info      
-        #     return new_dns_record 
-
-        # return {} # Should never occur under normal flow
 
 # For reference:
 
