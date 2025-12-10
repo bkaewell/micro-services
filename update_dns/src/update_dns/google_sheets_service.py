@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from google.auth.exceptions import TransportError
 from google.auth import exceptions as auth_exceptions
 
-
+from .config import Config
 from .logger import get_logger
 from .cache import GOOGLE_SHEET_ID_FILE
 
@@ -19,9 +19,6 @@ class GSheetsService:
     Standalone service for Google Sheets access with TTL caching and
     Spreadsheet ID persistence. Designed for easy reuse across microservices
     """
-
-    # Set a robust timeout constant for all external API requests
-    TIMEOUT_SECONDS = 15
 
     def __init__(self):
         """
@@ -82,9 +79,9 @@ class GSheetsService:
                 SCOPES
             )
 
-            client.set_timeout(self.TIMEOUT_SECONDS)
+            client.set_timeout(Config.API_TIMEOUT)
             self.client = client
-            self.logger.info(f"New gspread client initialized with {self.TIMEOUT_SECONDS}s timeout")
+            self.logger.info(f"New gspread client initialized with {Config.API_TIMEOUT}s timeout")
             return self.client
         
         except Exception as e:
@@ -271,3 +268,4 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
+
