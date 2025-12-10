@@ -1,16 +1,13 @@
-from datetime import datetime, timezone
-
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
+from .utils import get_ip, doh_lookup
 from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
 from .google_sheets_service import GSheetsService
-from .utils import get_ip, doh_lookup
 from .cache import get_cloudflare_ip, update_cloudflare_ip
-# from .sheets import log_to_sheets
 #from .db import log_metrics
-import time
+
 
 class NetworkWatchdog:
     """
@@ -46,23 +43,36 @@ class NetworkWatchdog:
         # Load timezone and time utilities once
         self.time = TimeService()
 
-        # Preload cache from DNS over HTTPS (DoH) 
-        # Authoritatively initialized from truth
+        # Preload cache from DNS over HTTPS (DoH); Authoritatively initialized 
+        # from truth. If DoH fails, clear cache to trigger auto-correction on 
+        # first cycle
         try:
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
+
             if doh_ip:
                 update_cloudflare_ip(doh_ip)
-                self.logger.info(f"Cache preloaded from DoH: {doh_ip}")
+                self.logger.info(
+                    f"Cloudflare cache initialized using DoH value: {doh_ip}"
+                )
             else:
-                self.logger.warning("Preload: DoH returned no IP; cache remains as-is.")
+                # DoH returned nothing or invalid
+                update_cloudflare_ip("__INIT__")
+                self.logger.warning(
+                    "DoH lookup returned no usable IP; Cache "
+                    "cleared for recovery"
+                )
+
         except Exception as exc:
-            self.logger.error(f"Preload: DoH cache initialization failed: {exc}")
+            # Defensive fallback
+            update_cloudflare_ip("")
+            self.logger.error(
+                f"DoH init failed ({type(exc).__name__}: {exc}); "
+                "Cache cleared for recovery"
+            )
 
-
-
-        #############
-        # For testing
-        #############
+        ##################
+        # For testing only
+        ##################
         self.count = 0
 
 
@@ -111,9 +121,9 @@ class NetworkWatchdog:
                 f" | ip={detected_ip} | time={dt_str}"
             )
 
-            # --- Early-exit: cache match -> fastest path (no DoH call) ---
+            # --- Cache check (no network calls) ---
             cached_ip = get_cloudflare_ip()
-            if cached_ip and cached_ip == detected_ip:
+            if cached_ip == detected_ip:
                 self.logger.info("🐾 🌤️  Cloudflare DNS OK | source: cached IP")
                 return True
 
@@ -122,41 +132,32 @@ class NetworkWatchdog:
             self.logger.debug(f"DoH resolved IP: {doh_ip} (detected: {detected_ip})")
 
             # If DoH matches detected IP -> DNS as seen by world is correct
-            if doh_ip and doh_ip == detected_ip:
+            if doh_ip == detected_ip:
                 self.logger.info("🐾 🌤️  Cloudflare DNS OK | source: DoH IP")
-                update_cloudflare_ip(detected_ip)
+                update_cloudflare_ip(detected_ip)   # Refresh cache
                 return True
 
             # --- STATE 2: Out-of-Sync, Cloudflare DNS Update Needed ---
-            try:
-                update_result = self.cloudflare_client.sync_dns(detected_ip)
+            
+            update_result = self.cloudflare_client.sync_dns(detected_ip)
+            update_cloudflare_ip(detected_ip)   # Refresh cache
+            dns_last_modified = self.time.iso_to_local_string(
+                update_result.get('modified_on')
+            )
+            self.logger.info(
+                f"🐾 🌤️  Cloudflare DNS updated | {doh_ip} → {detected_ip}"
+            )
 
-                if update_result:
-                    update_cloudflare_ip(detected_ip)
-                    dns_last_modified = self.time.iso_to_local_string(update_result.get('modified_on'))
-                    self.logger.info(f"🐾 🌤️  Cloudflare DNS updated | {doh_ip} → {detected_ip}")
-
-                    # Low-frequency audit log
-                    self.gsheets_service.update_status(
-                        ip_address=None,
-                        current_time=None,
-                        dns_last_modified=dns_last_modified
-                    )
-                    self.logger.info(
-                        f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | "
-                        f"dns_last_modified={dns_last_modified}"
-                    )
-
-                elif update_result is None:
-                    self.logger.info("🐾 Cloudflare authoritative already matches detected IP")
-                    update_cloudflare_ip(detected_ip)  # fix stale cache if needed
-
-            except (RuntimeError, ValueError) as e:
-                self.logger.error(f"Cloudflare sync failed: {e}")
-                return False
-            except Exception as e:
-                self.logger.error(f"Unexpected failure during DNS sync: {e}")
-                return False
+            # Low-frequency audit log
+            self.gsheets_service.update_status(
+                ip_address=None,
+                current_time=None,
+                dns_last_modified=dns_last_modified
+            )
+            self.logger.info(
+                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | "
+                f"dns_last_modified={dns_last_modified}"
+            )
 
             return True
         
@@ -186,4 +187,4 @@ class NetworkWatchdog:
         #             internet_ok=internet_ok,
         #             dns_changed=dns_changed)
 
-        
+
