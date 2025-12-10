@@ -5,7 +5,7 @@ import requests
 from .config import Config
 from .logger import get_logger
 
-# Define the logger once for the entire module
+
 logger = get_logger("watchdog")
 
 # Watchdog module specifically designed to monitor the health of a primary system
@@ -13,7 +13,6 @@ logger = get_logger("watchdog")
 # (power-cylcing the smart plug) if the primary system stops responding
 
 # Responsible for the self-healing and monitoring of the recovery
-
 
 
 # def ping_host(host: str) -> bool:
@@ -44,9 +43,10 @@ logger = get_logger("watchdog")
 #         time.sleep(1 if i < 2 else 0)  # tiny pause between retries
 #     return False
 
-
 def check_internet(host: str="8.8.8.8") -> bool:
-    """Ping a host (default: Google DNS 8.8.8.8) to verify network connectivity"""
+    """
+    Ping a host (default: Google DNS 8.8.8.8) to verify network connectivity.
+    """
 
     # This check uses ICMP (part of Layer 3/4) and is quick and low-resource
     return os.system(f"ping -c 1 -W 2 {host} > /dev/null 2>&1") == 0
@@ -54,7 +54,7 @@ def check_internet(host: str="8.8.8.8") -> bool:
 def reset_smart_plug() -> bool:
     """
     Power-cycle the smart plug with response validation and controlled delays. 
-    Verifies network recovery in two phases: Local Router and External Host
+    Verifies network recovery in two phases: Local Router and External Host.
     """
     router_ip = Config.Hardware.ROUTER_IP
     plug_ip = Config.Hardware.PLUG_IP
@@ -69,7 +69,9 @@ def reset_smart_plug() -> bool:
         # (Checks Layer 7 Application & Layer 4 Transport for local control)        
 
         # Power-cycle OFF
-        off_resp = requests.get(f"http://{plug_ip}/relay/0?turn=off", timeout=3)
+        off_resp = requests.get(
+            f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
+        )
         if not off_resp.ok:
             logger.error(f"Failed to power OFF smart plug | HTTP {off_resp.status_code})")
             return False
@@ -78,7 +80,9 @@ def reset_smart_plug() -> bool:
         time.sleep(reboot_delay)
 
         # Power-cycle ON
-        on_resp = requests.get(f"http://{plug_ip}/relay/0?turn=on", timeout=3)
+        on_resp = requests.get(
+            f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
+        )
         if not on_resp.ok:
             logger.error(f"Failed to power ON smart plug | HTTP {on_resp.status_code})")
             return False        
