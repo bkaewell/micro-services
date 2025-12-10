@@ -46,14 +46,24 @@ def get_ip() -> str | None:
     # Try API endpoints in order until one succeeds
     for service in ip_services:
         try:
-            response = requests.get(service, timeout=Config.API_TIMEOUT)
-            if response.status_code == 200:
-                ip = response.text.strip()
+            resp = requests.get(service, timeout=Config.API_TIMEOUT)
+
+            if resp.ok:
+                ip = resp.text.strip()
+                
                 if is_valid_ip(ip):
                     logger.debug(f"🌐 External IP acquired ({service})")
                     return ip
-        except requests.RequestException:
-            logger.warning(f"Failed to retrieve IP from {service}, proceeding to next service...")
+                
+                logger.warning(
+                    f"Invalid IP returned from {service}: {ip!r}"
+                )
+
+        except requests.RequestException as e:
+            logger.warning(
+                f"IP fetch failed from {service}: proceeding to next service..."
+                f" {e.__class__.__name__}: {e}"
+            )
             continue  # Skip on network/timeout error and try next
     
     # No service returned a valid IP
@@ -90,10 +100,17 @@ def doh_lookup(hostname : str) -> Optional[str]:
             )
             return None
 
-        # Get the 'data' field (IP address) from the first A-record
+        # Extrac the candidate IP address from the first A-record
         ip = answers[0].get("data")
         logger.debug(f"DoH resolved IP for {hostname}: {ip}")
-        return ip 
+
+        if not is_valid_ip(ip):
+            logger.warning(
+                f"DoH returned invalid IP for {hostname}: {ip!r}"
+            )
+            return None
+
+        return ip
 
     except requests.exceptions.Timeout:
         logger.error(f"DoH lookup timed out after {Config.API_TIMEOUT}s for {hostname}")
