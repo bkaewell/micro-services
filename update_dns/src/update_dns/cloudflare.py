@@ -4,6 +4,7 @@ import requests
 
 from dotenv import load_dotenv
 
+from .config import Config
 from .logger import get_logger
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 
@@ -111,7 +112,7 @@ class CloudflareClient:
         self.logger.debug(f"Initiating record pull → {list_url}")
         
         try:
-            resp = requests.get(list_url, headers=self.headers, timeout=5)
+            resp = requests.get(list_url, headers=self.headers, timeout=Config.API_TIMEOUT)
             resp.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"API GET request failed for {self.dns_name}: {e}")
@@ -160,7 +161,7 @@ class CloudflareClient:
         }
         
         try:
-            resp = requests.put(update_url, headers=self.headers, json=payload, timeout=5)
+            resp = requests.put(update_url, headers=self.headers, json=payload, timeout=Config.API_TIMEOUT)
             resp.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"API PUT failed for record {self.dns_record_id}: {e}")
@@ -196,7 +197,6 @@ class CloudflareClient:
             raise RuntimeError(f"Failed to update DNS record → {detected_ip}: {e}") from e
 
         return new_dns_record
-
 
 # For reference:
 
