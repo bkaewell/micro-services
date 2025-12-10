@@ -11,20 +11,15 @@ from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 class NetworkWatchdog:
     """
-    Manages a dynamic DNS update cycle with self-healing capabilities
+    Keeps Cloudflare DNS synchronized with the device’s current public IP
+    and provides automatic recovery when connectivity degrades.
 
-    The primary goal is to maintain the local DNS record (in Cloudflare) 
-    in sync with the current IP address    
-
-    The main loop (run_cycle) executes the following sequence:
-    1. Check network health by attempting to detect the current IP
-    2. If successful, delegate DNS synchronization
-       (IP comparison/update/caching) to the Cloudflare client
-    3. Log the cycle status (including the DNS record's last modified timestamp) 
-       to the Google Sheet service
-    4. If IP detection fails, track consecutive failures
-    5. If consecutive failures exceed a defined threshold, trigger the self-healing 
-       process to power-cycle the smart plug (if the watchdog flag is enabled)
+    Core functions:
+    - Detect current external IP 
+    - Verify DNS correctness via cache and DNS-over-HTTPS (DoH)
+    - Update Cloudflare DNS only when necessary
+    - Log IP/DNS status to Google Sheets
+    - Track consecutive failures and optionally trigger a smart plug reset
     """
 
     def __init__(self, max_consecutive_failures=3):
@@ -43,10 +38,11 @@ class NetworkWatchdog:
         # Load timezone and time utilities once
         self.time = TimeService()
 
-        # Preload cache from DNS over HTTPS (DoH); Authoritatively initialized 
-        # from truth. If DoH fails, clear cache to trigger auto-correction on 
-        # first cycle
+        # --- Cloudflare DNS/IP Cache Init ---
         try:
+
+            # Preload cache from DNS over HTTPS (DoH),
+            # authoritatively initialized from truth
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
 
             if doh_ip:
@@ -87,7 +83,7 @@ class NetworkWatchdog:
         4. Update cache and log to Google Sheets
         """
 
-        # --- Get current local time once ---
+        # --- Get current local time ---
         dt_local, dt_str = self.time.now_local()
         heartbeat = self.time.heartbeat_string(dt_local)
         self.logger.info(f"💚 Heartbeat OK ... {heartbeat}")
@@ -186,5 +182,4 @@ class NetworkWatchdog:
         # log_metrics(ip=detected_ip,
         #             internet_ok=internet_ok,
         #             dns_changed=dns_changed)
-
 
