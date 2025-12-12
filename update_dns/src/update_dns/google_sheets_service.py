@@ -17,15 +17,14 @@ from .cache import GOOGLE_SHEET_ID_FILE
 class GSheetsService:
     """
     Standalone service for Google Sheets access with TTL caching and
-    Spreadsheet ID persistence. Designed for easy reuse across microservices
+    Spreadsheet ID persistence. Designed for easy reuse across microservices.
     """
 
     def __init__(self):
         """
-        Initializes the service with configuration and sets up internal state
+        Initializes the service with configuration and sets up internal state.
         """
 
-        # Define the logger once for the entire class
         self.logger = get_logger("gsheets")
 
         # Load .env
@@ -41,15 +40,14 @@ class GSheetsService:
         required_vars = [
             self.gsheet_name, 
             self.gsheet_worksheet, 
-            self.gsheet_creds,
-            self.gsheet_dns 
+            self.gsheet_creds
         ]
 
         if not all(required_vars):
             raise EnvironmentError(
                 "Missing required Google environment variables in .env file "
                 "(GOOGLE_SHEET_NAME, GOOGLE_WORKSHEET, " \
-                "GOOGLE_SHEETS_CREDENTIALS, CLOUDFLARE_DNS_NAME)"
+                "GOOGLE_SHEETS_CREDENTIALS)"
             )
 
         # Internal State Management
@@ -60,11 +58,9 @@ class GSheetsService:
 
         self._create_client()
 
-
     def _create_client(self) -> gspread.Client:
         """
         Creates and returns a new gspread client configured with credentials.
-        Applies timeout using set_timeout() method.
         """
 
         SCOPES = [
@@ -81,7 +77,9 @@ class GSheetsService:
 
             client.set_timeout(Config.API_TIMEOUT)
             self.client = client
-            self.logger.info(f"New gspread client initialized with {Config.API_TIMEOUT}s timeout")
+            self.logger.info(
+                f"New gspread client initialized with GSheets JSON creds"
+            )
             return self.client
         
         except Exception as e:
@@ -90,14 +88,18 @@ class GSheetsService:
 
 
     def get_client(self) -> gspread.Client:
-        """Returns the existing client or creates a new one"""
+        """
+        Returns the existing client or creates a new one.
+        """
         if self.client is None:
             return self._create_client()
         return self.client
 
 
     def get_worksheet(self) -> gspread.Worksheet:
-        """Initializes the worksheet object, using cached ID if available"""
+        """
+        Initializes the worksheet object, using cached ID if available.
+        """
         
         # If the worksheet object is already initialized, return it immediately (Cache Hit)
         if self.worksheet:
@@ -139,7 +141,7 @@ class GSheetsService:
         """
         Forces the GSheets service to destroy its current client and authentication
         session, then rebuilds it; Used to clear stale TCP connections and expired 
-        OAuth tokens after long periods of inactivity
+        OAuth tokens after long periods of inactivity.
         """
         self.logger.critical("GSheets Service: Forcing full reconnect after system anomaly!")
 
@@ -268,4 +270,5 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
+
 
