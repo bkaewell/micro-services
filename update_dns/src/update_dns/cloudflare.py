@@ -10,12 +10,15 @@ from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 
 class CloudflareClient:
-    """Handles all communication and logic specific to the Cloudflare DNS API"""
+    """
+    Handles all communication and logic specific to the Cloudflare DNS API.
+    """
     
     def __init__(self):
-        """Initializes the client by resolving all config dependencies from os.environ"""
+        """
+        Initializes the client by resolving all config dependencies.
+        """
 
-        # Define the logger once for the entire class
         self.logger = get_logger("cloudflare")
 
         # Load .env 
@@ -27,20 +30,9 @@ class CloudflareClient:
         self.zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
         self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
         self.dns_record_id = os.getenv("CLOUDFLARE_DNS_RECORD_ID")
+        self.validate_cloudflare()
+        self.logger.info("🐾 🌤️  Cloudflare config OK")
 
-        # Add checks here to ensure values are not None and raise an error if they are
-        required_vars = [
-            self.api_base_url, 
-            self.api_token, 
-            self.zone_id, 
-            self.dns_name
-        ]
-
-        if not all(required_vars):
-            raise EnvironmentError(
-                "Missing required Cloudflare environment variables in .env file "
-                "(API_BASE_URL, API_TOKEN, ZONE_ID, DNS_NAME)"
-            )
 
         # Pre-calculated and necessary instance variables
         self.headers = {
@@ -57,7 +49,20 @@ class CloudflareClient:
         #self.ttl = 60            # Time-to-Live
         self.proxied = False     # Grey cloud icon (not proxied thru Cloudflare)
 
-
+    def validate_cloudflare(self) -> None:
+        """
+        Validate a Cloudflare DNS configuration in one request.
+        """
+        resp = requests.get(f"{self.api_base_url}/zones/{self.zone_id}/dns_records/{self.dns_record_id}",
+                            headers={"Authorization": f"Bearer {self.api_token}"})
+        data = resp.json()
+        if (
+            not resp.ok 
+            or not data.get("success") 
+            or data["result"]["name"] != self.dns_name
+        ):
+            raise ValueError(f"Cloudflare config invalid: {data}")
+    
     # Private helper for URL construction
     def _build_resource_url(
         self,
@@ -197,6 +202,7 @@ class CloudflareClient:
             raise RuntimeError(f"Failed to update DNS record → {detected_ip}: {e}") from e
 
         return new_dns_record
+
 
 # For reference:
 
