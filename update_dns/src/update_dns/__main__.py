@@ -53,6 +53,7 @@ def main_loop(
         # --- Run the Cycle ---
         try:
             watchdog.run_cycle()
+
         except Exception as e:
             logger.exception(f"Unhandled exception during run cycle: {e}")
 
@@ -62,14 +63,8 @@ def main_loop(
         # of the current cycle time
         cycle_duration = time.monotonic() - current_time
         sleep_duration = max(0, interval - cycle_duration)
-
-        #####################
-        #####################
-        # FOR DEBUG INFO ONLY
-        #####################
-        #####################
-        logger.critical(f"Sleep Duration: {sleep_duration:.2f}s\n")
-
+        logger.critical(f"💤 Sleep Duration: {sleep_duration:.2f}s\n\n")
+        
         # Update the time marker to the time we finished the current cycle
         last_cycle_end = time.monotonic()
         
