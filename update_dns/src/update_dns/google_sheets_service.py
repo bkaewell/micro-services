@@ -113,7 +113,6 @@ class GSheetsService:
         # cached client or create a new one with the timeout
         client = self.get_client() 
 
-        
         # Spreadsheet ID caching (minimizes API calls)
         if self.gsheet_id is None:
             # Check 1: Local file cache
@@ -224,7 +223,7 @@ class GSheetsService:
             ip_address: str,
             current_time: time,
             dns_last_modified: str
-        ):
+        ) -> bool:
             """
             Uses the persistently stored target_row to efficiently perform partial updates.
             """
@@ -247,6 +246,7 @@ class GSheetsService:
                 
                 if updates:
                     ws.update_cells(updates, value_input_option='USER_ENTERED')
+                    return True
                     #self.logger.info(f"Updated persistent row {target_row} for {self.gsheet_dns}")
 
             # --- EXCEPTION HANDLING ---
@@ -258,10 +258,10 @@ class GSheetsService:
                 TransportError,
             ) as e:
                 self.logger.error(
-                    f"Gracefully skipping GSheets status update: " 
-                    f"Connection aborted or API/Auth issue; "
-                    f"Will retry next cycle ({e.__class__.__name__}: {e})"
+                    f"Skipping GSheets update due to network/API error: " 
+                    f"{e.__class__.__name__}: {e}"
                 )
+                return False
             
             # The crucial safety net for truly unexpected system failures
             except Exception as e:
@@ -272,3 +272,4 @@ class GSheetsService:
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
 
 
+ 
