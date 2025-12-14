@@ -61,13 +61,25 @@ def get_ip() -> str | None:
 
         except requests.RequestException as e:
             logger.warning(
-                f"IP fetch failed from {service}: proceeding to next service..."
+                f"IP fetch failed from {service}: proceeding to next service...\n"
                 f" {e.__class__.__name__}: {e}"
             )
             continue  # Skip on network/timeout error and try next
     
     # No service returned a valid IP
     return None
+
+def dns_ready(hostname: str = "oauth2.googleapis.com") -> bool:
+    """
+    Returns True if DNS resolution is functional.
+
+    Uses a known-stable hostname as a canary.
+    """
+    try:
+        socket.gethostbyname(hostname)
+        return True
+    except socket.gaierror:
+        return False
 
 def doh_lookup(hostname : str) -> Optional[str]:
     """
