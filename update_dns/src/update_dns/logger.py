@@ -8,7 +8,7 @@ LOG_LEVEL_EMOJIS = {
     #logging.INFO: " 🟢",
     logging.INFO: "🟢",
     #logging.WARNING: " ⚠️ ",
-    logging.WARNING: "⚠️",
+    logging.WARNING: "⚠️ ",
     logging.ERROR: "❌",
     logging.CRITICAL: "🔥",  # For severe errors, typically logged via exception()
 }
