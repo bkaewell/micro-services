@@ -140,31 +140,35 @@ def doh_lookup(hostname : str) -> Optional[str]:
 # Performance Timing Utilities (optional instrumentation)
 # ============================================================
 
-def ms() -> float:
-    """
-    Return monotonic time in milliseconds.
-    """
-    return time.monotonic() * 1000
-
 class Timer:
-    """
-    Lightweight monotonic timer for performance instrumentation.
-
-    Enabled/disabled by caller to avoid runtime overhead.
-    """
-    __slots__ = ("enabled", "_start")
-
-    def __init__(self, enabled: bool = True):
+    def __init__(self, logger, enabled: bool = False):
+        self.logger = logger
         self.enabled = enabled
-        self._start = ms() if enabled else 0.0
+        self.cycle_start = None
+        self.lap_start = None
 
-    def lap(self) -> float:
-        """
-        Return elapsed ms since last lap and reset.
-        """
+    def start_cycle(self):
+        """Call once at the beginning of a run cycle."""
         if not self.enabled:
-            return 0.0
-        now = ms()
-        delta = now - self._start
-        self._start = now
-        return delta
+            return
+        now = time.perf_counter()  # Recommended clock for benchmarking
+        self.cycle_start = now
+        self.lap_start = now
+
+    def lap(self, label: str):
+        """Measure time since last lap."""
+        if not self.enabled or self.lap_start is None:
+            return
+        now = time.perf_counter()
+        delta_ms = (now - self.lap_start) * 1000
+        self.logger.critical(f"🏃 Timing | {label}: {delta_ms:.2f}ms")
+        self.lap_start = now
+
+    def end_cycle(self):
+        """End-to-end duration."""
+        if not self.enabled or self.cycle_start is None:
+            return
+        total_ms = (time.perf_counter() - self.cycle_start) * 1000
+        self.logger.critical(f"🏁 Timing | Total run_cycle: {total_ms:.2f}ms")
+        self.cycle_start = None
+        self.lap_start = None
