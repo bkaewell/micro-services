@@ -1,17 +1,13 @@
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
-from .utils import get_ip, doh_lookup
 from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
 from .google_sheets_service import GSheetsService
 from .cache import get_cloudflare_ip, update_cloudflare_ip
+from .utils import get_ip, dns_ready, doh_lookup, Timer, ms
 #from .db import log_metrics
 
-import time
-
-def ms():
-    return time.monotonic() * 1000   # helper for readability
 
 class NetworkWatchdog:
     """
@@ -28,19 +24,12 @@ class NetworkWatchdog:
 
     def __init__(self, max_consecutive_failures=3):
 
-        # Define the logger once for the entire class
-        self.logger = get_logger("agent")
-
-        self.watchdog_enabled = Config.WATCHDOG_ENABLED
-        self.failed_ping_count = 0
-        self.max_consecutive_failures = max_consecutive_failures
-
-        # Initialize Cloudflare and GSheets client
+        # Initialize time, clients, logs, and timing
+        self.time = TimeService()
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
-
-        # Load timezone and time utilities once
-        self.time = TimeService()
+        self.logger = get_logger("agent")
+        self.timer = Timer(Config.TIMING_ENABLED)
 
         # --- Cloudflare IP Cache Init ---
         try:
@@ -70,6 +59,10 @@ class NetworkWatchdog:
                 "Cache cleared for recovery"
             )
 
+
+        self.failed_ping_count = 0
+        self.watchdog_enabled = Config.WATCHDOG_ENABLED
+        self.max_consecutive_failures = max_consecutive_failures
         ##################
         # For testing only
         ##################
@@ -102,7 +95,6 @@ class NetworkWatchdog:
         detected_ip = get_ip()
         self.logger.critical(f"Timing | IP detection: {ms() - t2:.2f}ms")
 
-
         #################
         #################
         #For testing only
@@ -120,17 +112,20 @@ class NetworkWatchdog:
 
             # --- High-frequency heartbeat (IP/timestamp) to Google Sheet ---
             t3 = ms()
-            self.gsheets_service.update_status(
-                ip_address=detected_ip,
-                current_time=dt_str,
-                dns_last_modified=None
+            gsheets_ok = self.gsheets_service.update_status(
+                    ip_address=detected_ip,
+                    current_time=dt_str,
+                    dns_last_modified=None
             )
-            self.logger.critical(f"Timing | Google Sheets IP update: {ms() - t3:.2f}ms")
+            if gsheets_ok:
+                self.logger.critical(f"Timing | GSheets IP update: {ms() - t3:.2f}ms")
+                self.logger.info(
+                    f"📊 GSheets updated | dns={self.cloudflare_client.dns_name}"
+                    f" | ip={detected_ip} | time={dt_str}"
+                )
+            else:
+                self.logger.critical(f"Timing | GSheets update skipped: {ms() - t3:.2f}ms")
 
-            self.logger.info(
-                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name}"
-                f" | ip={detected_ip} | time={dt_str}"
-            )
 
             # --- Cache check (no network calls) ---
             t4 = ms()
@@ -166,19 +161,23 @@ class NetworkWatchdog:
             )
 
             # Low-frequency audit log
-            self.gsheets_service.update_status(
-                ip_address=None,
-                current_time=None,
-                dns_last_modified=dns_last_modified
-            )
-            self.logger.critical(f"Timing | Google Sheets audit log: {ms() - t7:.2f}ms")
+            gsheets_ok = self.gsheets_service.update_status(
+                    ip_address=None,
+                    current_time=None,
+                    dns_last_modified=dns_last_modified
+                )
+            
+            if gsheets_ok:
+                self.logger.critical(f"Timing | GSheets audit log: {ms() - t7:.2f}ms")
+                self.logger.info(
+                    f"📊 GSheets updated | dns={self.cloudflare_client.dns_name} | "
+                    f"dns_last_modified={dns_last_modified}"
+                )
+            else:
+                self.logger.critical(f"Timing | GSheets audit skipped: {ms() - t7:.2f}ms")
 
             self.logger.info(
                 f"🐾 🌤️  Cloudflare DNS updated | {doh_ip} → {detected_ip}"
-            )
-            self.logger.info(
-                f"📊 Google Sheet updated | dns={self.cloudflare_client.dns_name} | "
-                f"dns_last_modified={dns_last_modified}"
             )
 
             self.logger.critical(f"Timing | Total run_cycle: {ms() - t0:.2f}ms")
@@ -187,7 +186,9 @@ class NetworkWatchdog:
         else:
             # --- Phase 3: Failure Handling & Watchdog ---
             self.failed_ping_count += 1
-            self.logger.warning(f"Internet check failed ({self.failed_ping_count}/{self.max_consecutive_failures})")
+            self.logger.warning(
+                f"Internet check failed ({self.failed_ping_count}/{self.max_consecutive_failures})"
+            )
 
             # Check flag in .env
             if self.watchdog_enabled and self.failed_ping_count >= self.max_consecutive_failures:
@@ -196,11 +197,48 @@ class NetworkWatchdog:
                 # The execution of reset_smart_plug() is the self-correction action
                 if not reset_smart_plug():
                     self.logger.error("Smart plug reset failed")
-                    # Do not return True here, the cycle failed
 
-                # Reset counter after attempting recovery, regardless of success
-                self.failed_ping_count = 0 
 
-            # Always return False if the cycle failed (IP detection failed)
-            return False 
+                # # --- DNS Readiness Gate ---
+                # if not dns_ready("api.cloudflare.com"):
+                #     self.logger.warning(
+                #         "Cloudflare DNS resolver not ready; skipping API-dependent steps this cycle"
+                #     )
+                #     return True   # graceful skip, not a failure
+
+
+                # --- DNS Warm-up Phase (NO RESET HERE) ---
+                self.logger.info("Waiting for DNS to become ready...")
+                max_dns_wait = 30  # seconds
+                dns_ready_deadline = time.monotonic() + max_dns_wait
+
+                while time.monotonic() < dns_ready_deadline:
+                    if dns_ready("api.cloudflare.com"):
+                        self.logger.info("Cloudflare DNS ready after recovery")
+                        break
+                    time.sleep(2)
+                else:
+                    self.logger.warning(
+                        "DNS not ready after reset; deferring DNS sync this cycle"
+                    )
+
+                self.failed_ping_count = 0
+            
+            return False
+
+
+
+
+            #     # Reset counter after attempting recovery, regardless of success
+            #     self.failed_ping_count = 0 
+
+            # # Always return False if the cycle failed (IP detection failed)
+            # return False 
+        
+
+
+        # Optional: log metrics to SQLite
+        # log_metrics(ip=detected_ip,
+        #             internet_ok=internet_ok,
+        #             dns_changed=dns_changed)
 

@@ -17,11 +17,11 @@ class Config:
     except ValueError:
         CYCLE_INTERVAL = 60
 
+    API_TIMEOUT = 8   # seconds (safe, balanced)
     DEBUG_ENABLED = os.getenv("DEBUG_ENABLED", "false").lower() == "true"
     WATCHDOG_ENABLED = os.getenv("WATCHDOG_ENABLED", "false").lower() == "true"
-    API_TIMEOUT = 8   # seconds (safe, balanced)
+    TIMING_ENABLED = os.getenv("TIMING_ENABLED", "false").lower() == "true"
     # METRICS_DB = os.getenv("METRICS_DB", "metrics.db")
-    # AUTOPILOT_INTERVAL = int(os.getenv("AUTOPILOT_INTERVAL", "60"))
 
     # --- Hardware ---
     class Hardware:
