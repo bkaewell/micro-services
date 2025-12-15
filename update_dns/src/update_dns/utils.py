@@ -1,3 +1,4 @@
+import time
 import socket
 import requests
 
@@ -69,11 +70,11 @@ def get_ip() -> str | None:
     # No service returned a valid IP
     return None
 
-def dns_ready(hostname: str = "oauth2.googleapis.com") -> bool:
+def dns_ready(hostname: str = "api.cloudflare.com") -> bool:
     """
-    Returns True if DNS resolution is functional.
+    Returns True if DNS resolution for Cloudflare is functional.
 
-    Uses a known-stable hostname as a canary.
+    This is mission-critical DNS for the agent.
     """
     try:
         socket.gethostbyname(hostname)
@@ -134,3 +135,36 @@ def doh_lookup(hostname : str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Unexpected error during DoH lookup for {hostname}")
         return None
+
+# ============================================================
+# Performance Timing Utilities (optional instrumentation)
+# ============================================================
+
+def ms() -> float:
+    """
+    Return monotonic time in milliseconds.
+    """
+    return time.monotonic() * 1000
+
+class Timer:
+    """
+    Lightweight monotonic timer for performance instrumentation.
+
+    Enabled/disabled by caller to avoid runtime overhead.
+    """
+    __slots__ = ("enabled", "_start")
+
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        self._start = ms() if enabled else 0.0
+
+    def lap(self) -> float:
+        """
+        Return elapsed ms since last lap and reset.
+        """
+        if not self.enabled:
+            return 0.0
+        now = ms()
+        delta = now - self._start
+        self._start = now
+        return delta
