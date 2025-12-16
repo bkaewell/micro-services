@@ -1,12 +1,14 @@
+# --- Standard library imports ---
 import os
 import json
 import requests
 
+# --- Third-party imports ---
 from dotenv import load_dotenv
 
+# --- Project imports ---
 from .config import Config
 from .logger import get_logger
-from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 
 class CloudflareClient:
@@ -31,7 +33,7 @@ class CloudflareClient:
         self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
         self.dns_record_id = os.getenv("CLOUDFLARE_DNS_RECORD_ID")
         self.validate_cloudflare()
-        self.logger.info("🐾 🌤️  Cloudflare config OK")
+        self.logger.info("🐾🌤️  Cloudflare config OK")
 
 
         # Pre-calculated and necessary instance variables
@@ -145,10 +147,8 @@ class CloudflareClient:
             RuntimeError: If the API PUT request fails
         """
 
-
         # is_collection = False
         # update_url = self._build_resource_url(is_collection, record_id)
-
 
         # Common Base Path for all DNS record operations within the zone
         base_path = (
@@ -202,7 +202,6 @@ class CloudflareClient:
             raise RuntimeError(f"Failed to update DNS record → {detected_ip}: {e}") from e
 
         return new_dns_record
-
 
 # For reference:
 
