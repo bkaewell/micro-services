@@ -9,7 +9,6 @@ x-common-dev: &common-dev
   # Volumes here apply to run-time environment, bypassing .dockerignore for live code editting in dev mode
   volumes:
     - .:/app # in dev mode, bypasses .dockerignore
-    - ${GOOGLE_API_KEY_LOCAL}:${GOOGLE_API_KEY_DOCKER}:ro
 
 services:
   # ================================
