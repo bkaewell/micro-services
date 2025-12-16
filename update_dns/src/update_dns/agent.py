@@ -1,5 +1,7 @@
+# --- Standard library imports ---
 import time
 
+# --- Project imports ---
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
@@ -35,7 +37,7 @@ class NetworkWatchdog:
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
         self.logger = get_logger("agent")
-        self.timer = Timer(self.logger, Config.TIMING_ENABLED)
+        self.timer = Timer(self.logger)
 
         # --- Cloudflare IP Cache Init ---
         try:
@@ -64,7 +66,6 @@ class NetworkWatchdog:
                 f"DoH init failed ({type(e).__name__}: {e}); "
                 "Cache cleared for recovery"
             )
-
 
         self.failed_ping_count = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
@@ -121,7 +122,7 @@ class NetworkWatchdog:
 
             # --- High-frequency heartbeat (IP/timestamp) to Google Sheet ---
             gsheets_ok = self.gsheets_service.update_status(
-                ip_address=detected_ip,
+                ip_address=None,  # No change
                 current_time=dt_str,
                 dns_last_modified=None
             )
@@ -161,7 +162,7 @@ class NetworkWatchdog:
 
             # Low-frequency audit log
             gsheets_ok = self.gsheets_service.update_status(
-                    ip_address=None,
+                    ip_address=detected_ip,
                     current_time=None,
                     dns_last_modified=dns_last_modified
                 )
@@ -169,9 +170,8 @@ class NetworkWatchdog:
 
             if gsheets_ok:
                 self.logger.info(f"📊 GSheets uplink OK")
-            
             self.logger.info(
-                f"🐾 🌤️  Cloudflare DNS updated | {doh_ip} → {detected_ip}"
+                f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
             )
             self.timer.end_cycle()
             return True
@@ -180,7 +180,7 @@ class NetworkWatchdog:
             # --- Phase 3: Failure Handling & Watchdog ---
             self.failed_ping_count += 1
             self.logger.warning(
-                f"Internet check failed ({self.failed_ping_count}/{self.max_consecutive_failures})"
+                f"Internet check failed [{self.failed_ping_count}/{self.max_consecutive_failures}]"
             )
 
             # Check flag in .env

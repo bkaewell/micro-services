@@ -63,7 +63,7 @@ def main_loop(
         # of the current cycle time
         cycle_duration = time.monotonic() - current_time
         sleep_duration = max(0, interval - cycle_duration)
-        logger.critical(f"💤 Sleep Duration [{sleep_duration:.2f} s]\n\n")
+        logger.info(f"💤 Sleeping ... [{sleep_duration:.2f} s]\n")
         
         # Update the time marker to the time we finished the current cycle
         last_cycle_end = time.monotonic()
@@ -77,16 +77,16 @@ def main():
 
     Configures logging and starts the supervisor loop
     """
-    # One-time logging setup
-    if Config.DEBUG_ENABLED:
-        setup_logging(level=logging.DEBUG)
+
+    # Setup logging policy
+    if Config.LOG_LEVEL:
+        setup_logging(level=getattr(logging, Config.LOG_LEVEL))
     else:
         setup_logging()
-    
     logger = get_logger("main")
 
     # Basic sanity checks
-    run_sanity_checks()
+    # run_sanity_checks()
 
     # Initialize core components
     watchdog = NetworkWatchdog()

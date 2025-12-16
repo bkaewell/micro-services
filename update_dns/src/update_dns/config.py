@@ -9,7 +9,7 @@ class Config:
     """Centralized config for Operational Parameters and Hardware data structures"""
 
     # --- Operational Parameters ---
-    # --- Execution Policy ---
+    # --- Scheduling Policy ---
     try:
         CYCLE_INTERVAL = int(os.getenv("CYCLE_INTERVAL", 60))
     except ValueError:
