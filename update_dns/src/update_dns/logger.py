@@ -1,24 +1,50 @@
+# --- Standard library imports ---
 import sys
 import logging
 
+# --- Project imports ---
+from .config import Config
 
-# Why not, make it fun 
+
+# --- Custom log levels ---
+TIMING = 25   # Between INFO (20) and WARNING (30)
+logging.addLevelName(TIMING, "TIME")
+
+def timing(self, message, *args, **kwargs):
+    """Add `timing` method to Logger for TIMING-level logs."""
+    if self.isEnabledFor(TIMING):
+        self._log(TIMING, message, args, stacklevel=2, **kwargs)
+
+logging.Logger.timing = timing
+
+# --- Filters ---
+class TimingFilter(logging.Filter):
+    """Filter out TIMING logs unless explicitly enabled."""
+    def __init__(self, enabled: bool):
+        super().__init__()
+        self.enabled = enabled
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno == TIMING:
+            return self.enabled
+        return True
+
+# --- Format configuration constants ---
 LOG_LEVEL_EMOJIS = {
     logging.DEBUG: "🧱",
-    #logging.INFO: " 🟢",
     logging.INFO: "🟢",
-    #logging.WARNING: " ⚠️ ",
+    TIMING: "⚡️",
     logging.WARNING: "⚠️ ",
     logging.ERROR: "❌",
-    logging.CRITICAL: "🔥",  # For severe errors, typically logged via exception()
+    logging.CRITICAL: "🔥",
 }
 
-# Shorten default log level names for uniform 4-5 character output
 LEVEL_NAME_MAP = {
     "WARNING": "WARN",
     "CRITICAL": "FATAL",
 }
 
+# --- Formatters ---
 class EmojiFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """
@@ -29,10 +55,15 @@ class EmojiFormatter(logging.Formatter):
         record.levelname = LEVEL_NAME_MAP.get(record.levelname, record.levelname)
         return super().format(record)
 
+# --- Public logging setup API ---
 def setup_logging(level=logging.INFO) -> None:
     """
-    Configure global application logging with emoji decorations.
+    Configure global logging with emoji decorations and optional TIMING logs.
     """
+    root = logging.getLogger()
+    root.setLevel(level)
+    root.handlers.clear()
+
     handler = logging.StreamHandler(sys.stdout)
     formatter = EmojiFormatter(
         #fmt="%(asctime)s [%(levelname)s] %(levelemoji)s %(name)s:%(funcName)s:%(lineno)d → %(message)s",
@@ -42,9 +73,8 @@ def setup_logging(level=logging.INFO) -> None:
     )
     handler.setFormatter(formatter)
 
-    root = logging.getLogger()
-    root.setLevel(level)
-    root.handlers.clear()
+    # Apply optional TIMING filter based on config
+    handler.addFilter(TimingFilter(enabled=Config.LOG_TIMING))
     root.addHandler(handler)
 
 def get_logger(name: str) -> logging.Logger:
