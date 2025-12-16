@@ -63,14 +63,13 @@ def main_loop(
         # of the current cycle time
         cycle_duration = time.monotonic() - current_time
         sleep_duration = max(0, interval - cycle_duration)
-        logger.critical(f"💤 Sleep Duration: {sleep_duration:.2f}s\n\n")
+        logger.critical(f"💤 Sleep Duration [{sleep_duration:.2f} s]\n\n")
         
         # Update the time marker to the time we finished the current cycle
         last_cycle_end = time.monotonic()
         
         # Sleep for the calculated remaining duration
         time.sleep(sleep_duration)
-
 
 def main():
     """
@@ -97,7 +96,6 @@ def main():
     # Start loop, passing initialized components
     logger.info("🚀 Starting network maintenance cycle...")
     main_loop(watchdog, cycle_interval, buffer)
-
 
 if __name__ == "__main__":
     main()

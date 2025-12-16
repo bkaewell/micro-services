@@ -161,7 +161,8 @@ class Timer:
             return
         now = time.perf_counter()
         delta_ms = (now - self.lap_start) * 1000
-        self.logger.critical(f"🏃 Timing | {label}: {delta_ms:.2f}ms")
+        #self.logger.critical(f"🏃 Timing | {label:<32} [{delta_ms:7.2f} ms]")
+        self.logger.critical(f"⚡️ Timing | {label:<32} [{delta_ms:7.2f} ms]")
         self.lap_start = now
 
     def end_cycle(self):
@@ -169,6 +170,6 @@ class Timer:
         if not self.enabled or self.cycle_start is None:
             return
         total_ms = (time.perf_counter() - self.cycle_start) * 1000
-        self.logger.critical(f"🏁 Timing | Total run_cycle: {total_ms:.2f}ms")
+        self.logger.critical(f"⚡️ Timing | {'Total run_cycle()':<26} [{total_ms:7.2f} ms]")
         self.cycle_start = None
         self.lap_start = None
