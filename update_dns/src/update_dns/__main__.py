@@ -31,7 +31,7 @@ def main_loop(
         elapsed = time.monotonic() - cycle_start
         remaining = max(0.0, interval - elapsed)
 
-        logger.info(f"💤 Sleeping ... {remaining:.1f} s\n")
+        logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
 
 def main():
