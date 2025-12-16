@@ -135,44 +135,6 @@ class GSheetsService:
         
         return self.worksheet
 
-
-    def reconnect(self):
-        """
-        Forces the GSheets service to destroy its current client and authentication
-        session, then rebuilds it; Used to clear stale TCP connections and expired 
-        OAuth tokens after long periods of inactivity.
-        """
-        self.logger.critical("GSheets Service: Forcing full reconnect after system anomaly!")
-
-        # Explicitly destroy the old client/connection state
-        self.client = None
-
-        # Rebuild the client immediately (with timeout applied)
-        try:
-            self._create_client() # Calls the function that always creates a new client
-        except Exception as e:
-            # If client creation fails (i.e. bad credentials), log and stop
-            # self.logger.error(f"FATAL: Reconnect failed during client creation: {e}")
-            # self.logger.fatal(f"Reconnect failed during client creation: {e}")
-            self.logger.error(f"Reconnect failed during client creation: {e}")            
-            raise # Re-raise this fatal error
-
-        # Reset the worksheet state (Crucial for clearing stale connection pointers)
-        self.worksheet = None
-
-        # Call get_worksheet() to preload and test the new connection chain
-        try:
-            self.get_worksheet()
-            self.logger.critical("GSheets Service: Reconnection successful")
-        except Exception as e:
-            # If opening the sheet fails (i.e. API is still down), log gracefully
-            self.logger.error(
-                f"Failed to restore worksheet after client reconnection. "
-                f"Will retry on next cycle. Error: {e.__class__.__name__}"
-            )
-            # Do not raise here; let the next run_cycle handle the temp failure
-
-
     def _ensure_target_row(self) -> int:
         """
         Calculates and stores the target row index (1-based) if not already set.
@@ -234,14 +196,15 @@ class GSheetsService:
                 
                 updates = []
                 
-                # Update Column B (IP), Column C (Last Updated Time), and Column A (DNS Name)
-                if ip_address is not None:
-                    updates.append(gspread.Cell(target_row, 1, self.gsheet_dns)) # A: DNS
-                    updates.append(gspread.Cell(target_row, 2, ip_address))      # B: IP
+                # Heartbeat update:
+                # Only touch Column C (Last Updated)
+                if current_time is not None:
                     updates.append(gspread.Cell(target_row, 3, current_time))    # C: Last Updated
 
-                # Update Column D (Last Modified) - Only updated on actual IP change
+                # IP change update:
+                # Only update Column B (IP Address) and Column D (Last Modified)
                 if dns_last_modified is not None:
+                    updates.append(gspread.Cell(target_row, 2, ip_address))        # B: IP
                     updates.append(gspread.Cell(target_row, 4, dns_last_modified)) # D: Last Modified
                 
                 if updates:
@@ -270,6 +233,3 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
-
-
- 
