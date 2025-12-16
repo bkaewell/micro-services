@@ -49,7 +49,7 @@ class NetworkWatchdog:
             if doh_ip:
                 update_cloudflare_ip(doh_ip)
                 self.logger.info(
-                    f"Cloudflare cache initialized using DoH value: {doh_ip}"
+                    f"Cloudflare cache initialized using DoH value: [{doh_ip}]"
                 )
             else:
                 # DoH returned nothing or invalid
@@ -74,7 +74,6 @@ class NetworkWatchdog:
         # For testing only
         ##################
         self.count = 0
-
 
     def run_cycle(self):
         """
