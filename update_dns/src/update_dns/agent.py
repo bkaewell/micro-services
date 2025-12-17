@@ -15,19 +15,11 @@ from .cache import get_cloudflare_ip, update_cloudflare_ip
 
 class NetworkWatchdog:
     """
-    Background agent that keeps Cloudflare DNS in sync with the
-    device's current public IP.
+    Background agent that maintains consistency between the device’s
+    current public IP and its Cloudflare DNS record.
 
-    Responsibilities:
-    - Monitor external connectivity and public IP changes
-    - Verify DNS state using cache and DNS-over-HTTPS/DoH (source of truth)
-    - Update Cloudflare only when the IP is out of sync
-    - Emit lightweight audit telemetry to Google Sheets
-    - Track consecutive failures and optionally trigger a smart plug reset
-      to recover from sustained connectivity loss
-
-    Designed to run continuously with fast-path execution when
-    everything is healthy, and clear recovery behavior when it isn't.
+    Optimized for fast no-op cycles under normal conditions when everything's
+    healthy with explicit recovery behavior on sustained failures.
     """
 
     def __init__(self, max_consecutive_failures=3):
@@ -49,14 +41,15 @@ class NetworkWatchdog:
             if doh_ip:
                 update_cloudflare_ip(doh_ip)
                 self.logger.info(
-                    f"Cloudflare cache initialized using DoH value: [{doh_ip}]"
+                    f"Cloudflare L1 cache initialized using DoH value: "
+                    f"[{doh_ip}]"
                 )
             else:
                 # DoH returned nothing or invalid
                 update_cloudflare_ip("__INIT__")
                 self.logger.warning(
-                    "DoH lookup returned no usable IP; Cache "
-                    "cleared for recovery"
+                    "DoH lookup returned no usable IP; "
+                    "Cache cleared for recovery"
                 )
 
         except Exception as e:
@@ -104,11 +97,11 @@ class NetworkWatchdog:
         detected_ip = get_ip()
         self.timer.lap("utils.get_ip()")
 
-        # #######################
-        # #######################
-        # ## For testing only
-        # #######################
-        # #######################
+        #######################
+        #######################
+        ## For testing only
+        #######################
+        #######################
         # self.count += 1
         # if self.count % 3 == 0:
         #     detected_ip = "192.168.1.1"   # For testing only
@@ -135,14 +128,13 @@ class NetworkWatchdog:
             self.timer.lap("cache.get_cloudflare_ip()")
 
             if cached_ip == detected_ip:
-                self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
+                self.logger.info("🐾🌤️  Cloudflare DNS OK [L1 Cache]")
                 self.timer.end_cycle()
                 return True
 
             # --- DoH check (authoritative) ---
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
             self.timer.lap("utils.doh_lookup()")
-            self.logger.debug(f"DoH IP [{doh_ip}]")
 
             # If DoH matches detected IP, DNS as seen by world is correct
             if doh_ip == detected_ip:
@@ -152,9 +144,12 @@ class NetworkWatchdog:
                 return True
 
             # --- STATE 2: Out-of-Sync, Cloudflare DNS Update Needed ---
-            update_result = self.cloudflare_client.sync_dns(detected_ip)
+            #update_result = self.cloudflare_client.sync_dns(detected_ip)
+
+            update_result = self.cloudflare_client.update_dns(detected_ip)
+
             update_cloudflare_ip(detected_ip)   # Refresh cache
-            self.timer.lap("cloudflare_client.sync_dns()")
+            self.timer.lap("cloudflare_client.update_dns()")
             dns_last_modified = self.time.iso_to_local_string(
                 update_result.get('modified_on')
             )
