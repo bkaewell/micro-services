@@ -35,7 +35,6 @@ class CloudflareClient:
         self.validate_cloudflare()
         self.logger.info("🐾🌤️  Cloudflare config OK")
 
-
         # Pre-calculated and necessary instance variables
         self.headers = {
             "Authorization": f"Bearer {self.api_token}",
@@ -65,78 +64,6 @@ class CloudflareClient:
         ):
             raise ValueError(f"Cloudflare config invalid: {data}")
     
-    # Private helper for URL construction
-    def _build_resource_url(
-        self,
-        is_collection: bool = True, 
-        record_id: str = None
-    ) -> str:
-        """
-        Constructs the appropriate Cloudflare DNS resource URL based on the operation type
-
-        Args:
-            is_collection: True for the List/Collection endpoint (GET) 
-                           False for the Single Resource endpoint (PUT/PATCH/DELETE)
-            record_id: The unique ID of the target record (required if is_collection is False)
-
-        Returns:
-            The complete, correctly formatted API endpoint URL
-        """
-
-        # Common Base Path for all DNS record operations within the zone
-        base_path = (
-            f"{self.api_base_url}/zones/"
-            f"{self.zone_id}/dns_records"
-        )
-
-        if is_collection:
-            # Collection Resource Endpoint (GET operation)
-            # Hardcoded filters for the specific DNS name and type
-            filters = (
-                f"?name={self.dns_name}"
-                f"&type={self.record_type}"
-            )
-            return base_path + filters
-            
-        else:
-            # Single Resource Endpoint (PUT/PATCH/DELETE operation)
-            if not record_id:
-                raise ValueError("record_id must be provided for single resource operations")
-                    
-            # Append the unique resource ID to the path
-            return base_path + f"/{record_id}"
-
-
-    def get_dns_record_info(self) -> dict:
-        """
-        Fetch the live Cloudflare DNS record (ID, IP, modified_on)
-        
-        Raises:
-            RuntimeError: If the Cloudflare API request fails or returns no records
-        """
-        is_collection = True
-        list_url = self._build_resource_url(is_collection)
-        self.logger.debug(f"Initiating record pull → {list_url}")
-        
-        try:
-            resp = requests.get(list_url, headers=self.headers, timeout=Config.API_TIMEOUT)
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            raise RuntimeError(f"API GET request failed for {self.dns_name}: {e}")
-
-        get_resp_data = resp.json()
-        self.logger.debug(f"Live JSON received:\n{json.dumps(get_resp_data, indent=2)}")
-        
-        # Extract results (collection/list format)
-        records_list = get_resp_data.get("result") or []
-        
-        if not records_list:
-            raise RuntimeError(f"No DNS record found for {self.dns_name} ({self.record_type})")
-
-        # Return the first (and only) matching record object
-        return records_list[0]
-
-
     def update_dns(self, new_ip: str) -> dict:
         """
         Update the DNS record to point to the provided IP address.
@@ -171,7 +98,7 @@ class CloudflareClient:
             raise RuntimeError(
                 f"Cloudflare PUT failed for DNS record " 
                 f"[{self.dns_record_id}] → {new_ip}"
-                ) from e
+            ) from e
 
         # Extract the new record from the PUT response body
         try:
@@ -193,3 +120,54 @@ class CloudflareClient:
             )
 
         return new_dns_record
+    
+    def get_dns_record(self) -> dict:
+        """
+        Fetch the current Cloudflare DNS record for this hostname.
+        
+        Returns:
+            dict: DNS record object from Cloudflare response
+
+        Raises:
+            RuntimeError: If the API request fails or response is invalid
+        """
+
+        url = (
+            f"{self.api_base_url}/zones/"
+            f"{self.zone_id}/dns_records"
+            f"?name={self.dns_name}"
+            f"&type={self.record_type}"
+        )
+        
+        try:
+            resp = requests.get(
+                url, headers=self.headers, timeout=Config.API_TIMEOUT
+            )
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            raise RuntimeError(
+                f"Cloudflare GET failed for DNS record "
+                f"[{self.dns_name}]"
+            ) from e
+        
+        # Extract the DNS record from the GET response body
+        try:
+            get_resp_data = resp.json()
+        except ValueError as e:
+            raise RuntimeError(
+                "GET succeeded but response was not valid JSON"
+            ) from e
+
+        self.logger.debug(
+            f"GET JSON response:\n%s",
+            json.dumps(get_resp_data, indent=2),
+        )
+
+        records = get_resp_data.get("result") or []
+        if not records:
+            raise RuntimeError(
+                f"GET succeeded but response contained no DNS record"
+            )
+
+        # Cloudflare returns a collection; name+type should be unique
+        return records[0]
