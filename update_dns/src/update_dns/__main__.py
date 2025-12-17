@@ -1,4 +1,5 @@
 # --- Standard library imports ---
+import sys
 import time
 import logging
 
@@ -47,6 +48,7 @@ def main():
     else:
         setup_logging()
     logger = get_logger("main")
+    logger.debug(f"Python version: {sys.version}")
 
     # Initialize core components
     watchdog = NetworkWatchdog()
