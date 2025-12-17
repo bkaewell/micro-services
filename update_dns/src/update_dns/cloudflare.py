@@ -137,25 +137,22 @@ class CloudflareClient:
         return records_list[0]
 
 
-    def update_dns_record(self, new_ip: str) -> dict:
+    def update_dns(self, new_ip: str) -> dict:
         """
-        Executes the PUT request to update the DNS record
-        
+        Update the DNS record to point to the provided IP address.
+
         Returns:
-            The updated DNS record object from the PUT response body
+            dict: Updated DNS record from Cloudflare response
+
         Raises:
-            RuntimeError: If the API PUT request fails
+            RuntimeError: If the API request fails or response is invalid
         """
 
-        # is_collection = False
-        # update_url = self._build_resource_url(is_collection, record_id)
-
-        # Common Base Path for all DNS record operations within the zone
-        base_path = (
+        url = (
             f"{self.api_base_url}/zones/"
-            f"{self.zone_id}/dns_records"
+            f"{self.zone_id}/dns_records/"
+            f"{self.dns_record_id}"
         )
-        update_url = base_path + f"/{self.dns_record_id}"
 
         payload = {
             "type": self.record_type,
@@ -166,73 +163,33 @@ class CloudflareClient:
         }
         
         try:
-            resp = requests.put(update_url, headers=self.headers, json=payload, timeout=Config.API_TIMEOUT)
+            resp = requests.put(
+                url, headers=self.headers, json=payload, timeout=Config.API_TIMEOUT
+            )
             resp.raise_for_status()
         except requests.RequestException as e:
-            raise RuntimeError(f"API PUT failed for record {self.dns_record_id}: {e}")
+            raise RuntimeError(
+                f"Cloudflare PUT failed for DNS record " 
+                f"[{self.dns_record_id}] → {new_ip}"
+                ) from e
 
-        # Efficiency: Extract the new record from the PUT response body
-        put_resp_data = resp.json()
-        new_dns_record = put_resp_data.get("result")
-        self.logger.debug(f"PUTTT JSON response:\n{json.dumps(put_resp_data, indent=2)}")
-
-        if not new_dns_record:
-            self.logger.warning("Successful PUT but response body was incomplete.")
-            return {} 
-
-        return new_dns_record
-
-
-    # --- Orchestrator Method (Control Flow) ---
-    def sync_dns(self, detected_ip: str) -> dict | None:
-        """
-        Orchestrates the DNS synchronization
-        
-        Returns:
-            dict: The new DNS record info (with 'modified_on') if updated
-            None: If the IP was unchanged (skipped), indicating no API interaction occurred
-        Raises:
-            RuntimeError: If any Cloudflare API operation fails
-        """
-
-        # Single PUT operation (update DNS record)
+        # Extract the new record from the PUT response body
         try:
-            new_dns_record = self.update_dns_record(detected_ip)
-        except RuntimeError as e:
-            raise RuntimeError(f"Failed to update DNS record → {detected_ip}: {e}") from e
+            put_resp_data = resp.json()
+        except ValueError as e:
+            raise RuntimeError(
+                "PUT succeeded but response was not valid JSON"
+            ) from e
+        
+        self.logger.debug(
+            f"PUT JSON response:\n%s",
+            json.dumps(put_resp_data, indent=2),
+        )
+
+        new_dns_record = put_resp_data.get("result")
+        if not new_dns_record:
+            raise RuntimeError(
+                "PUT succeeded but response contained no DNS record"
+            )
 
         return new_dns_record
-
-# For reference:
-
-# DNS records JSON response:
-# {
-#   "result": [
-#     {
-#       "id": "******",
-#       "name": "vpn.",
-#       "type": "A",
-#       "content": "101.34.48.69",
-#       "proxiable": true,
-#       "proxied": false,
-#       "ttl": 60,
-#       "settings": {},
-#       "meta": {},
-#       "comment": null,
-#       "tags": [],
-#       "created_on": "2025-08-26T02:33:04.952328Z",
-#       "modified_on": "2025-11-25T02:13:54.401647Z"
-#     }
-#   ],
-#   "success": true,
-#   "errors": [],
-#   "messages": [],
-#   "result_info": {
-#     "page": 1,
-#     "per_page": 100,
-#     "count": 1,
-#     "total_count": 1,
-#     "total_pages": 1
-#   }
-# }
-
