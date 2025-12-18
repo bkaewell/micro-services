@@ -1,0 +1,52 @@
+# --- Standard library imports ---
+import random
+
+# --- Project imports ---
+from .config import Config
+from .logger import get_logger
+
+
+# --- Scheduling policy constants ---
+DNS_UPDATE_JITTER = 5  # seconds (fixed, internal safety margin)
+
+class SchedulingPolicy:
+    def __init__(self):
+        self.requested_interval = Config.CYCLE_INTERVAL
+        self.min_ttl = Config.CLOUDFLARE_MIN_TTL
+        self.enforce_policy = Config.ENFORCE_TTL_POLICY
+        self.jitter = DNS_UPDATE_JITTER
+        self.logger = get_logger("scheduling_policy")
+
+    def effective_base_interval(self) -> int:
+        """
+        Returns the base interval that will be used for scheduling.
+
+        When enforcement is enabled, guarantees:
+            base_interval - jitter >= MIN_TTL
+        """
+        min_safe = self.min_ttl + self.jitter
+
+        if not self.enforce_policy:
+            return self.requested_interval
+
+        if self.requested_interval >= min_safe:
+            return self.requested_interval
+
+        # Enforcement path
+        self.logger.warning(
+            "CYCLE_INTERVAL=%ss is unsafe with ±%ss jitter; "
+            "enforcing minimum safe interval of %ss",
+            self.requested_interval,
+            self.jitter,
+            min_safe,
+        )
+
+        return min_safe
+
+    def next_sleep(self, elapsed: float) -> float:
+        return max(
+            0.0,
+            self.effective_base_interval
+            + random.uniform(-self.jitter, self.jitter)
+            - elapsed,
+        )
