@@ -74,7 +74,7 @@ def dns_ready(hostname: str = "api.cloudflare.com") -> bool:
     """
     Returns True if DNS resolution for Cloudflare is functional.
 
-    This is mission-critical DNS for the agent.
+    This is mission-critical DNS for the infra agent.
     """
     try:
         socket.gethostbyname(hostname)
