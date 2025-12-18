@@ -40,15 +40,9 @@ class CloudflareClient:
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
         }
-        self.record_type = "A"   # Fixed type
-
-        #ttl: TTL
-        #(default: 1)
-        #Time To Live (TTL) of the DNS record in seconds. Setting to 1 means 'automatic'. 
-        #Value must be between 60 and 86400, with the minimum reduced to 30 for Enterprise zones.
-        self.ttl = 1            # Time-to-Live
-        #self.ttl = 60            # Time-to-Live
-        self.proxied = False     # Grey cloud icon (not proxied thru Cloudflare)
+        self.record_type = "A"  # Fixed type
+        self.ttl = 1            # auto → resolves to 60s (30s for Enterprise)
+        self.proxied = False    # Grey cloud icon (not proxied thru Cloudflare)
 
     def validate_cloudflare(self) -> None:
         """
