@@ -14,7 +14,7 @@ def print_summary():
     logger.info("===== Runtime Summary =====")
     logger.info(f"Router IP:                     {Config.Hardware.ROUTER_IP}")
     logger.info(f"Smart Plug IP:                 {Config.Hardware.PLUG_IP}")
-    logger.info(f"Debug Flag:                    {Config.DEBUG_ENABLED}")
+    logger.info(f"Debug Flag:                    {Config.LOG_LEVEL}")
     logger.info(f"Watchdog Self-Healing Flag:    {Config.WATCHDOG_ENABLED}")
     logger.info("==========================\n")
 
@@ -40,8 +40,7 @@ def run_sanity_checks() -> None:
 
     try:
         resp = requests.get(
-            f"http://{Config.Hardware.PLUG_IP}/relay/0",
-            timeout=2
+            f"http://{Config.Hardware.PLUG_IP}/relay/0", timeout=Config.API_TIMEOUT
         )
         if resp.status_code != 200:
             logger.warning(
