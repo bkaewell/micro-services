@@ -1,14 +1,17 @@
+# --- Standard library imports ---
 import os
 import time
 import json
 import gspread
 import requests
 
+# --- Third-party imports ---
 from typing import Optional
 from dotenv import load_dotenv
 from google.auth.exceptions import TransportError
 from google.auth import exceptions as auth_exceptions
 
+# --- Project imports ---
 from .config import Config
 from .logger import get_logger
 from .cache import GOOGLE_SHEET_ID_FILE
@@ -105,10 +108,6 @@ class GSheetsService:
         if self.worksheet:
             return self.worksheet
         
-        # # Verify client integrity and is ready
-        # self.get_client()   # Will NOT force a new client here unless one doesn't exist
-        # client = self.client # Use internal client state
-
         # Get the authenticated client instance. This will either return the
         # cached client or create a new one with the timeout
         client = self.get_client() 
@@ -233,3 +232,4 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
+
