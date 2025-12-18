@@ -5,14 +5,12 @@ import logging
 
 # --- Project imports ---
 from .config import Config
-from .agent import NetworkWatchdog
+from .infra_agent import NetworkWatchdog
 from .logger import get_logger, setup_logging
+from .scheduling_policy import SchedulingPolicy
 
 
-def main_loop(
-        watchdog: NetworkWatchdog, 
-        interval: int = 60,
-    ):
+def main_loop(watchdog: NetworkWatchdog, policy: SchedulingPolicy):
     """
     Supervisor loop running once per interval.
     """
@@ -20,18 +18,14 @@ def main_loop(
     logger = get_logger("main_loop")
 
     while True:
-        cycle_start = time.monotonic()
+        start = time.monotonic()
         
-        # --- Run the Cycle ---
         try:
             watchdog.run_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during run cycle: {e}")
 
-        # --- Maintain Fixed Cycle Interval ---
-        elapsed = time.monotonic() - cycle_start
-        remaining = max(0.0, interval - elapsed)
-
+        remaining = policy.next_sleep(time.monotonic() - start)
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
 
@@ -43,19 +37,18 @@ def main():
     """
 
     # Setup logging policy
-    if Config.LOG_LEVEL:
-        setup_logging(level=getattr(logging, Config.LOG_LEVEL))
-    else:
-        setup_logging()
+    setup_logging(level=getattr(logging, Config.LOG_LEVEL))
     logger = get_logger("main")
+    logger.info("🚀 Starting Cloudflare DNS Reconciliation Infra Agent")
     logger.debug(f"Python version: {sys.version}")
 
-    # Initialize core components
+    # Policy
+    policy = SchedulingPolicy()    
+
+    # Core infra agent
     watchdog = NetworkWatchdog()
     
-    # Start loop, passing initialized components
-    logger.info("🚀 Starting network maintenance cycle...")
-    main_loop(watchdog, Config.CYCLE_INTERVAL)
+    main_loop(watchdog, policy)
 
 if __name__ == "__main__":
     main()
