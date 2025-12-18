@@ -75,8 +75,8 @@ class NetworkWatchdog:
         Workflow:
         1. Detect the current external IP
         2. Check DNS state using cache and/or DoH (source of truth)
-        3. Update Cloudflare only when the IP is out of sync
-        4. Refresh local state and emit audit telemetry
+        3. Update Cloudflare only if the IP has changed
+        4. Refresh local state and log the results
 
         Optimized for the common case where DNS is already correct,
         with built-in timing and clear logging for observability.
@@ -143,9 +143,7 @@ class NetworkWatchdog:
                 self.timer.end_cycle()
                 return True
 
-            # --- STATE 2: Out-of-Sync, Cloudflare DNS Update Needed ---
-            #update_result = self.cloudflare_client.sync_dns(detected_ip)
-
+            # --- PHASE 2: Cloudflare DNS Update Needed ---
             update_result = self.cloudflare_client.update_dns(detected_ip)
 
             update_cloudflare_ip(detected_ip)   # Refresh cache
