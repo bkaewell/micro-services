@@ -17,9 +17,9 @@ class SchedulingPolicy:
         self.jitter = DNS_UPDATE_JITTER
         self.logger = get_logger("scheduling_policy")
 
-    def effective_base_interval(self) -> int:
+    def effective_runtime_interval(self) -> int:
         """
-        Returns the base interval that will be used for scheduling.
+        Returns the final runtime interval that will be used for scheduling.
 
         When enforcement is enabled, guarantees:
             base_interval - jitter >= MIN_TTL
@@ -46,7 +46,7 @@ class SchedulingPolicy:
     def next_sleep(self, elapsed: float) -> float:
         return max(
             0.0,
-            self.effective_base_interval
+            self.effective_runtime_interval()
             + random.uniform(-self.jitter, self.jitter)
             - elapsed,
         )
