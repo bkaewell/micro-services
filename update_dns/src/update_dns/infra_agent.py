@@ -24,12 +24,12 @@ class NetworkWatchdog:
 
     def __init__(self, max_consecutive_failures=3):
 
-        # Initialize time, clients, logs, and timing
+        # Initialize time, clients, logs, and benchmark timing
         self.time = TimeService()
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
         self.logger = get_logger("agent")
-        self.timer = Timer(self.logger)
+        self.timer = Timer(self.logger) 
 
         # --- Cloudflare IP Cache Init ---
         try:
@@ -97,14 +97,14 @@ class NetworkWatchdog:
         detected_ip = get_ip()
         self.timer.lap("utils.get_ip()")
 
-        #######################
-        #######################
-        ## For testing only
-        #######################
-        #######################
+        # ######################
+        # ######################
+        # # For testing only
+        # ######################
+        # ######################
         # self.count += 1
         # if self.count % 3 == 0:
-        #     detected_ip = "192.168.1.1"   # For testing only
+        #     detected_ip = "1.2.3.4"   # For testing only
         # else:
         #     detected_ip = get_ip()
 
