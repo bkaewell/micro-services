@@ -28,7 +28,7 @@ class NetworkWatchdog:
         self.time = TimeService()
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
-        self.logger = get_logger("agent")
+        self.logger = get_logger("infra_agent")
         self.timer = Timer(self.logger) 
 
         # --- Cloudflare IP Cache Init ---
