@@ -24,24 +24,30 @@ class SchedulingPolicy:
         When enforcement is enabled, guarantees:
             base_interval - jitter >= MIN_TTL
         """
+        
         min_safe = self.min_ttl + self.jitter
 
-        if not self.enforce_policy:
+        # --- Production enforcement ---
+        if self.enforce_policy:
+            if self.requested_interval < min_safe:
+                self.logger.warning(
+                    "CYCLE_INTERVAL=%ss is below safe minimum (%ss). Enforcing %ss.",
+                    self.requested_interval,
+                    min_safe,
+                    min_safe,
+                )
+                return min_safe
             return self.requested_interval
 
-        if self.requested_interval >= min_safe:
-            return self.requested_interval
+        # --- Testing mode: warn if unsafe, but do not enforce ---
+        if self.requested_interval < self.min_ttl:
+            self.logger.warning(
+                "CYCLE_INTERVAL=%ss is below TTL minimum (%ss). Allowed because ENFORCE_TTL_POLICY=false.",
+                self.requested_interval,
+                self.min_ttl,
+            )
 
-        # Enforcement path
-        self.logger.warning(
-            "CYCLE_INTERVAL=%ss is unsafe with ±%ss jitter; "
-            "enforcing minimum safe interval of %ss",
-            self.requested_interval,
-            self.jitter,
-            min_safe,
-        )
-
-        return min_safe
+        return self.requested_interval
 
     def next_sleep(self, elapsed: float) -> float:
         return max(
