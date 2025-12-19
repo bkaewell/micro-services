@@ -232,4 +232,3 @@ class GSheetsService:
                     f"{e.__class__.__name__}: {e}"
                 )
                 raise # Re-raise to crash the process and ensure the scheduler sees the failure
-

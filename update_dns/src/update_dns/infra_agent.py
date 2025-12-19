@@ -7,7 +7,7 @@ from .logger import get_logger
 from .time_service import TimeService
 from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
-from .google_sheets_service import GSheetsService
+from .gsheets_service import GSheetsService
 from .utils import get_ip, dns_ready, doh_lookup, Timer
 from .cache import get_cloudflare_ip, update_cloudflare_ip
 #from .db import log_metrics
