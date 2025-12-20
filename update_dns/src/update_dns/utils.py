@@ -13,13 +13,13 @@ logger = get_logger("utils")
 
 def is_valid_ip(ip: str) -> bool:
     """
-    Validate an IP address using socket.
+    Validate an IPv4 address using socket.
 
     Args:
-        ip: IP address string to validate.   
+        ip: IPv4 address string to validate.   
 
     Returns: 
-        True if the IP address is valid, False otherwise.
+        True if the IPv4 address is valid, False otherwise.
     """
 
     try:
@@ -30,44 +30,36 @@ def is_valid_ip(ip: str) -> bool:
 
 def get_ip() -> str | None:
     """
-    Fetch the external IP address.
+    Resolve the current external IPv4 address.
 
-    Returns: 
-        External IP address as a string or None if no service succeeds.  
+    Tries multiple plaintext IP services in priority order.
+    Returns the first valid IP or None if all sources fail. 
     """
 
-    # API endpoints (redundant, outputs plain text, ranked by reliability)
-    ip_services = [
+    services = (
         "https://api.ipify.org", 
         "https://ifconfig.me/ip", 
         "https://ipv4.icanhazip.com", 
         "https://ipecho.net/plain", 
-    ]
+    )
 
-    # Try API endpoints in order until one succeeds
-    for service in ip_services:
+    timeout = Config.API_TIMEOUT
+
+    for url in services:
         try:
-            resp = requests.get(service, timeout=Config.API_TIMEOUT)
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
 
-            if resp.ok:
-                ip = resp.text.strip()
-                
-                if is_valid_ip(ip):
-                    logger.debug(f"🌐 External IP acquired ({service})")
-                    return ip
-                
-                logger.warning(
-                    f"Invalid IP returned from {service}: {ip!r}"
-                )
+            ip = resp.text.strip()
+            if is_valid_ip(ip):
+                logger.debug(f"🌐 External IP acquired ({url})")
+                return ip
+            
+            logger.warning(f"Invalid IP returned from {url}: {ip!r}")
 
         except requests.RequestException as e:
-            logger.warning(
-                f"IP fetch failed from {service}: proceeding to next service...\n"
-                f" {e.__class__.__name__}: {e}"
-            )
-            continue  # Skip on network/timeout error and try next
+            logger.warning(f"IP lookup failed via {url} ({e.__class__.__name__})")
     
-    # No service returned a valid IP
     return None
 
 def dns_ready(hostname: str = "api.cloudflare.com") -> bool:
