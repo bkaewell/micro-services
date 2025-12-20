@@ -1,55 +1,39 @@
+# --- Standard library imports ---
 import json
-import pathlib
-
-from typing import Dict, Any
-
-from .logger import get_logger
-
-# Define the logger once for the entire module
-logger = get_logger("cache")
+from pathlib import Path
+from typing import Optional
 
 
-# --- Centralized Cache Directory Setup ---
-# When running locally, pathlib.Path.home() points to your macOS home directory.
-# When running in Docker, it points to the container user's home directory (e.g., /home/user or /root),
-# which is the correct, writeable location for application data within the container.
-CACHE_DIR = pathlib.Path.home() / ".cache" / "update_dns"
+# --- Cache layout ---
+CACHE_DIR = Path.home() / ".cache" / "update_dns"
 CACHE_DIR.mkdir(parents=True, exist_ok=True) 
 
-# --- Specific Cache File Paths ---
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
 GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
 
-# --- Cloudflare IP Cache Functions ---
-def _read_json_file(file_path: pathlib.Path) -> Dict[str, Any]:
-    """Helper function to safely read and parse a JSON file using pathlib"""
+# --- Cloudflare IP cache ---
+def load_cached_cloudflare_ip() -> Optional[str]:
+    """
+    Return the last known Cloudflare IP from local cache.
 
-    if not file_path.exists():
-        return {}
-    
+    This cache is a performance optimization only.
+    Failure or corruption is treated as a cache miss.
+    """
     try:
-        # Get the content as a single string
-        content = file_path.read_text()
-        return json.loads(content)
-    except (json.JSONDecodeError, OSError):
-        # OSError handles permission issues or other file I/O errors (like IOError)
-        return {}
+        data = json.loads(CLOUDFLARE_IP_FILE.read_text())
+        return data.get("last_ip")
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
 
-def _write_json_file(file_path: pathlib.Path, data: Dict[str, Any]):
-    """Helper function to safely write data to a JSON file using pathlib"""
+def store_cloudflare_ip(ip: str) -> None:
+    """
+    Persist the current Cloudflare IP to local cache.
+
+    Best-effort only — failures are intentionally ignored.
+    """
     try:
-        content = json.dumps(data, indent=4)
-        file_path.write_text(content)
+        CLOUDFLARE_IP_FILE.write_text(
+            json.dumps({"last_ip": ip}, indent=2)
+        )
     except OSError:
-        # Log error if file write fails (like IOError)
         pass
-
-def get_cloudflare_ip() -> str:
-    """Reads the last known IP from the Cloudflare cache file"""
-    data = _read_json_file(CLOUDFLARE_IP_FILE)
-    return data.get("last_ip", "")
-
-def update_cloudflare_ip(new_ip: str):
-    """Writes the new IP to the Cloudflare cache file upon successful DNS update"""
-    data = {"last_ip": new_ip}
-    _write_json_file(CLOUDFLARE_IP_FILE, data)
