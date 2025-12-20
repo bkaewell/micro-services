@@ -128,7 +128,7 @@ class NetworkWatchdog:
             self.timer.lap("cache.load_cached_cloudflare_ip()")
 
             if cached_ip == detected_ip:
-                self.logger.info("🐾🌤️  Cloudflare DNS OK [L1 Cache]")
+                self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
                 self.timer.end_cycle()
                 return True
 

@@ -10,7 +10,7 @@ from .logger import get_logger, setup_logging
 from .scheduling_policy import SchedulingPolicy
 
 
-def main_loop(watchdog: NetworkWatchdog, policy: SchedulingPolicy):
+def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
     """
     Supervisor loop running once per interval.
     """
@@ -26,7 +26,7 @@ def main_loop(watchdog: NetworkWatchdog, policy: SchedulingPolicy):
             logger.exception(f"Unhandled exception during run cycle: {e}")
 
         remaining = policy.next_sleep(time.monotonic() - start)
-        logger.info(f"💤 Scheduling ... {policy.effective_runtime_interval()}")
+        #logger.info(f"💤 Scheduling ... {policy.effective_runtime_interval()}")
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
 
@@ -49,7 +49,7 @@ def main():
     # Core infra agent
     watchdog = NetworkWatchdog()
     
-    main_loop(watchdog, policy)
+    main_loop(policy, watchdog)
 
 if __name__ == "__main__":
     main()

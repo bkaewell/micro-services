@@ -1,6 +1,9 @@
+# --- Standard library imports ---
 import os
 
+# --- Third-party imports ---
 from dotenv import load_dotenv
+
 
 # Load .env once
 load_dotenv()
