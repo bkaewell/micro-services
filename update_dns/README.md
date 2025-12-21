@@ -1,409 +1,183 @@
-# 🚀 Autonomous Network Management Agent Microservice
-A lightweight, containerized microservice for **IP address ingestion, processing, and third-party API integration.** Designed with **scalability, automation, and real-time monitoring** in mind.
-  
-  
-## 📌 Features
-- **Process IP Address Data:** Efficiently ingest and store IP-related data for analytics
-- **Integrate with External APIs:** Supports Google Services, ip-api, and more
-- **Automated & On-Demand Execution:** Run as a **scheduled cron job** or **manually**
-- **Containerized Deployment:** Fully Dockerized for seamless deployment
-- **Logging & Monitoring:** Supports **real-time logs for operational insights**
-  
-  
-## ⚡ Quick Setup
-### Clone the repo
-```bash
-git clone https://github.com/bkaewell/micro-services.git
-cd micro-services/ip_upload
-```
-
-### Set up environment variables
-```bash
-cp .env.example .env
-```
-Update `.env` to configure **API keys, Google filenames/worksheet tabs, location mappings, and cron settings.**
-
-### (Optional) Set up Google API key
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Enable required APIs (i.e. Google Sheets, Google Maps, Cloud Vision, etc.)
-3. Generate an API key under APIs & Services > Credentials
-4. Add the API key to the `.env`
-5. (Optional) Secure your API key:
-In the API key settings, [restrict usage](https://cloud.google.com/docs/authentication/api-keys#securing) (i.e. by HTTP referrers or IP addresses) for enhanced security
-  
-  
-## 🐳 Containerization
-This microservice is **containerized using Docker** and **orchestrated with Docker Compose** for both **manual execution and scheduled automation.**
-### Run the Service in Two Modes
-```bash
-# Start both manual (`app`) and automated cron (`cron`) services
-docker-compose up --build -d
-```
-To run **only one mode,** specify the service:
-```bash
-docker-compose up app -d   # Manual test mode
-docker-compose up cron -d  # Scheduled cron job mode
-```
-To **stop all running services:**
-```bash
-docker-compose down
-```
-  
-  
-## ⚙️ DevOps & Automation
-🕒 Cron Job Schedule (`cron/mycron`) -- runs once per day @ 23:59 New York time:
-```bash
-59 23 * * * /usr/local/bin/python3 /app/src/ip_upload.py >> /var/log/cron.log 2>&1
-```
-
-### Cron Job Integration
-1. `cron/mycron` → Defines the schedule
-2. `docker-entrypoint.sh` → Determines whether to start cron or execute manually
-3. `docker-compose.yaml` → Defines the cron job as a separate service
-
-
-## 👨‍💻 Development
-For debugging or running the script locally **without Docker,** you can execute manually:
-```bash
-pip install -r requirements.txt
-python src/ip_upload.py
-```
-  
-  
-## 🛠 Deployment & Monitoring
-This microservice supports **real-time observability** using Docker logs.
-
-### Production Deployment
-Deploy in **detached mode** to run in the background:
-```bash
-docker-compose up -d
-```
-Verify running services:
-```bash
-docker ps
-```
-
-### Real-time Logs & Monitoring
-Monitor logs for **manual execution (`app`)** or **cron execution (`cron`):**
-```bash
-docker logs -f <ip_uploader_app | ip_uploader_cron>
-```
-For more details:
-```bash
-docker-compose logs --tail=100 -f
-```
-  
-  
-## 🧨 Testing (TBD)
-### Run Unit Tests
-```bash
-pytest tests/
-```
 
-### Run Manual IP Upload Test
-```bash
-docker exec -it ip_uploader_app python /app/src/ip_upload.py
-```
-  
-  
-## 📂 Repository Overview
-```
+Microservice/Infra-agent
+Designed to be boring and resilient 
 
-update_dns/
-├── tests/                  # Unit tests
-├─ __main__.py             # Runs the loop
-├─ network_autopilot.py    # Orchestrates all logic
-├─ watchdog.py             # Internet check & smart plug reset
-├─ cloudflare.py           # Cloudflare + Sheets logic
-├─ sheets.py               # Google Sheets updates
-├─ db.py                   # SQLite metrics (optional)
-├─ utils.py                # Helpers (ping, time, IP fetch)
 
-├── docker-entrypoint.sh    # Controls execution (manual vs. cron)
-├── Dockerfile              # Containerization
-├── .env.example            # Sample env file
-├── README.md               
-└── docker-compose.yaml     # Docker setup
+In industry terms, an infrastructure agent is:
+A long-running, autonomous process that observes infrastructure state and reconciles it toward a desired configuration, usually via APIs, under defined policies.
 
-```
-  
-  
-## Why This Microservice?
-Designed for **scalability, efficiency, and ease of deployment,** this service simplifies **IP data ingestion** with robust API integrations and a containerized environment.
+Key characteristics:
+-Runs continuously (daemon / service / container)
+-Periodic control loop
+-Talks to infra APIs (DNS, cloud, networking, etc.)
+-Policy-driven behavior (rate limits, TTLs, backoff)
+-Makes idempotent updates
+-Emits structured logs / metrics
+-Designed to be boring and reliable
 
 
 
-Verify package visibility (without full run):
-```
-poetry run python -c "import update_dns; print(update_dns.__file__)"
-```
+You are building:
 
-poetry check
+A Cloudflare DNS reconciliation agent
 
+More explicitly:
+-Observes: current public IP
+-Observes: current DNS record state
+-Compares: desired vs actual state
+-Reconciles: updates DNS only when drift is detected
+-Operates: under configurable TTL and rate-limit policies
+-Supports: test vs production enforcement modes
+-Runs: as a containerized, long-running service
 
-Dockerfile:
-# -------------------------------------------------------------------
-# 4. Install Python dependencies (cached and no dev deps in prod)
-# -------------------------------------------------------------------
-COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-interaction --no-ansi --no-root
-# For production without dev dependencies, uncomment:
-#RUN poetry install --no-root --without dev
 
-DNS Leak test
-IP leak test
 
+Buzzwords you can safely use (and actually justify)
 
+Here are resume-safe terms you can use without eyebrow raises:
 
+Core framing
+-Infrastructure Agent
+-Control Loop–based Service
+-Reconciliation Engine
+-Policy-Driven Infra Automation
+-Autonomous Infra Process
 
-Development (live editing, base first, override second extends settings from the first base):
-```
-docker compose up -d --build
+System design language
+-Idempotent API reconciliation
+-Eventually consistent state management
+-Policy enforcement with environment-based overrides
+-Jittered scheduling to avoid thundering herd effects
+-Safe defaults with explicit operator escape hatches
+-Soft vs hard policy enforcement
+-Rate-limit-aware API orchestration
 
+Cloud/networking flavor
+-Dynamic DNS (DDNS) agent
+-Edge DNS automation
+-Cloudflare API integration
+-TTL-aware DNS update strategy
 
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
-```
+Reliability signals
+-Observability via structured logging
+-Production-safe defaults
+-Config-driven behavior
+-Failure-tolerant control loop
 
-Production (frozen code):
-```
-docker compose -f docker-compose.yaml up -d
-```
 
-docker compose up -d --build
 
 
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build manual_run
 
 
 
-Step 1: Build the Docker image
-Make sure you’re in your project root where your Dockerfile is:
-```
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml build test
-```
 
-Step 2: Run the container with an interactive shell
-Instead of running the normal Python command, override it to get a shell:
-```
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml run --rm test /bin/bash
-```
-- --rm → automatically deletes the container when you exit, keeps things clean
-- /bin/bash → opens a Bash shell inside the container
+Keep a DNS record updated when the IP changes, without manual intervention.
 
-Now you’re inside the container
+Those services:
+-Poll your current public IP
+-Detect change
+-Push an update to a DNS provider
+-Rely on low TTLs so clients converge quickly
 
-Step 3: Inspect environment variables
-Inside the container:
-```
-printenv
-```
+Your update_dns loop:
+-Detects current IP
+-Compares to DNS
+-Updates Cloudflare if changed
 
-Step 4: Test your Python script
-Still inside the container, run:
-```
-python -m update_dns.__main__
-```
-- If you set PYTHONUNBUFFERED=1 in the dev compose file, your print statements will show immediately
+Dynamic DNS implemented via Cloudflare API
 
-Step 5: Exit the container
-```
-exit
-```
-- If you used --rm, the container is deleted automatically
+DDNS TTL:
+Control Loop: 60 seconds
+Effective TTL: 60 seconds
 
-Python package directory: micro-service/update_dns/src/update_dns/...
 
 
-🌐 Update DNS Microservice
+Goal was to not write a python script, but a microservice control loop
 
-A lightweight, containerized service that monitors your public IP address and automatically updates DNS records when changes are detected. Designed for dynamic networks, remote systems, and self-hosted setups that need reliable domain availability.
 
-📌 Features
 
-Dynamic DNS Updates: Detects IP changes and syncs records via Cloudflare API
 
-Smart Network Watchdog: Periodically checks internet connectivity and resets hardware if needed
+🟢 Add jitter
 
-Automated or Manual Execution: Run continuously or trigger on demand
+To avoid:
 
-Containerized Deployment: Optimized Docker setup for local or distributed environments
+-Thundering herd
+-Rate-limit patterns
+-Clock-aligned bursts
+-An appearance of DDoS (Distributed Denial-of-Service) attacks
 
-Logging & Observability: Provides clear, real-time runtime output for debugging and operations
+sleep(60 + random.uniform(-5, +5))
 
 
+Cloudflare likes this.
 
 
 
-Test locally:
-```
-poetry run python -m update_dns.__main__
-```
+Concept	Purpose
+TTL	How long clients cache
+Control loop	How often you check for change
 
 
-Deployed production code:
-docker compose build app
-docker compose run --rm app /bin/bash
-printenv
-python -m update_dns.__main__
+Make Requirements Less Dumb:
+INTERVAL >= TTL cache Cloudflare
 
-Deployed dev code:
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml build test
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml run --rm test /bin/bash
-printenv
-python -m update_dns.__main__
 
 
-Cleaned up stale .venv/
-~/repo/micro-services/update_dns/
-rm -fr .venv
-poetry config virtualenvs.in-project true
-poetry env use python3.14
-poetry install --with dev
-poetry env info
-poetry run which python
-poetry run which pytest
-poetry run pytest
 
-poetry run pytest -v
-poetry run pytest tests/test_to_local_time.py
-poetry run pytest -v tests/test_watchdog.py
 
-# Check Container Logs for Exceptions
-docker logs vpn_ddns_cron | tail -n 200
 
+Example resume bullets (strong but honest)
 
-# Logging Style Quick Reference
-| Level       | Emoji | 
-| ----------- | ----- |
-| `INFO`      | 🟢    |
-| `WARNING`   | ⚠️    |
-| `ERROR`     | ❌    | 
-| `EXCEPTION` | 🔥    | 
+Here are a few options depending on tone.
 
+**Crisp and senior-leaning**
 
-Get into the OSI model network architecture (7 layers) for the purpose of this script...
+Designed and implemented a policy-driven Cloudflare DNS infrastructure agent using a reconciliation control loop to safely manage dynamic IP updates under TTL and rate-limit constraints.
 
-Check Method	Why It's Best for Recovery:
-check_internet() (Simple Ping/DNS)	This is the minimum viable test. You only need confirmation that Layer 3 (Network) and possibly basic Layer 4 (Transport) are operational. It requires fewer network resources and is faster than HTTPS.
+**Slightly more technical**
 
-get_public_ip() (HTTPS API Call)	This is an application-layer test that checks Layers 5-7 (Session, Presentation, Application). If the router is still slow or resolving DNS poorly right after a reboot, this more complex check might fail even if the connection is fundamentally back online.
+Built a long-running infrastructure agent that reconciles public IP state with Cloudflare DNS records using idempotent updates, jittered scheduling, and environment-configurable policy enforcement.
 
+**Big-tech-coded**
 
+Implemented an eventually consistent DNS reconciliation service with production-safe defaults, operator-controlled policy enforcement, and rate-limit-aware scheduling to prevent API abuse.
 
-## 🛡️ Self-Healing Dynamic DNS & Network Watchdog 🧭
+**If you want DDNS explicitly**
 
-This project employs a robust, multi-layered approach to guarantee network stability and accurate DNS synchronization, leveraging the **OSI 7-Layer Model** to intelligently diagnose and recover from failures.
+Developed a containerized Dynamic DNS (DDNS) infra agent integrating with Cloudflare APIs, featuring TTL-aware scheduling, jittered control loops, and test vs production policy modes.
 
-### The Problem: False Negatives and Unreliable Checks
 
-In dynamic DNS (DDNS) systems, a simple internet failure can temporarily halt service. Traditional checks often rely on low-level pings, which can return "OK" even if high-level services are failing, leading to false negatives and missed DNS updates.
 
-### The Solution: Layered Validation and Methodical Recovery
 
-Our agent executes the network check and self-healing in three distinct phases, moving up and down the network stack:
 
-#### 1. Primary Health Check (Layers 5-7: Application)
+What Changed — And Why (get_ip())
+1. raise_for_status() > if resp.ok
 
-* **Action:** The main loop's first task is to execute **`get_public_ip()`**. This involves an HTTPS request to an external API (like IPify).
-* **Rationale:** Success requires the entire network stack to be functional: DNS resolution, TCP handshakes, SSL negotiation, and application-layer communication. If this **Layer 7** test succeeds, we have the highest confidence that the internet is fully operational for the DNS update.
-* **Failure Trigger:** If this high-level check fails, it signals a systemic network issue, triggering the watchdog.
+-Converts HTTP failure into a single control path
+-Less branching
+-Idiomatic requests
 
-#### 2. Watchdog Recovery Check (Layers 3 & 4: Transport/Network)
+Big-tech rule: errors are control flow, not booleans.
 
-If the primary check fails, the **Watchdog** system attempts a self-healing reboot of the smart plug, followed by a two-phase network verification:
+GET_IP(): “The IP resolver is intentionally boring: sequential, defensive, and observable. Reliability comes from redundancy, not complexity.”
 
-* **Phase A: Router Check (LAN Health)**
-    * **Action:** Ping the local **router IP** (e.g., `192.168.1.1`).
-    * **Rationale:** This confirms the local physical connection (Layer 1/2) is back and the router's **Layer 3** stack is responding on the LAN side.
-* **Phase B: External Check (WAN Health)**
-    * **Action:** Ping a reliable external host like **`8.8.8.8`**.
-    * **Rationale:** This confirms the router has successfully established its **WAN link** with the ISP and can forward packets to the internet (a full **Layer 3** confirmation). 
 
-[Image of the OSI Model showing Network and Application Layers]
+Never trust the network. Ever.
+This is exactly why your earlier Cloudflare PUT failed fast — and that’s good engineering.
 
 
-Only when both the local and external checks pass does the Watchdog declare the system healthy and allow the main DNS loop to resume.
+**is_valid_ip()??????**
+This is classic defensive boundary validation:
+-External input
+-Zero cost
+-Prevents silent corruption
+-Converts weird failures into safe retries
+This is fail fast / fail cheap in its purest form.
 
-#### 3. Diagnostic Logging & Resilience
 
-This methodical approach minimizes false negatives and provides better diagnostic logging during self-healing: The log clearly shows which layer (Application, Router, or WAN) failed, leading to faster troubleshooting. The recovery process is resilient, checking the local network *before* wasting attempts on the external WAN link.
 
-
-
-
-
-### 🧩 Connecting the REST Endpoints
-
-The Cloudflare API design necessitates a two-step process to update a DNS record:
-
-1.  We use the **Collection Resource Endpoint (`list_url`)** with an `HTTP GET` to identify *which* DNS record (by name and type) we want to change.
-2.  The resulting JSON response yields the **`record_id`**. This ID is the critical piece of **connective tissue** that transforms the vague query URL into the specific **Single Resource Endpoint (`update_url`)** used for the `HTTP PUT` or `PATCH` operation. This ensures we update the correct, unique DNS entry.
-
-| URL Type | API Request Method | Data Included in URL | Primary Purpose |
-| :--- | :--- | :--- | :--- |
-| **`list_url`** | `GET` | Zone ID + Query Parameters (`name`, `type`) | **Find** the record and get its unique **ID**. |
-| **`update_url`** | `PUT`/`PATCH` | Zone ID + **Record ID** | **Modify** the specific record. |
-
-Lessons Learned:
-- A robust agent must enforce short, non-negotiable timeouts on all external I/O operations (API calls). This prevents cascading failures and indefinite hangs (Never rely on the default timeout of an HTTP client library)
-- .reconnect(force_new=True)
-
-
-
-
-
-# ⚙️ Scheduling Philosophy and Anomaly Detection
-
-This service is designed to perform its core task—checking the public IP and updating the heartbeat status—at a precise, fixed interval (currently **60 seconds**). Maintaining this tight schedule is crucial for reliable external monitoring.
-
-To achieve stability and predictability, we iterated through two common scheduler philosophies before settling on the current design.
-
----
-
-## Phase 1: Exploring "Philosophy 2: Constant Sleep" (Latency Focus)
-Our initial approach focused on minimizing latency within the cycle's `work` phase (`run_cycle`). This philosophy maintains a constant sleep duration and lets the schedule slip if the work takes too long.
-
-### Metrics
-
-| Metric          | Calculation                     | Purpose                       |
-|-----------------|---------------------------------|-------------------------------|
-| Work Duration   | `time.monotonic() - start_time` | Measures API/network latency. |
-| Sleep Duration  | `interval` (always 60s)         | Fixed sleep duration.         |
-
-### Trade-Off
-**Pro:** Clearly exposes upstream latency issues. For example, if the Google Sheets API takes 6 seconds, the total cycle becomes **66 seconds**, making latency obvious via schedule drift.
-
-**Con (Deciding Factor):** Causes **schedule drift**. If network operations are slow, the agent falls further behind with every cycle (e.g., updates at 0s → 66s → 132s → ...). This violates the requirement for consistent throughput.
-
----
-
-## Final Design: "Philosophy 1: Variable Sleep" (Throughput Focus)
-We chose a scheduler that prioritizes constant cycle throughput so the IP check and heartbeat validation occur reliably once per minute—even if network latency fluctuates.
-
-This approach uses a **variable sleep duration** to compensate for network operation time.
-
-### Metrics
-
-| Metric          | Calculation                           | Purpose                       |
-|-----------------|-----------------------------------------|-------------------------------|
-| Cycle Duration  | `time.monotonic() - start_time`         | Measures total cycle work.    |
-| Sleep Duration  | `max(0, interval - cycle_duration)`     | Adjusts to hit 60-second mark |
-
-### Benefits
-- **Guaranteed Heartbeat:** If work takes 6 seconds, sleep becomes 54 seconds, starting the next cycle at exactly 60 seconds.
-- **External Reliability:** Heartbeats in Google Sheets remain consistently ~60 seconds apart.
-
----
-
-## Anomaly Detection
-To avoid masking true system issues (like suspension/wake), a threshold check is used before starting each cycle.
-
-The threshold is:
-```
-interval (60s) + buffer (6s) = 66s
-```
-If the time elapsed since the last cycle exceeds **66 seconds**, the system triggers a **SYSTEM WAKEUP ANOMALY**.
-
-This forces a `reconnect()` on the Google Sheets client to clean up stale TCP sessions, ensuring reliability after suspension.
-```
+**Docker**
+root@c**********b:~/.cache/update_dns# more cloudflare_ip.json 
+{
+    "last_ip": "100.34.53.106"
+}
