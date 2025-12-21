@@ -63,6 +63,11 @@ class NetworkWatchdog:
         self.failed_ping_count = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.max_consecutive_failures = max_consecutive_failures
+
+        self.outage_start_ts: float | None = None
+        self.reboot_grace_period = 240  # seconds (tunable)
+
+
         ##################
         # For testing only
         ##################
@@ -86,7 +91,6 @@ class NetworkWatchdog:
                 False if the cycle exited in a degraded or recovery path.
         """
 
-        self.timer.start_cycle()
 
         # --- Get current local time ---
         dt_local, dt_str = self.time.now_local()
@@ -94,6 +98,7 @@ class NetworkWatchdog:
         self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
 
         # --- PHASE 1: Network Health Check ---
+        self.timer.start_cycle()
         detected_ip = get_ip()
         self.timer.lap("utils.get_ip()")
 
@@ -145,8 +150,7 @@ class NetworkWatchdog:
 
             # --- PHASE 2: Cloudflare DNS Update Needed ---
             update_result = self.cloudflare_client.update_dns(detected_ip)
-
-            store_cloudflare_ip(detected_ip)   # Refresh cache
+            store_cloudflare_ip(detected_ip)
             self.timer.lap("cloudflare_client.update_dns()")
             dns_last_modified = self.time.iso_to_local_string(
                 update_result.get('modified_on')
@@ -169,32 +173,51 @@ class NetworkWatchdog:
             return True
         
         else:
-            # --- Phase 3: Failure Handling & Watchdog ---
+            now = time.monotonic()
+
+            # Initialize outage window
+            if self.outage_start_ts is None:
+                self.outage_start_ts = now
+                self.logger.warning("Internet down — starting outage timer")
+
+            outage_duration = now - self.outage_start_ts
             self.failed_ping_count += 1
+
+            # --- Failure classification (cheap signal, big value) ---
+            if elapsed_ms < 50:
+                # Fast failure → router reboot / no route
+                self.logger.info(
+                    f"Fast network failure ({elapsed_ms:.1f} ms); "
+                    f"likely reboot in progress [{outage_duration:.0f}s elapsed]"
+                )
+                return True  # graceful skip
+
             self.logger.warning(
-                f"Internet check failed [{self.failed_ping_count}/{self.max_consecutive_failures}]"
+                f"Internet check failed "
+                f"[{self.failed_ping_count}/{self.max_consecutive_failures}] "
+                f"({elapsed_ms:.1f} ms)"
             )
 
-            # Check flag in .env
-            if self.watchdog_enabled and self.failed_ping_count >= self.max_consecutive_failures:
-                self.logger.error("Triggering smart plug reset...")
+            # --- Grace window: allow normal recovery ---
+            if outage_duration < self.reboot_grace_period:
+                self.logger.info(
+                    f"Within reboot grace window "
+                    f"({outage_duration:.0f}/{self.reboot_grace_period}s)"
+                )
+                return True
 
-                # The execution of reset_smart_plug() is the self-correction action
+            # --- Escalation gate ---
+            if self.watchdog_enabled and self.failed_ping_count >= self.max_consecutive_failures:
+                self.logger.error(
+                    "Outage exceeded grace window — triggering smart plug reset"
+                )
+
                 if not reset_smart_plug():
                     self.logger.error("Smart plug reset failed")
 
-
-                # # --- DNS Readiness Gate ---
-                # if not dns_ready("api.cloudflare.com"):
-                #     self.logger.warning(
-                #         "Cloudflare DNS resolver not ready; skipping API-dependent steps this cycle"
-                #     )
-                #     return True   # graceful skip, not a failure
-
-
                 # --- DNS Warm-up Phase (NO RESET HERE) ---
                 self.logger.info("Waiting for DNS to become ready...")
-                max_dns_wait = 30  # seconds
+                max_dns_wait = 30
                 dns_ready_deadline = time.monotonic() + max_dns_wait
 
                 while time.monotonic() < dns_ready_deadline:
@@ -207,6 +230,7 @@ class NetworkWatchdog:
                         "DNS not ready after reset; deferring DNS sync this cycle"
                     )
 
+                # Reset state after corrective action
                 self.failed_ping_count = 0
-            
-            return False
+                self.outage_start_ts = None
+
