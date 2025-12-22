@@ -15,42 +15,6 @@ logger = get_logger("watchdog")
 # Responsible for the self-healing and monitoring of the recovery
 
 
-# def ping_host(host: str) -> bool:
-#     """Return True if host responds to a single ping."""
-#     try:
-#         result = subprocess.run(
-#             ["ping", "-c", "1", "-W", "1", host],
-#             stdout=subprocess.DEVNULL,
-#             stderr=subprocess.DEVNULL,
-#         )
-#         return result.returncode == 0
-#     except Exception:
-#         return False
-
-# More robust ping checking...
-
-# def check_internet() -> bool:
-#     """Ping 8.8.8.8 three times fast — only fail if ALL three fail"""
-#     for i in range(3):
-#         # -c 1 = one packet, -W 2 = 2-second timeout
-#         result = subprocess.run(
-#             ["ping", "-c", "1", "-W", "2", "8.8.8.8"],
-#             stdout=subprocess.DEVNULL,
-#             stderr=subprocess.DEVNULL,
-#         )
-#         if result.returncode == 0:
-#             return True
-#         time.sleep(1 if i < 2 else 0)  # tiny pause between retries
-#     return False
-
-def check_internet(host: str="8.8.8.8") -> bool:
-    """
-    Ping a host (default: Google DNS 8.8.8.8) to verify network connectivity.
-    """
-
-    # This check uses ICMP (part of Layer 3/4) and is quick and low-resource
-    return os.system(f"ping -c 1 -W 2 {host} > /dev/null 2>&1") == 0
-
 def reset_smart_plug() -> bool:
     """
     Power-cycle the smart plug with response validation and controlled delays. 
