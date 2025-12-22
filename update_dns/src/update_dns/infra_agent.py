@@ -1,5 +1,6 @@
 # --- Standard library imports ---
 import time
+from enum import Enum, auto
 
 # --- Project imports ---
 from .config import Config
@@ -12,6 +13,11 @@ from .utils import get_ip, dns_ready, doh_lookup, Timer
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip
 #from .db import log_metrics
 
+# For informational purposes, not operational
+class NetworkState(Enum):
+    HEALTHY = auto()
+    ROUTER_DOWN = auto()
+    WAN_DOWN = auto()
 
 class NetworkWatchdog:
     """
@@ -22,7 +28,7 @@ class NetworkWatchdog:
     healthy with explicit recovery behavior on sustained failures.
     """
 
-    def __init__(self, max_consecutive_failures=3):
+    def __init__(self, max_consecutive_failures=4):
 
         # Initialize time, clients, logs, and benchmark timing
         self.time = TimeService()
@@ -73,7 +79,7 @@ class NetworkWatchdog:
         ##################
         self.count = 0
 
-    def run_cycle(self):
+    def run_cycle(self) -> NetworkState:
         """
         Run a single watchdog cycle.
 
@@ -91,17 +97,25 @@ class NetworkWatchdog:
                 False if the cycle exited in a degraded or recovery path.
         """
 
-
         # --- Get current local time ---
         dt_local, dt_str = self.time.now_local()
         heartbeat = self.time.heartbeat_string(dt_local)
         self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
 
         # --- PHASE 1: Network Health Check ---
+
+        #router_up = ping_router(Config.Hardware.ROUTER_IP)   # TBD
+        router_up = True
+
+        if not router_up:
+            self.logger.warning("Router un-reachable (likely rebooting)")
+            self.failed_ping_count = 0
+            return NetworkState.ROUTER_DOWN   # hard stop, never recover here
+
+
         self.timer.start_cycle()
         detected_ip = get_ip()
         self.timer.lap("utils.get_ip()")
-
         # ######################
         # ######################
         # # For testing only
@@ -112,6 +126,18 @@ class NetworkWatchdog:
         #     detected_ip = "1.2.3.4"   # For testing only
         # else:
         #     detected_ip = get_ip()
+
+
+        if detected_ip:
+            state = HEALTHY
+            self.logger.info(f"🌐 IP OK [{detected_ip}]")
+            # reset failure counters
+            self.failed_ping_count = 0
+
+
+
+
+
 
         if detected_ip:
             self.logger.info(f"🌐 IP OK [{detected_ip}]")
@@ -135,7 +161,7 @@ class NetworkWatchdog:
             if cached_ip == detected_ip:
                 self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
                 self.timer.end_cycle()
-                return True
+                return NetworkState.HEALTHY
 
             # --- DoH check (authoritative) ---
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
@@ -146,7 +172,7 @@ class NetworkWatchdog:
                 self.logger.info("🐾🌤️  Cloudflare DNS OK [DoH]")
                 store_cloudflare_ip(detected_ip)   # Refresh cache
                 self.timer.end_cycle()
-                return True
+                return NetworkState.HEALTHY
 
             # --- PHASE 2: Cloudflare DNS Update Needed ---
             update_result = self.cloudflare_client.update_dns(detected_ip)
@@ -170,67 +196,15 @@ class NetworkWatchdog:
                 f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
             )
             self.timer.end_cycle()
-            return True
-        
-        else:
-            now = time.monotonic()
+            return NetworkState.HEALTHY
 
-            # Initialize outage window
-            if self.outage_start_ts is None:
-                self.outage_start_ts = now
-                self.logger.warning("Internet down — starting outage timer")
 
-            outage_duration = now - self.outage_start_ts
-            self.failed_ping_count += 1
+        # Router is up, but WAN is down
+        return NetworkState.WAN_DOWN
+        # incremenet failure count
 
-            # --- Failure classification (cheap signal, big value) ---
-            if elapsed_ms < 50:
-                # Fast failure → router reboot / no route
-                self.logger.info(
-                    f"Fast network failure ({elapsed_ms:.1f} ms); "
-                    f"likely reboot in progress [{outage_duration:.0f}s elapsed]"
-                )
-                return True  # graceful skip
+        #if router_up and failures >= WAN_FAILURE_THRESHOLD:
+        #    trigger_recovery() / reset_smart_plug()
 
-            self.logger.warning(
-                f"Internet check failed "
-                f"[{self.failed_ping_count}/{self.max_consecutive_failures}] "
-                f"({elapsed_ms:.1f} ms)"
-            )
 
-            # --- Grace window: allow normal recovery ---
-            if outage_duration < self.reboot_grace_period:
-                self.logger.info(
-                    f"Within reboot grace window "
-                    f"({outage_duration:.0f}/{self.reboot_grace_period}s)"
-                )
-                return True
-
-            # --- Escalation gate ---
-            if self.watchdog_enabled and self.failed_ping_count >= self.max_consecutive_failures:
-                self.logger.error(
-                    "Outage exceeded grace window — triggering smart plug reset"
-                )
-
-                if not reset_smart_plug():
-                    self.logger.error("Smart plug reset failed")
-
-                # --- DNS Warm-up Phase (NO RESET HERE) ---
-                self.logger.info("Waiting for DNS to become ready...")
-                max_dns_wait = 30
-                dns_ready_deadline = time.monotonic() + max_dns_wait
-
-                while time.monotonic() < dns_ready_deadline:
-                    if dns_ready("api.cloudflare.com"):
-                        self.logger.info("Cloudflare DNS ready after recovery")
-                        break
-                    time.sleep(2)
-                else:
-                    self.logger.warning(
-                        "DNS not ready after reset; deferring DNS sync this cycle"
-                    )
-
-                # Reset state after corrective action
-                self.failed_ping_count = 0
-                self.outage_start_ts = None
 
