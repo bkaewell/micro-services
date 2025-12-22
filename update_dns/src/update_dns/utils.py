@@ -1,5 +1,4 @@
 # --- Standard library imports ---
-import os
 import time
 import socket
 from typing import Optional
@@ -15,16 +14,30 @@ from .logger import get_logger
 # Define the logger once for the entire module
 logger = get_logger("utils")
 
-def ping_host(ip: str, timeout: float = 1.0) -> bool:
+def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
     """
-    Check Layer 3 reachability to an IP address.
+    Check host reachability efficiently and cross-platform.
 
-    Used to distinguish:
-    - LAN health (router reachability)
-    - WAN health (external routing)
+    Performs a TCP connection (Layer 4) to the given IP/hostname and port, 
+    avoiding ICMP so no admin privileges are required.  
+
+    Conceptually, this function helps distinguish:
+      - LAN health (router reachability)
+      - WAN health (external routing)
+
+    Args:
+        ip: IP address or hostname to check.
+        port: TCP port to attempt (default 80).
+        timeout: Seconds before giving up.
+
+    Returns:
+        True if the host is reachable, False otherwise.
     """
-    # This check uses ICMP (part of Layer 3/4) and is quick and low-resource
-    return os.system(f"ping -c 1 -W 2 {ip} > /dev/null 2>&1") == 0
+    try:
+        with socket.create_connection((ip, port), timeout=timeout):
+            return True
+    except (OSError, socket.timeout):
+        return False
 
 def is_valid_ip(ip: str) -> bool:
     """
@@ -76,6 +89,7 @@ def get_ip() -> str | None:
             logger.warning(f"IP lookup failed via {url} ({e.__class__.__name__})")
     
     return None
+
 
 # def get_ip() -> tuple[str | None, float]:
 #     start = time.monotonic()
