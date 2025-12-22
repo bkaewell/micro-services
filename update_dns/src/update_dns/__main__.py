@@ -21,12 +21,13 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
         start = time.monotonic()
         
         try:
-            watchdog.run_cycle()
+            state = watchdog.run_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during run cycle: {e}")
 
         remaining = policy.next_sleep(time.monotonic() - start)
         #logger.info(f"💤 Scheduling ... {policy.effective_runtime_interval()}")
+        logger.info(f"🛜 State [{state}]")
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
 

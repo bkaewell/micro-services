@@ -6,7 +6,7 @@ from enum import Enum, auto
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
-from .watchdog import reset_smart_plug
+from .watchdog import reset_smart_plug, check_internet
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
 from .utils import get_ip, dns_ready, doh_lookup, Timer
@@ -97,23 +97,29 @@ class NetworkWatchdog:
                 False if the cycle exited in a degraded or recovery path.
         """
 
-        # --- Get current local time ---
+        self.timer.start_cycle()
+
+        # --- Heartbeat (local only, no network dependency) ---
         dt_local, dt_str = self.time.now_local()
         heartbeat = self.time.heartbeat_string(dt_local)
         self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
 
-        # --- PHASE 1: Network Health Check ---
-
+        # --- PHASE 0: Router Alive Gate ---
         #router_up = ping_router(Config.Hardware.ROUTER_IP)   # TBD
-        router_up = True
+        #self.timer.lap("utils.ping_router()")
+        router_up = check_internet(Config.Hardware.ROUTER_IP)
+        self.logger.info(f"check_internet() = {router_up}")
+        self.timer.lap("utils.check_internet()")
+
 
         if not router_up:
-            self.logger.warning("Router un-reachable (likely rebooting)")
+            #self.logger.warning("Router un-reachable (likely rebooting)")
             self.failed_ping_count = 0
+            self.timer.end_cycle()
             return NetworkState.ROUTER_DOWN   # hard stop, never recover here
 
 
-        self.timer.start_cycle()
+        # --- PHASE 1: External Connectivity Check (WAN) ---
         detected_ip = get_ip()
         self.timer.lap("utils.get_ip()")
         # ######################
@@ -126,17 +132,6 @@ class NetworkWatchdog:
         #     detected_ip = "1.2.3.4"   # For testing only
         # else:
         #     detected_ip = get_ip()
-
-
-        if detected_ip:
-            state = HEALTHY
-            self.logger.info(f"🌐 IP OK [{detected_ip}]")
-            # reset failure counters
-            self.failed_ping_count = 0
-
-
-
-
 
 
         if detected_ip:
@@ -163,7 +158,7 @@ class NetworkWatchdog:
                 self.timer.end_cycle()
                 return NetworkState.HEALTHY
 
-            # --- DoH check (authoritative) ---
+            # --- Authoritative DoH verification ---
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
             self.timer.lap("utils.doh_lookup()")
 
@@ -199,12 +194,22 @@ class NetworkWatchdog:
             return NetworkState.HEALTHY
 
 
-        # Router is up, but WAN is down
+        # --- PHASE 3: WAN Failure (Router UP, Internet DOWN) ---
+        self.failed_ping_count += 1
+
+        self.logger.warning(
+            f"WAN un-reachable "
+            f"[{self.failed_ping_count}/{self.max_consecutive_failures}]"
+        )
+
+        # --- Escalation gate ---
+        if (
+            self.watchdog_enabled 
+            and self.failed_ping_count >= self.max_consecutive_failures
+        ):
+            self.logger.error("Persistent WAN failure → triggering recovery")
+            # trigger_recovery()
+            # reset_smart_plug()
+            self.failed_ping_count = 0   # reset after action
+        
         return NetworkState.WAN_DOWN
-        # incremenet failure count
-
-        #if router_up and failures >= WAN_FAILURE_THRESHOLD:
-        #    trigger_recovery() / reset_smart_plug()
-
-
-
