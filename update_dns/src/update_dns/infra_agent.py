@@ -6,18 +6,30 @@ from enum import Enum, auto
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
-from .watchdog import reset_smart_plug, check_internet
+from .watchdog import reset_smart_plug
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
-from .utils import get_ip, dns_ready, doh_lookup, Timer
+from .utils import ping_host, get_ip, dns_ready, doh_lookup, Timer
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip
 #from .db import log_metrics
 
-# For informational purposes, not operational
+
 class NetworkState(Enum):
     HEALTHY = auto()
     ROUTER_DOWN = auto()
     WAN_DOWN = auto()
+    ERROR = auto()
+    UNKNOWN = auto()
+
+    @property
+    def label(self) -> str:
+        return {
+            NetworkState.HEALTHY: "Healthy",
+            NetworkState.ROUTER_DOWN: "Router rebooting / offline",
+            NetworkState.WAN_DOWN: "WAN unreachable",
+            NetworkState.ERROR: "Unexpected error / exception",
+            NetworkState.UNKNOWN: "Network state undetermined",
+        }[self]
 
 class NetworkWatchdog:
     """
@@ -69,6 +81,7 @@ class NetworkWatchdog:
         self.failed_ping_count = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.max_consecutive_failures = max_consecutive_failures
+        self.router_ip = Config.Hardware.ROUTER_IP
 
         self.outage_start_ts: float | None = None
         self.reboot_grace_period = 240  # seconds (tunable)
@@ -105,11 +118,9 @@ class NetworkWatchdog:
         self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
 
         # --- PHASE 0: Router Alive Gate ---
-        #router_up = ping_router(Config.Hardware.ROUTER_IP)   # TBD
-        #self.timer.lap("utils.ping_router()")
-        router_up = check_internet(Config.Hardware.ROUTER_IP)
-        self.logger.info(f"check_internet() = {router_up}")
-        self.timer.lap("utils.check_internet()")
+        router_up = ping_host(self.router_ip)
+        self.logger.info(f"ping_host() = {router_up}")
+        self.timer.lap("utils.ping_host()")
 
 
         if not router_up:
@@ -195,6 +206,9 @@ class NetworkWatchdog:
 
 
         # --- PHASE 3: WAN Failure (Router UP, Internet DOWN) ---
+
+        #wan_up = ping_host("8.8.8.8")
+
         self.failed_ping_count += 1
 
         self.logger.warning(
@@ -213,3 +227,4 @@ class NetworkWatchdog:
             self.failed_ping_count = 0   # reset after action
         
         return NetworkState.WAN_DOWN
+
