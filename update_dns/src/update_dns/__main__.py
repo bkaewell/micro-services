@@ -6,6 +6,7 @@ import logging
 # --- Project imports ---
 from .config import Config
 from .logger import get_logger, setup_logging
+from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
 from .infra_agent import NetworkState, NetworkWatchdog
 
@@ -50,7 +51,7 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
             state = NetworkState.ERROR
 
         logger.info(f"🛜 Network State [{state.label}]")
-        
+
         remaining = policy.next_sleep(time.monotonic() - start)
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
@@ -67,6 +68,8 @@ def main():
     logger = get_logger("main")
     logger.info("🚀 Starting Cloudflare DNS Reconciliation Infra Agent")
     logger.debug(f"Python version: {sys.version}")
+
+    validate_runtime_config()
 
     # Policy
     policy = SchedulingPolicy()    
