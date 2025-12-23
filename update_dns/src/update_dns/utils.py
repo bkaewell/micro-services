@@ -2,6 +2,7 @@
 import time
 import socket
 from typing import Optional
+from dataclasses import dataclass
 
 # --- Third-party imports ---
 import requests
@@ -13,6 +14,13 @@ from .logger import get_logger
 
 # Define the logger once for the entire module
 logger = get_logger("utils")
+
+@dataclass(frozen=True)
+class IPResolutionResult:
+    ip: str | None
+    elapsed_ms: float
+    attempts: int
+    success: bool
 
 def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
     """
@@ -56,12 +64,18 @@ def is_valid_ip(ip: str) -> bool:
     except socket.error:
         return False
 
-def get_ip() -> str | None:
+def get_ip() -> IPResolutionResult:
     """
     Resolve the current external IPv4 address.
 
     Tries multiple plaintext IP services in priority order.
     Returns the first valid IP or None if all sources fail. 
+    """
+
+    """
+    Resolve the current external IPv4 address using multiple fallback services.
+
+    Latency reflects both network health and fallback usage.
     """
 
     services = (
@@ -72,24 +86,35 @@ def get_ip() -> str | None:
     )
 
     timeout = Config.API_TIMEOUT
+    start = time.monotonic()
+    attempts = 0
 
     for url in services:
+        attempts += 1
         try:
             resp = requests.get(url, timeout=timeout)
             resp.raise_for_status()
 
             ip = resp.text.strip()
             if is_valid_ip(ip):
-                logger.debug(f"🌐 External IP acquired ({url})")
-                return ip
+                return IPResolutionResult(
+                    ip=ip,
+                    elapsed_ms=(time.monotonic() - start) * 1000,
+                    attempts=attempts,
+                    success=True,
+                )
             
             logger.warning(f"Invalid IP returned from {url}: {ip!r}")
 
         except requests.RequestException as e:
             logger.warning(f"IP lookup failed via {url} ({e.__class__.__name__})")
     
-    return None
-
+    return IPResolutionResult(
+        ip=None,
+        elapsed_ms=(time.monotonic() - start) * 1000,
+        attempts=attempts,
+        success=False,
+    )
 
 # def get_ip() -> tuple[str | None, float]:
 #     start = time.monotonic()
