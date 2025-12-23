@@ -1,4 +1,3 @@
-import os
 import time
 import requests
 
@@ -8,85 +7,48 @@ from .logger import get_logger
 
 logger = get_logger("watchdog")
 
-# Watchdog module specifically designed to monitor the health of a primary system
-# (internet connection and DNS service) and trigger a pre-defined recovery action
-# (power-cylcing the smart plug) if the primary system stops responding
-
-# Responsible for the self-healing and monitoring of the recovery
-
-
-def reset_smart_plug() -> bool:
+def trigger_recovery() -> bool:
     """
-    Power-cycle the smart plug with response validation and controlled delays. 
-    Verifies network recovery in two phases: Local Router and External Host.
+    Execute a physical network recovery action by power-cycling
+    the smart plug connected to the router/modem.
+
+    This function performs NO health checks.
+    All validation and escalation decisions are handled upstream
+    by the network watchdog state machine.
+
+    Returns:
+        True if the power-cycle command sequence completed successfully,
+        False otherwise.
     """
-    router_ip = Config.Hardware.ROUTER_IP
     plug_ip = Config.Hardware.PLUG_IP
     reboot_delay = Config.Hardware.REBOOT_DELAY
     init_delay = Config.Hardware.INIT_DELAY
 
-    # Define a reliable external host (Google DNS) for Layer 3 validation
-    EXTERNAL_HOST = "8.8.8.8"
-
     try:
-        # --- Phase 0: Smart Plug Power-Cycle ---
-        # (Checks Layer 7 Application & Layer 4 Transport for local control)        
-
-        # Power-cycle OFF
-        off_resp = requests.get(
+        # Power OFF
+        off = requests.get(
             f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
         )
-        if not off_resp.ok:
-            logger.error(f"Failed to power OFF smart plug | HTTP {off_resp.status_code})")
-            return False
+        off.raise_for_status()
 
-        logger.info(f"Waiting {reboot_delay}s after power-off...")
+        logger.info("🔌 Smart plug powered OFF")
         time.sleep(reboot_delay)
 
-        # Power-cycle ON
-        on_resp = requests.get(
+        # Power ON
+        on = requests.get(
             f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
         )
-        if not on_resp.ok:
-            logger.error(f"Failed to power ON smart plug | HTTP {on_resp.status_code})")
-            return False        
-        
-        logger.info(f"Waiting {init_delay}s for network devices to reinitialize...")
+        on.raise_for_status()
+
+        logger.info("🔌 Smart plug powered ON")
         time.sleep(init_delay)
 
-        max_attempts = 5
+        logger.info("♻️ Recovery sequence completed")
+        return True
 
-        # --- Phase 1: Verify Router (Local Network Link) ---
-        # Checks if the router's Layer 3 (Network) stack is initialized on the LAN side
-        logger.info("Attempting to verify router is back online (Local Check)...")
-        router_reachable = False
-        for attempt in range(max_attempts):
-            if check_internet(router_ip):
-                logger.info(f"Router is reachable ({attempt + 1}/{max_attempts} attempts)")
-                router_reachable = True
-                break
-            time.sleep(3)
-        
-        if not router_reachable:
-            logger.error(f"Router un-reachable after {max_attempts} attempts post-reset")
-            return False
-
-        # --- Phase 2: Verify External Connectivity (WAN Link) ---
-        # Checks if the router has established its WAN link and can forward traffic (Layer 3)
-        logger.info(f"Attempting to verify external access via {EXTERNAL_HOST} (WAN Check)...")
-        for attempt in range(max_attempts):
-            # Checking 8.8.8.8 confirms the WAN side is active and traffic is routable.
-            if check_internet(EXTERNAL_HOST):
-                logger.info(f"✅ External host ({EXTERNAL_HOST}) reachable ({attempt + 1}/{max_attempts} attempts)")
-                return True # Success: Both local and external checks passed.
-            time.sleep(3)
-            
-        logger.error(f"External host ({EXTERNAL_HOST}) unreachable after {max_attempts} attempts.")
-        return False # Failure: Local network is up, but the ISP/Internet link is not.
-
-    except requests.exceptions.RequestException:
-        logger.exception("Network error communicating with smart plug")
+    except requests.RequestException:
+        logger.exception("Failed to communicate with smart plug")
         return False
     except Exception:
-        logger.exception("Unexpected error during smart plug reset")
+        logger.exception("Unexpected error during recovery")
         return False
