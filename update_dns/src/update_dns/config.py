@@ -43,8 +43,3 @@ class Config:
             REBOOT_DELAY = int(os.getenv("REBOOT_DELAY", 30))
         except ValueError:
             REBOOT_DELAY = 30
-
-        try:
-            INIT_DELAY = int(os.getenv("INIT_DELAY", 30))
-        except ValueError:
-            INIT_DELAY = 30

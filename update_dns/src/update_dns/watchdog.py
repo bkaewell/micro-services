@@ -22,7 +22,6 @@ def trigger_recovery() -> bool:
     """
     plug_ip = Config.Hardware.PLUG_IP
     reboot_delay = Config.Hardware.REBOOT_DELAY
-    init_delay = Config.Hardware.INIT_DELAY
 
     try:
         # Power OFF
@@ -30,7 +29,6 @@ def trigger_recovery() -> bool:
             f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
         )
         off.raise_for_status()
-
         logger.info("🔌 Smart plug powered OFF")
         time.sleep(reboot_delay)
 
@@ -39,10 +37,7 @@ def trigger_recovery() -> bool:
             f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
         )
         on.raise_for_status()
-
         logger.info("🔌 Smart plug powered ON")
-        time.sleep(init_delay)
-
         logger.info("♻️ Recovery sequence completed")
         return True
 
