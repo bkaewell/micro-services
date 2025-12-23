@@ -98,18 +98,6 @@ def get_ip() -> str | None:
 #     return ip, elapsed_ms
 
 
-def dns_ready(hostname: str = "api.cloudflare.com") -> bool:
-    """
-    Returns True if DNS resolution for Cloudflare is functional.
-
-    This is mission-critical DNS for the infra agent.
-    """
-    try:
-        socket.gethostbyname(hostname)
-        return True
-    except socket.gaierror:
-        return False
-
 def doh_lookup(hostname : str) -> Optional[str]:
     """
     Resolve a hostname to an IPv4 address using Cloudflare DNS-over-HTTPS.
