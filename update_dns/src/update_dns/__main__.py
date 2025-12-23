@@ -34,10 +34,10 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
     Notes:
         - NetworkState captures LAN/WAN/Router health and transient issues.
         - Logs include both state and sleep interval for observability.
-        - Designed for 24/7 unattended operation with resilient recovery.    """
+        - Designed for 24/7 unattended operation with resilient recovery.    
+    """
 
     logger = get_logger("main_loop")
-
     state = NetworkState.UNKNOWN
 
     while True:
@@ -49,9 +49,9 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
             logger.exception(f"Unhandled exception during run cycle: {e}")
             state = NetworkState.ERROR
 
-        remaining = policy.next_sleep(time.monotonic() - start)
-        #logger.info(f"💤 Scheduling ... {policy.effective_runtime_interval()}")
         logger.info(f"🛜 Network State [{state.label}]")
+        
+        remaining = policy.next_sleep(time.monotonic() - start)
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
         time.sleep(remaining)
 

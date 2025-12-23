@@ -6,10 +6,10 @@ from enum import Enum, auto
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
-from .watchdog import reset_smart_plug
+from .watchdog import trigger_recovery
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
-from .utils import ping_host, get_ip, dns_ready, doh_lookup, Timer
+from .utils import ping_host, get_ip, doh_lookup, Timer
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip
 #from .db import log_metrics
 
@@ -83,10 +83,6 @@ class NetworkWatchdog:
         self.max_consecutive_failures = max_consecutive_failures
         self.router_ip = Config.Hardware.ROUTER_IP
 
-        self.outage_start_ts: float | None = None
-        self.reboot_grace_period = 240  # seconds (tunable)
-
-
         ##################
         # For testing only
         ##################
@@ -94,23 +90,40 @@ class NetworkWatchdog:
 
     def run_cycle(self) -> NetworkState:
         """
-        Run a single watchdog cycle.
+        Execute a single watchdog evaluation cycle and return the observed network state.
 
-        Workflow:
-        1. Detect the current external IP
-        2. Check DNS state using cache and/or DoH (source of truth)
-        3. Update Cloudflare only if the IP has changed
-        4. Refresh local state and log the results
+        This function implements a defensive, state-machine-based health check designed
+        to distinguish between normal operation, router reboot scenarios, transient
+        failures, and persistent WAN outages.
 
-        Optimized for the common case where DNS is already correct,
-        with built-in timing and clear logging for observability.
+        Decision flow:
+            1. Router health check (LAN reachability)
+            - If the router is unreachable, assume reboot or offline state.
+            - No recovery action is taken in this state.
+
+            2. WAN health check (external reachability)
+            - If the router is reachable but external connectivity fails,
+                track consecutive failures.
+
+            3. Escalation and recovery
+            - Only after a configurable number of consecutive WAN failures
+                is a recovery action triggered (e.g., power-cycling modem/router).
+            - Counters are reset after recovery attempts.
+
+        Design goals:
+            - Avoid false positives during expected router reboots
+            - Ignore transient packet loss and DNS flakiness
+            - Fail fast, but recover conservatively
+            - Provide clear, observable system state for logging and monitoring
 
         Returns:
-            bool: True if the cycle completed normally or made progress,
-                False if the cycle exited in a degraded or recovery path.
+            NetworkState:
+                HEALTHY        – Router and WAN are reachable
+                ROUTER_DOWN    – Router unreachable (rebooting or offline)
+                WAN_DOWN       – Router reachable, WAN unreachable
+                ERROR          – Unexpected internal error
+                UNKNOWN        – Initial or indeterminate state
         """
-
-        self.timer.start_cycle()
 
         # --- Heartbeat (local only, no network dependency) ---
         dt_local, dt_str = self.time.now_local()
@@ -118,17 +131,14 @@ class NetworkWatchdog:
         self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
 
         # --- PHASE 0: Router Alive Gate ---
+        self.timer.start_cycle()
         router_up = ping_host(self.router_ip)
-        self.logger.info(f"ping_host() = {router_up}")
         self.timer.lap("utils.ping_host()")
 
-
         if not router_up:
-            #self.logger.warning("Router un-reachable (likely rebooting)")
             self.failed_ping_count = 0
             self.timer.end_cycle()
             return NetworkState.ROUTER_DOWN   # hard stop, never recover here
-
 
         # --- PHASE 1: External Connectivity Check (WAN) ---
         detected_ip = get_ip()
@@ -207,8 +217,15 @@ class NetworkWatchdog:
 
         # --- PHASE 3: WAN Failure (Router UP, Internet DOWN) ---
 
-        #wan_up = ping_host("8.8.8.8")
+        #PING_TARGET_IP = "api.cloudflare.com"
+        PING_TARGET_IP = "8.8.8.8"   # Google DNS Primary IP (Stable DNS check)
+        wan_up = ping_host(PING_TARGET_IP)
 
+        if wan_up:
+            self.failed_ping_count = 0
+            return NetworkState.HEALTHY
+
+        # --- WAN is DOWN ---
         self.failed_ping_count += 1
 
         self.logger.warning(
@@ -222,9 +239,11 @@ class NetworkWatchdog:
             and self.failed_ping_count >= self.max_consecutive_failures
         ):
             self.logger.error("Persistent WAN failure → triggering recovery")
-            # trigger_recovery()
-            # reset_smart_plug()
-            self.failed_ping_count = 0   # reset after action
+
+            if not trigger_recovery():
+                self.logger.error("Recovery action failed")
+
+            # Always reset counter after recovery attempt
+            self.failed_ping_count = 0
         
         return NetworkState.WAN_DOWN
-
