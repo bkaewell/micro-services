@@ -1,12 +1,11 @@
 # --- Standard library imports ---
-import time
 from enum import Enum, auto
 
 # --- Project imports ---
 from .config import Config
 from .logger import get_logger
 from .time_service import TimeService
-from .watchdog import trigger_recovery
+from .recovery import trigger_recovery
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
 from .utils import ping_host, get_ip, doh_lookup, Timer
@@ -25,10 +24,10 @@ class NetworkState(Enum):
     def label(self) -> str:
         return {
             NetworkState.HEALTHY: "Healthy",
-            NetworkState.ROUTER_DOWN: "Router rebooting / offline",
-            NetworkState.WAN_DOWN: "WAN unreachable",
-            NetworkState.ERROR: "Unexpected error / exception",
-            NetworkState.UNKNOWN: "Network state undetermined",
+            NetworkState.ROUTER_DOWN: "Router unreachable (rebooting or offline)",
+            NetworkState.WAN_DOWN: "Router reachable, WAN unreachable",
+            NetworkState.ERROR: "Unexpected internal error",
+            NetworkState.UNKNOWN: "Initial or indeterminate state",
         }[self]
 
 class NetworkWatchdog:
@@ -78,7 +77,7 @@ class NetworkWatchdog:
                 "Cache cleared for recovery"
             )
 
-        self.failed_ping_count = 0
+        self.consecutive_wan_failures = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.max_consecutive_failures = max_consecutive_failures
         self.router_ip = Config.Hardware.ROUTER_IP
@@ -136,12 +135,13 @@ class NetworkWatchdog:
         self.timer.lap("utils.ping_host()")
 
         if not router_up:
-            self.failed_ping_count = 0
+            self.consecutive_wan_failures = 0
             self.timer.end_cycle()
             return NetworkState.ROUTER_DOWN   # hard stop, never recover here
 
         # --- PHASE 1: External Connectivity Check (WAN) ---
-        detected_ip = get_ip()
+        result = get_ip()
+        detected_ip = result.ip
         self.timer.lap("utils.get_ip()")
         # ######################
         # ######################
@@ -156,8 +156,12 @@ class NetworkWatchdog:
 
 
         if detected_ip:
-            self.logger.info(f"🌐 IP OK [{detected_ip}]")
-            self.failed_ping_count = 0
+            self.logger.info(
+                f"🌐 IP OK [{result.ip}] "
+                f"({result.elapsed_ms:.1f} ms, {result.attempts} attempt(s))"
+            )
+            #self.logger.info(f"🌐 IP OK [{detected_ip}]")
+            self.consecutive_wan_failures = 0
 
             # --- High-frequency heartbeat (timestamp) to Google Sheet ---
             gsheets_ok = self.gsheets_service.update_status(
@@ -222,28 +226,34 @@ class NetworkWatchdog:
         wan_up = ping_host(PING_TARGET_IP)
 
         if wan_up:
-            self.failed_ping_count = 0
+            self.consecutive_wan_failures = 0
             return NetworkState.HEALTHY
 
         # --- WAN is DOWN ---
-        self.failed_ping_count += 1
-
+        self.consecutive_wan_failures += 1
+        self.logger.warning(
+            f"🌐 IP unresolved "
+            f"({result.elapsed_ms:.1f} ms, {result.attempts} attempts)"
+        )
         self.logger.warning(
             f"WAN un-reachable "
-            f"[{self.failed_ping_count}/{self.max_consecutive_failures}]"
+            f"[{self.consecutive_wan_failures}/{self.max_consecutive_failures}]"
         )
 
         # --- Escalation gate ---
         if (
             self.watchdog_enabled 
-            and self.failed_ping_count >= self.max_consecutive_failures
+            and self.consecutive_wan_failures >= self.max_consecutive_failures
         ):
-            self.logger.error("Persistent WAN failure → triggering recovery")
+            self.logger.error(
+                "Persistent WAN failure → triggering recovery "
+                "(likely real outage)"
+            )
 
             if not trigger_recovery():
                 self.logger.error("Recovery action failed")
 
             # Always reset counter after recovery attempt
-            self.failed_ping_count = 0
+            self.consecutive_wan_failures = 0
         
         return NetworkState.WAN_DOWN
