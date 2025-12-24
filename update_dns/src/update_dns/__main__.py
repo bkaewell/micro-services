@@ -5,6 +5,7 @@ import logging
 
 # --- Project imports ---
 from .config import Config
+from .telemetry import tlog
 from .logger import get_logger, setup_logging
 from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
@@ -51,6 +52,7 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
             state = NetworkState.ERROR
 
         logger.info(f"🛜 Network State [{state.label}]")
+        tlog(logger, "🛜", "STATE", f"{state.label}")
 
         remaining = policy.next_sleep(time.monotonic() - start)
         logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
