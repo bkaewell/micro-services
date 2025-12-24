@@ -5,7 +5,7 @@ from .config import Config
 from .logger import get_logger
 
 
-logger = get_logger("watchdog")
+logger = get_logger("recovery")
 
 def trigger_recovery() -> bool:
     """
