@@ -181,3 +181,112 @@ root@c**********b:~/.cache/update_dns# more cloudflare_ip.json
 {
     "last_ip": "100.34.53.106"
 }
+
+Nuanced State Machine (HEALTHY, ROUTER_DOWN, WAN_DOWN)
+
+
+**One-line takeaway (blog-worthy) Recovery watchdog_enabled=true**
+
+-Resilience isn’t about reacting faster — it’s about reacting at the right time.
+-Failure counts tell you how often something broke. Timings tell you what kind of failure it is.
+
+
+The best solution: Two-dimensional failure logic
+
+Don’t count failures. Classify them.
+
+At big tech, this is how watchdogs are written.
+
+Introduce failure modes
+
+Instead of just:
+
+failed_ping_count += 1
+
+
+Track:
+
+failure_mode = FAST_FAIL | SLOW_FAIL | TIMEOUT
+
+Classification rule (simple & effective)
+if elapsed_ms < 50:
+    failure_mode = FAST_FAIL   # router reboot / no route
+elif elapsed_ms < 300:
+    failure_mode = SLOW_FAIL   # degraded WAN
+else:
+    failure_mode = TIMEOUT     # real outage
+
+Recovery is only allowed when the router is alive but the internet is not
+
+
+
+| Layer              | Responsibility                 |
+| ------------------ | ------------------------------ |
+| `utils`            | Primitives (ping_host, get_ip) |
+| `watchdog`         | Decision-making, escalation    |
+| `trigger_recovery` | Physical action                |
+| `infra_agent`      | State transitions              |
+| `main_loop`        | Supervision + observability    |
+
+
+**What Your State Machine Already Does Well**
+**Your system already has excellent primary signals:**
+
+| Signal               | Layer    | Used For             |
+| -------------------- | -------- | -------------------- |
+| Router ping          | L3/L4    | Detect router reboot |
+| External IP fetch    | L7       | Detect WAN usability |
+| Consecutive failures | Temporal | Avoid flapping       |
+| Smart-plug gate      | Control  | Recovery escalation  |
+
+
+
+**get_ip():**
+Latency context lets you prove:
+
+you fail fast when appropriate
+
+you don’t escalate prematurely
+
+your watchdog behaves deterministically under stress
+
+
+
+| Component            | Responsibility            |
+| -------------------- | ------------------------- |
+| `trigger_recovery()` | Power-cycle hardware      |
+| `run_cycle()`        | Observe recovery progress |
+| `SchedulingPolicy`   | Control retry cadence     |
+| State machine        | Decide HEALTHY vs DOWN    |
+
+
+
+Takes 3 versions to make something great (started work in February, September and November)
+
+
+Scheduling policy derived from the Cloudflare Time-to-Live (TTL)
+
+Random, but driving efficiency: Cost per token, per dollar, per Watt
+
+
+# --- Network Policy (NOT user configurable, strict, prevents blocking events) ---
+API_TIMEOUT = 8   # seconds (safe, balanced)
+
+
+SpaceX engineering principles, popularized by Elon Musk, follow a strict 5-step algorithm for product development: 
+1. Question Requirements
+2. Delete Parts/Processes
+3. Simplify/Optimize
+4. Accelerate Cycle Time
+5. Automate
+
+Why watchdog.py is now the wrong filename
+Historically, watchdog.py made sense because:
+- It checked network health
+- It tracked failures
+- It performed recovery
+
+Now:
+All decision-making lives in infra_agent / NetworkWatchdog
+This module only executes a physical action
+**So watchdog.py now violates the Single Responsibility Principle at the module level.**
