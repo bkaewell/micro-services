@@ -3,6 +3,7 @@ from enum import Enum, auto
 
 # --- Project imports ---
 from .config import Config
+from .telemetry import tlog
 from .logger import get_logger
 from .time_service import TimeService
 from .recovery import trigger_recovery
@@ -39,7 +40,7 @@ class NetworkWatchdog:
     healthy with explicit recovery behavior on sustained failures.
     """
 
-    def __init__(self, max_consecutive_failures=4):
+    def __init__(self, max_consec_fails=4):
 
         # Initialize time, clients, logs, and benchmark timing
         self.time = TimeService()
@@ -77,9 +78,9 @@ class NetworkWatchdog:
                 "Cache cleared for recovery"
             )
 
-        self.consecutive_wan_failures = 0
+        self.consec_wan_fails = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
-        self.max_consecutive_failures = max_consecutive_failures
+        self.max_consec_fails = max_consec_fails
         self.router_ip = Config.Hardware.ROUTER_IP
 
         ##################
@@ -127,7 +128,9 @@ class NetworkWatchdog:
         # --- Heartbeat (local only, no network dependency) ---
         dt_local, dt_str = self.time.now_local()
         heartbeat = self.time.heartbeat_string(dt_local)
-        self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
+        #self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
+        tlog(self.logger, "💚", "HEARTBEAT", "OK", primary=heartbeat) 
+
 
         # --- PHASE 0: Router Alive Gate ---
         self.timer.start_cycle()
@@ -135,10 +138,13 @@ class NetworkWatchdog:
         self.timer.lap("utils.ping_host()")
 
         if not router_up:
-            self.consecutive_wan_failures = 0
+            tlog(self.logger, "🟡", "ROUTER", "DOWN", primary=f"ip={self.router_ip}")
+            self.consec_wan_fails = 0
             self.timer.end_cycle()
             return NetworkState.ROUTER_DOWN   # hard stop, never recover here
 
+        tlog(self.logger, "🟢", "ROUTER", "UP", primary=f"ip={self.router_ip}") 
+        
         # --- PHASE 1: External Connectivity Check (WAN) ---
         result = get_ip()
         detected_ip = result.ip
@@ -156,12 +162,29 @@ class NetworkWatchdog:
 
 
         if detected_ip:
-            self.logger.info(
-                f"🌐 IP OK [{result.ip}] "
-                f"({result.elapsed_ms:.1f} ms, {result.attempts} attempt(s))"
+            # self.logger.info(
+            #     f"🌐 IP OK [{result.ip}] "
+            #     f"({result.elapsed_ms:.1f} ms, {result.attempts} attempt(s))"
+            # )
+
+            tlog(
+                self.logger,
+                "🟢",
+                "IP",
+                "OK",
+                primary=f"ip={detected_ip}",
+                meta=f"latency={result.elapsed_ms:.1f}ms | attempts={result.attempts}"
             )
+
+
             #self.logger.info(f"🌐 IP OK [{detected_ip}]")
-            self.consecutive_wan_failures = 0
+            # IP resolved successfully
+            # tlog(self.logger, logging.INFO, "IP", "OK", result.ip,
+            #     latency=f"{result.elapsed_ms:.1f}ms",
+            #     attempts=result.attempts)
+
+
+            self.consec_wan_fails = 0
 
             # --- High-frequency heartbeat (timestamp) to Google Sheet ---
             gsheets_ok = self.gsheets_service.update_status(
@@ -172,16 +195,21 @@ class NetworkWatchdog:
             self.timer.lap("gsheets_service.update_status()")
 
             if gsheets_ok:
-                self.logger.info(f"📊 GSheets uplink OK")
+                #self.logger.info(f"📊 GSheets uplink OK")
+                tlog(self.logger, "🟢", "GSheet", "OK")
 
             # --- Cache check (no network calls) ---
             cached_ip = load_cached_cloudflare_ip()
             self.timer.lap("cache.load_cached_cloudflare_ip()")
 
             if cached_ip == detected_ip:
-                self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
+                #self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
+                tlog(self.logger, "🟢", "CACHE", "HIT", primary=f"cache={cached_ip}")
                 self.timer.end_cycle()
                 return NetworkState.HEALTHY
+            else:
+                tlog(self.logger, "🟡", "CACHE", "MISS", primary=f"cache={cached_ip}")
+
 
             # --- Authoritative DoH verification ---
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
@@ -189,17 +217,29 @@ class NetworkWatchdog:
 
             # If DoH matches detected IP, DNS as seen by world is correct
             if doh_ip == detected_ip:
-                self.logger.info("🐾🌤️  Cloudflare DNS OK [DoH]")
+                #self.logger.info("🐾🌤️  Cloudflare DNS OK [DoH]")
+                tlog(self.logger, "🟢", "DNS", "OK", primary=f"doh={doh_ip}")
                 store_cloudflare_ip(detected_ip)   # Refresh cache
                 self.timer.end_cycle()
                 return NetworkState.HEALTHY
+            else:
+                tlog(self.logger, "🟡", "DNS", "STALE", f"DoH={doh_ip}", meta=f"IP={detected_ip}")    
 
             # --- PHASE 2: Cloudflare DNS Update Needed ---
             update_result = self.cloudflare_client.update_dns(detected_ip)
             store_cloudflare_ip(detected_ip)
             self.timer.lap("cloudflare_client.update_dns()")
+
             dns_last_modified = self.time.iso_to_local_string(
                 update_result.get('modified_on')
+            )
+
+            tlog(
+                self.logger,
+                "❌",
+                "DNS",
+                "UPDATE",
+                primary=f"{doh_ip} → {detected_ip}"
             )
 
             # Low-frequency audit log
@@ -211,10 +251,19 @@ class NetworkWatchdog:
             self.timer.lap("gsheets_service.update_status()")
 
             if gsheets_ok:
-                self.logger.info(f"📊 GSheets uplink OK")
-            self.logger.info(
-                f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
-            )
+                #self.logger.info(f"📊 GSheets uplink OK")
+                tlog(
+                    self.logger,
+                    "🟢",
+                    "GSH",
+                    "OK",
+                    "audit-ip-update"
+                )
+
+            # self.logger.info(
+            #     f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
+            # )
+
             self.timer.end_cycle()
             return NetworkState.HEALTHY
 
@@ -226,34 +275,68 @@ class NetworkWatchdog:
         wan_up = ping_host(PING_TARGET_IP)
 
         if wan_up:
-            self.consecutive_wan_failures = 0
+            self.consec_wan_fails = 0
+            tlog(self.logger, "🟢", "WAN", "UP", PING_TARGET_IP)
             return NetworkState.HEALTHY
 
         # --- WAN is DOWN ---
-        self.consecutive_wan_failures += 1
+        self.consec_wan_fails += 1
         self.logger.warning(
             f"🌐 IP unresolved "
             f"({result.elapsed_ms:.1f} ms, {result.attempts} attempts)"
         )
         self.logger.warning(
             f"WAN un-reachable "
-            f"[{self.consecutive_wan_failures}/{self.max_consecutive_failures}]"
+            f"[{self.consec_wan_fails}/{self.max_consec_fails}]"
         )
+
+        tlog(
+            self.logger,
+            "⚠️",
+            "WAN",
+            "DOWN",
+            primary=PING_TARGET_IP,
+            meta=f"failures={self.consec_wan_fails}/{self.max_consec_fails}"
+        )
+
 
         # --- Escalation gate ---
         if (
             self.watchdog_enabled 
-            and self.consecutive_wan_failures >= self.max_consecutive_failures
+            and self.consec_wan_fails >= self.max_consec_fails
         ):
-            self.logger.error(
-                "Persistent WAN failure → triggering recovery "
-                "(likely real outage)"
+            # self.logger.error(
+            #     "Persistent WAN failure → triggering recovery "
+            #     "(likely real outage)"
+            # )
+            tlog(
+                self.logger,
+                "❌",
+                "RECOVERY",
+                "TRIGGER",
+                primary="smart-plug"
             )
 
-            if not trigger_recovery():
-                self.logger.error("Recovery action failed")
+            if trigger_recovery():
+                tlog(
+                    self.logger,
+                    "🟢",
+                    "RECOVERY",
+                    "OK",
+                    primary="power-cycle complete"
+                )
+            else:
+                tlog(
+                    self.logger,
+                    "❌",
+                    "RECOVERY",
+                    "FAIL"
+                )
+
+            # if not trigger_recovery():
+            #     self.logger.error("Recovery action failed")
 
             # Always reset counter after recovery attempt
-            self.consecutive_wan_failures = 0
+            self.consec_wan_fails = 0
         
         return NetworkState.WAN_DOWN
