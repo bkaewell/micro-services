@@ -1,7 +1,9 @@
 # --- Standard library imports ---
+import time
 import json
 from pathlib import Path
 from typing import Optional
+from dataclasses import dataclass
 
 
 # --- Cache layout ---
@@ -11,19 +13,34 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
 GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
 
-# --- Cloudflare IP cache ---
-def load_cached_cloudflare_ip() -> Optional[str]:
-    """
-    Return the last known Cloudflare IP from local cache.
+@dataclass
+class CacheLookupResult:
+    ip: Optional[str]
+    elapsed_ms: float
+    hit: bool
 
-    This cache is a performance optimization only.
-    Failure or corruption is treated as a cache miss.
+# --- Cloudflare IP cache ---
+def load_cached_cloudflare_ip() -> CacheLookupResult:
     """
+    Load the last known Cloudflare IP from local cache.
+
+    This is a performance optimization only. 
+    Any failure is treated as a cache miss.
+    """
+    start = time.monotonic()
     try:
         data = json.loads(CLOUDFLARE_IP_FILE.read_text())
-        return data.get("last_ip")
+        ip = data.get("last_ip")
+        hit = ip is not None
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
+        ip = None
+        hit = False
+
+    return CacheLookupResult(
+        ip=ip,
+        hit=hit,
+        elapsed_ms=(time.monotonic() - start) * 1000,
+    )
 
 def store_cloudflare_ip(ip: str) -> None:
     """
