@@ -45,29 +45,27 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
     while True:
         start = time.monotonic()
         
+        tlog("🔁", "CYCLE", "START")
+
         try:
             state = watchdog.run_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during run cycle: {e}")
             state = NetworkState.ERROR
 
-
-        #logger.info(f"🛜 Network State [{state.label}]")
-        tlog(logger, "🛜", "STATE", f"{state.label}")
-
-
-        if state == NetworkState.HEALTHY:
-            #logger.info("🐾🌤️  \033[1mDNS OK - All systems nominal \033[0m")
-            tlog(logger, 
-                 "🐾🌤️", 
-                 " DNS", 
-                 "OK",
-                 primary="All systems nominal"
-            )
-
         # Compute sleep interval
         remaining = policy.next_sleep(time.monotonic() - start)
-        logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
+        #logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
+
+        #logger.info(f"🛜 Network State [{state.label}]")
+        tlog("🛜", "STATE", f"{state.label}", meta=f"sleeping={remaining:.2f} s\n")
+
+
+        # if state == NetworkState.HEALTHY:
+        #     #logger.info("🐾🌤️  \033[1mDNS OK - All systems nominal \033[0m")
+        #     tlog("🟢", "DNS", "OK", primary="All systems nominal 🐾🌤️", meta=f"sleeping={remaining:.2f} s\n")
+
+
         time.sleep(remaining)
 
 def main():
