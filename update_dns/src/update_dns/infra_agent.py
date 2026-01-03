@@ -24,7 +24,7 @@ class NetworkState(Enum):
     @property
     def label(self) -> str:
         return {
-            NetworkState.HEALTHY: "Healthy",
+            NetworkState.HEALTHY: "HEALTHY",
             NetworkState.ROUTER_DOWN: "Router unreachable (rebooting or offline)",
             NetworkState.WAN_DOWN: "Router reachable, WAN unreachable",
             NetworkState.ERROR: "Unexpected internal error",
@@ -78,6 +78,7 @@ class NetworkWatchdog:
                 "Cache cleared for recovery"
             )
 
+        self.cycle = 0
         self.consec_wan_fails = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.max_consec_fails = max_consec_fails
@@ -126,10 +127,11 @@ class NetworkWatchdog:
         """
 
         # --- Heartbeat (local only, no network dependency) ---
+        self.cycle += 1
         dt_local, dt_str = self.time.now_local()
-        heartbeat = self.time.heartbeat_string(dt_local)
+        #heartbeat = self.time.heartbeat_string(dt_local)
         #self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
-        tlog("💚", "HEARTBEAT", "OK", primary=heartbeat) 
+        tlog("💚", "HEARTBEAT", "OK", meta=f"cycle={self.cycle}") 
 
 
         # --- PHASE 0: Router Alive Gate ---
@@ -147,7 +149,7 @@ class NetworkWatchdog:
         
         # --- PHASE 1: External Connectivity Check (WAN) ---
         result = get_ip()
-        detected_ip = result.ip
+        detected_ip: str = result.ip
         self.timer.lap("utils.get_ip()")
         # ######################
         # ######################
@@ -156,9 +158,9 @@ class NetworkWatchdog:
         # ######################
         # self.count += 1
         # if self.count % 2 == 0:
-        #     detected_ip = "1.2.3.4"   # For testing only
+        #     detected_ip = "192.168.0.77"   # For testing only
         # else:
-        #     detected_ip = get_ip()
+        #     detected_ip = get_ip().ip
 
 
         if detected_ip:
@@ -172,7 +174,7 @@ class NetworkWatchdog:
                 "IP",
                 "OK",
                 primary=f"detected ip={detected_ip}",
-                meta=f"latency={result.elapsed_ms:.1f}ms | attempts={result.attempts}"
+                meta=f"rtt={result.elapsed_ms:.1f}ms | attempts={result.attempts}"
             )
             #self.logger.info(f"🌐 IP OK [{detected_ip}]")
             # IP resolved successfully
@@ -192,20 +194,31 @@ class NetworkWatchdog:
 
             if gsheets_ok:
                 #self.logger.info(f"📊 GSheets uplink OK")
-                tlog("🟢", "GSheet", "OK")
+                tlog("🟢", "GSHEET", "OK")
 
             # --- Cache check (no network calls) ---
-            cached_ip = load_cached_cloudflare_ip()
+            cache = load_cached_cloudflare_ip()
             self.timer.lap("cache.load_cached_cloudflare_ip()")
 
-            if cached_ip == detected_ip:
+            if cache.hit and cache.ip == detected_ip:
                 #self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
-                tlog("🟢", "CACHE", "HIT", primary=f"cache ip={cached_ip}")
+                tlog(
+                    "🟢",
+                    "CACHE",
+                    "HIT",
+                    primary=f"cache ip={cache.ip}",
+                    meta=f"rtt={cache.elapsed_ms:.1f}ms",
+                )
                 self.timer.end_cycle()
                 return NetworkState.HEALTHY
             else:
-                tlog("🟡", "CACHE", "MISS", primary=f"cache ip={cached_ip}")
-
+                tlog(
+                    "🟡",
+                    "CACHE",
+                    "MISS",
+                    primary=f"cache ip={cache.ip}",
+                    meta=f"rtt={cache.elapsed_ms:.1f}ms",
+                )
 
             # --- Authoritative DoH verification ---
             doh_ip = doh_lookup(self.cloudflare_client.dns_name)
@@ -241,7 +254,7 @@ class NetworkWatchdog:
 
             if gsheets_ok:
                 #self.logger.info(f"📊 GSheets uplink OK")
-                tlog("🟢", "GSheet", "OK", primary="audit ip update")
+                tlog("🟢", "GSHEET", "OK", primary="audit ip update")
 
             # self.logger.info(
             #     f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
