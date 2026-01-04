@@ -15,11 +15,17 @@ from .logger import get_logger
 # Define the logger once for the entire module
 logger = get_logger("utils")
 
-@dataclass(frozen=True)
+@dataclass (frozen=True)
 class IPResolutionResult:
     ip: str | None
     elapsed_ms: float
     attempts: int
+    success: bool
+
+@dataclass(frozen=True)
+class DoHLookupResult:
+    ip: str | None
+    elapsed_ms: float
     success: bool
 
 def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
@@ -66,16 +72,11 @@ def is_valid_ip(ip: str) -> bool:
 
 def get_ip() -> IPResolutionResult:
     """
-    Resolve the current external IPv4 address.
-
-    Tries multiple plaintext IP services in priority order.
-    Returns the first valid IP or None if all sources fail. 
-    """
-
-    """
     Resolve the current external IPv4 address using multiple fallback services.
 
-    Latency reflects both network health and fallback usage.
+    Services are queried in priority order until a valid IPv4 address 
+    (in plaintext) is returned or all sources fail. The reported latency 
+    reflects both network response time and any fallback usage.
     """
 
     services = (
@@ -116,26 +117,19 @@ def get_ip() -> IPResolutionResult:
         success=False,
     )
 
-# def get_ip() -> tuple[str | None, float]:
-#     start = time.monotonic()
-#     ip = _get_ip_internal()   # your existing logic
-#     elapsed_ms = (time.monotonic() - start) * 1000
-#     return ip, elapsed_ms
-
-
-def doh_lookup(hostname : str) -> Optional[str]:
+def doh_lookup(hostname : str) -> DoHLookupResult:
     """
     Resolve a hostname to an IPv4 address using Cloudflare DNS-over-HTTPS.
 
     This is an authoritative, non-cached verification step used to confirm
     public DNS state after updates.
 
-    Returns:
-        IPv4 address as a string, or None if resolution fails.
     """
     url = "https://cloudflare-dns.com/dns-query"
     params = {"name": hostname, "type": "A"}
     headers = {"Accept": "application/dns-json"}
+
+    start = time.monotonic()
 
     try:
         resp = requests.get(
@@ -149,21 +143,37 @@ def doh_lookup(hostname : str) -> Optional[str]:
         answers = resp.json().get("Answer", [])
         if not answers:
             logger.warning(f"No A-record returned for {hostname}")
-            return None
+            return DoHLookupResult(
+                ip=None,
+                success=False,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
 
         ip = answers[0].get("data")
         if not ip or not is_valid_ip(ip):
             logger.warning(f"Invalid A-record for {hostname}: {ip!r}")
-            return None
+            return DoHLookupResult(
+                ip=None,
+                success=False,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
 
         logger.debug(f"DoH resolved {hostname} → {ip}")
-        return ip
+        return DoHLookupResult(
+            ip=ip,
+            success=True,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+        )
 
     except requests.RequestException as e:
         logger.debug(
             f"DoH request failed for {hostname}: {e.__class__.__name__}"
         )
-        return None
+        return DoHLookupResult(
+            ip=None,
+            success=False,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+        )
 
 # ============================================================
 # Performance Timing Utilities (optional instrumentation)
