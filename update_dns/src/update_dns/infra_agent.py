@@ -9,7 +9,7 @@ from .time_service import TimeService
 from .recovery import trigger_recovery
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
-from .utils import ping_host, get_ip, doh_lookup, Timer
+from .utils import ping_host, get_ip, doh_lookup
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip
 #from .db import log_metrics
 
@@ -47,38 +47,35 @@ class NetworkWatchdog:
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
         self.logger = get_logger("infra_agent")
-        self.timer = Timer(self.logger) 
 
-        # --- Cloudflare IP Cache Init ---
+        # --- Cloudflare IP Cache Init (authoritative DNS over HTTPS (DoH) ---
         try:
 
-            # Preload cache from DNS over HTTPS (DoH),
-            # authoritatively initialized from truth
-            doh_ip = doh_lookup(self.cloudflare_client.dns_name)
+            doh_result = doh_lookup(self.cloudflare_client.dns_name)
 
-            if doh_ip:
-                store_cloudflare_ip(doh_ip)
+            if doh_result.success and doh_result.ip:
+                store_cloudflare_ip(doh_result.ip)
                 self.logger.info(
-                    f"Cloudflare L1 cache initialized using DoH value: "
-                    f"[{doh_ip}]"
+                    "Cloudflare L1 cache initialized via DoH | "
+                    f"ip={doh_result.ip} rtt={doh_result.elapsed_ms:.1f}ms"
                 )
             else:
-                # DoH returned nothing or invalid
+                # DoH completed but returned no usable IP
                 store_cloudflare_ip("__INIT__")
                 self.logger.warning(
-                    "DoH lookup returned no usable IP; "
-                    "Cache cleared for recovery"
+                    "Cloudflare L1 cache not initialized via DoH | "
+                    f"success={doh_result.success} "
+                    f"rtt={doh_result.elapsed_ms:.1f}ms"
                 )
 
         except Exception as e:
-            # Defensive fallback
+            # Defensive fallback: init must never crash the agent
             store_cloudflare_ip("")
             self.logger.error(
-                f"DoH init failed ({type(e).__name__}: {e}); "
-                "Cache cleared for recovery"
+                "Cloudflare L1 cache init failed | "
+                f"error={type(e).__name__}: {e}"
             )
 
-        self.cycle = 0
         self.consec_wan_fails = 0
         self.watchdog_enabled = Config.WATCHDOG_ENABLED
         self.max_consec_fails = max_consec_fails
@@ -127,30 +124,28 @@ class NetworkWatchdog:
         """
 
         # --- Heartbeat (local only, no network dependency) ---
-        self.cycle += 1
         dt_local, dt_str = self.time.now_local()
         #heartbeat = self.time.heartbeat_string(dt_local)
-        #self.logger.info(f"💚 Heartbeat OK [{heartbeat}]")
-        tlog("💚", "HEARTBEAT", "OK", meta=f"cycle={self.cycle}") 
-
+        tlog("💚", "HEARTBEAT", "OK")
 
         # --- PHASE 0: Router Alive Gate ---
-        self.timer.start_cycle()
         router_up = ping_host(self.router_ip)
-        self.timer.lap("utils.ping_host()")
+
+        tlog(
+            "🟢" if router_up else "🟡", 
+            "ROUTER", 
+            "UP" if router_up else "DOWN", 
+            primary=f"router ip={self.router_ip}"
+        ) 
 
         if not router_up:
-            tlog("🟡", "ROUTER", "DOWN", primary=f"router ip={self.router_ip}")
             self.consec_wan_fails = 0
-            self.timer.end_cycle()
             return NetworkState.ROUTER_DOWN   # hard stop, never recover here
 
-        tlog("🟢", "ROUTER", "UP", primary=f"router ip={self.router_ip}") 
-        
         # --- PHASE 1: External Connectivity Check (WAN) ---
-        result = get_ip()
-        detected_ip: str = result.ip
-        self.timer.lap("utils.get_ip()")
+        public = get_ip()
+        detected_ip: str = public.ip
+
         # ######################
         # ######################
         # # For testing only
@@ -162,25 +157,15 @@ class NetworkWatchdog:
         # else:
         #     detected_ip = get_ip().ip
 
+        tlog(
+            "🟢" if public.success else "🔴",
+            "IP",
+            "OK" if public.success else "FAIL",
+            primary=f"detected ip={detected_ip}",
+            meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
+        )
 
         if detected_ip:
-            # self.logger.info(
-            #     f"🌐 IP OK [{result.ip}] "
-            #     f"({result.elapsed_ms:.1f} ms, {result.attempts} attempt(s))"
-            # )
-
-            tlog(
-                "🟢",
-                "IP",
-                "OK",
-                primary=f"detected ip={detected_ip}",
-                meta=f"rtt={result.elapsed_ms:.1f}ms | attempts={result.attempts}"
-            )
-            #self.logger.info(f"🌐 IP OK [{detected_ip}]")
-            # IP resolved successfully
-            # tlog(self.logger, logging.INFO, "IP", "OK", result.ip,
-            #     latency=f"{result.elapsed_ms:.1f}ms",
-            #     attempts=result.attempts)
 
             self.consec_wan_fails = 0
 
@@ -190,59 +175,68 @@ class NetworkWatchdog:
                 current_time=dt_str,
                 dns_last_modified=None   # No change
             )
-            self.timer.lap("gsheets_service.update_status()")
 
             if gsheets_ok:
-                #self.logger.info(f"📊 GSheets uplink OK")
                 tlog("🟢", "GSHEET", "OK")
 
             # --- Cache check (no network calls) ---
             cache = load_cached_cloudflare_ip()
-            self.timer.lap("cache.load_cached_cloudflare_ip()")
+
+            tlog(
+                "🟢" if cache.hit and cache.ip == detected_ip else "🟡",
+                "CACHE",
+                "HIT" if cache.hit and cache.ip == detected_ip else "MISS",
+                primary=f"cache ip={cache.ip}",
+                meta=f"rtt={cache.elapsed_ms:.1f}ms"
+            )
 
             if cache.hit and cache.ip == detected_ip:
-                #self.logger.info("🐾🌤️  Cloudflare DNS OK [cache]")
-                tlog(
-                    "🟢",
-                    "CACHE",
-                    "HIT",
-                    primary=f"cache ip={cache.ip}",
-                    meta=f"rtt={cache.elapsed_ms:.1f}ms",
-                )
-                self.timer.end_cycle()
                 return NetworkState.HEALTHY
-            else:
-                tlog(
-                    "🟡",
-                    "CACHE",
-                    "MISS",
-                    primary=f"cache ip={cache.ip}",
-                    meta=f"rtt={cache.elapsed_ms:.1f}ms",
-                )
+
 
             # --- Authoritative DoH verification ---
-            doh_ip = doh_lookup(self.cloudflare_client.dns_name)
-            self.timer.lap("utils.doh_lookup()")
+            doh_result = doh_lookup(self.cloudflare_client.dns_name)
 
             # If DoH matches detected IP, DNS as seen by world is correct
-            if doh_ip == detected_ip:
-                #self.logger.info("🐾🌤️  Cloudflare DNS OK [DoH]")
-                tlog("🟢", "DNS", "OK", primary=f"DoH ip={doh_ip}")
+            if doh_result.success and doh_result.ip == detected_ip:
+                tlog(
+                    "🟢", 
+                    "DNS", 
+                    "OK", 
+                    primary=f"DoH ip={doh_result.ip}",
+                    meta=f"rtt={doh_result.elapsed_ms:.1f}ms"
+                )
                 store_cloudflare_ip(detected_ip)   # Refresh cache
-                self.timer.end_cycle()
                 return NetworkState.HEALTHY
             else:
-                tlog("🟡", "DNS", "STALE", primary=f"DoH ip={doh_ip}")
+                tlog(
+                    "🟡" if doh_result.success else "🔴", 
+                    "DNS", 
+                    "STALE" if doh_result.success else "FAIL", 
+                    primary=f"DoH ip={doh_result.ip}",
+                    meta=f"rtt={doh_result.elapsed_ms:.1f}ms"
+                )
 
             # --- PHASE 2: Cloudflare DNS Update Needed ---
             update_result = self.cloudflare_client.update_dns(detected_ip)
             store_cloudflare_ip(detected_ip)
-            self.timer.lap("cloudflare_client.update_dns()")
+            tlog(
+                "🟡", 
+                "DNS", 
+                "UPDATE", 
+                primary=f"{doh_result.ip} → {detected_ip}"
+                )
 
             dns_last_modified = self.time.iso_to_local_string(
                 update_result.get('modified_on')
             )
-            tlog("❌", "DNS", "UPDATE", primary=f"{doh_ip} → {detected_ip}")
+            tlog(
+                "🟢",
+                "DNS",
+                "UPDATE",
+                primary="Cloudflare record updated",
+                meta=f"modified={dns_last_modified}"
+            )
 
             # Low-frequency audit log
             gsheets_ok = self.gsheets_service.update_status(
@@ -250,17 +244,10 @@ class NetworkWatchdog:
                     current_time=None,
                     dns_last_modified=dns_last_modified
                 )
-            self.timer.lap("gsheets_service.update_status()")
 
             if gsheets_ok:
-                #self.logger.info(f"📊 GSheets uplink OK")
                 tlog("🟢", "GSHEET", "OK", primary="audit ip update")
 
-            # self.logger.info(
-            #     f"🐾 🌤️  Cloudflare DNS updated  [{doh_ip} → {detected_ip}]"
-            # )
-
-            self.timer.end_cycle()
             return NetworkState.HEALTHY
 
 
@@ -279,7 +266,7 @@ class NetworkWatchdog:
         self.consec_wan_fails += 1
         self.logger.warning(
             f"🌐 IP unresolved "
-            f"({result.elapsed_ms:.1f} ms, {result.attempts} attempts)"
+            f"({public.elapsed_ms:.1f} ms, {public.attempts} attempts)"
         )
         self.logger.warning(
             f"WAN un-reachable "

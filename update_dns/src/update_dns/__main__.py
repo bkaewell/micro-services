@@ -6,13 +6,18 @@ import logging
 # --- Project imports ---
 from .config import Config
 from .telemetry import tlog
+from .time_service import TimeService
 from .logger import get_logger, setup_logging
 from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
 from .infra_agent import NetworkState, NetworkWatchdog
 
 
-def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
+def main_loop(
+        local_time: TimeService,
+        policy: SchedulingPolicy,
+        watchdog: NetworkWatchdog
+    ):
     """
     Supervisor loop for continuous network monitoring and self-healing.
 
@@ -40,12 +45,17 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
     """
 
     logger = get_logger("main_loop")
+    cycle = 0
     state = NetworkState.UNKNOWN
+
 
     while True:
         start = time.monotonic()
-        
-        tlog("🔁", "CYCLE", "START")
+
+        # --- Heartbeat (local only, no network dependency) ---
+        dt_local, dt_str = local_time.now_local()
+        heartbeat = local_time.heartbeat_string(dt_local)
+        tlog("🔁", "CYCLE", "START", primary=heartbeat, meta=f"cycle={cycle}")
 
         try:
             state = watchdog.run_cycle()
@@ -54,12 +64,31 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
             state = NetworkState.ERROR
 
         # Compute sleep interval
-        remaining = policy.next_sleep(time.monotonic() - start)
+        cycle_rtt = time.monotonic() - start
+        cycle_rtt_ms = cycle_rtt * 1000
+        remaining = policy.next_sleep(cycle_rtt)
+
         #logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
 
-        #logger.info(f"🛜 Network State [{state.label}]")
-        tlog("🛜", "STATE", f"{state.label}", meta=f"sleeping={remaining:.2f} s\n")
+        if state == NetworkState.HEALTHY:
+            tlog(
+                "🛜", 
+                "STATE", 
+                f"{state.label}", 
+                primary="All systems nominal 🐾🌤️ ",
+                meta=f"cycle_rtt={cycle_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+            )
+        else:
+            tlog(
+                "🛜", 
+                "STATE", 
+                f"{state.label}",
+                meta=f"cycle_rtt={cycle_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+            )
 
+
+        #logger.info(f"🛜 Network State [{state.label}]")
+        #tlog("🛜", "STATE", f"{state.label}", meta=f"sleeping={remaining:.2f} s\n")
 
         # if state == NetworkState.HEALTHY:
         #     #logger.info("🐾🌤️  \033[1mDNS OK - All systems nominal \033[0m")
@@ -67,6 +96,7 @@ def main_loop(policy: SchedulingPolicy, watchdog: NetworkWatchdog):
 
 
         time.sleep(remaining)
+        cycle += 1
 
 def main():
     """
@@ -83,13 +113,16 @@ def main():
 
     validate_runtime_config()
 
+    # Time
+    local_time = TimeService()
+    
     # Policy
     policy = SchedulingPolicy()    
 
     # Core infra agent
     watchdog = NetworkWatchdog()
     
-    main_loop(policy, watchdog)
+    main_loop(local_time, policy, watchdog)
 
 if __name__ == "__main__":
     main()
