@@ -13,7 +13,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
 GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
 
-@dataclass
+@dataclass(frozen=True)
 class CacheLookupResult:
     ip: Optional[str]
     elapsed_ms: float

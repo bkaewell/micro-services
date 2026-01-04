@@ -5,7 +5,7 @@ def tlog(
     emoji: str,
     subsystem: str,
     state: str,
-    primary: str = "—",
+    primary: str = "———————",
     meta: str | None = None,
 ) -> None:
     """
