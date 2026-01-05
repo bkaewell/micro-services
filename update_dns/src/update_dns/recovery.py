@@ -29,7 +29,7 @@ def trigger_recovery() -> bool:
             f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
         )
         off.raise_for_status()
-        logger.info("🔌 Smart plug powered OFF")
+        logger.debug("Smart plug powered OFF")
         time.sleep(reboot_delay)
 
         # Power ON
@@ -37,8 +37,7 @@ def trigger_recovery() -> bool:
             f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
         )
         on.raise_for_status()
-        logger.info("🔌 Smart plug powered ON")
-        logger.info("♻️ Recovery sequence completed")
+        logger.debug("Smart plug powered ON")
         return True
 
     except requests.RequestException:
