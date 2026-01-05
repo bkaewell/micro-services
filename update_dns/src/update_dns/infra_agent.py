@@ -1,5 +1,6 @@
 # --- Standard library imports ---
 from enum import Enum, auto
+from typing import Optional
 
 # --- Project imports ---
 from .config import Config
@@ -81,6 +82,25 @@ class NetworkWatchdog:
         self.max_consec_fails = max_consec_fails
         self.router_ip = Config.Hardware.ROUTER_IP
 
+
+        """Network watchdog with WAN readiness and convergence awareness."""
+        # --- Phase 0: Configuration ---
+        self.router_ip = Config.Hardware.ROUTER_IP        # Local router gateway IP
+        self.watchdog_enabled = Config.WATCHDOG_ENABLED   # Enable recovery actions
+        self.max_consec_fails = max_consec_fails          # Escalation threshold
+
+        # --- Phase 1: Failure Tracking ---
+        self.consec_wan_fails: int = 0   # Consecutive confirmed WAN failures
+
+        # --- Phase 2: WAN Observation ---
+        self.last_detected_ip: Optional[str] = None   # Last observed public IP
+        self.ip_stability_count: int = 0              # Consecutive identical IP detections
+        self.last_router_up_ts: float = 0.0           # Timestamp router last confirmed up
+
+        # --- Phase 3: WAN Readiness Gates ---
+        self.MIN_IP_STABILITY_CYCLES: int = 2   # Required IP stability cycles
+        self.MIN_ROUTER_UP_SECONDS: int = 90    # Router uptime before trust
+
         ##################
         # For testing only
         ##################
@@ -123,9 +143,8 @@ class NetworkWatchdog:
                 UNKNOWN        – Initial or indeterminate state
         """
 
-        # --- Heartbeat (local only, no network dependency) ---
+        # --- Heartbeat (local only) ---
         dt_local, dt_str = self.time.now_local()
-        #heartbeat = self.time.heartbeat_string(dt_local)
         tlog("💚", "HEARTBEAT", "OK")
 
         # --- PHASE 0: Router Alive Gate ---
@@ -140,11 +159,13 @@ class NetworkWatchdog:
 
         if not router_up:
             self.consec_wan_fails = 0
-            return NetworkState.ROUTER_DOWN   # hard stop, never recover here
+            self.ip_stability_count = 0
+            self.last_detected_ip = None
+            return NetworkState.ROUTER_DOWN
 
-        # --- PHASE 1: External Connectivity Check (WAN) ---
+        # --- PHASE 1: WAN Observation (NO assumptions yet) ---
         public = get_ip()
-        detected_ip: str = public.ip
+        detected_ip = public.ip
 
         # ######################
         # ######################
@@ -159,7 +180,7 @@ class NetworkWatchdog:
 
         tlog(
             "🟢" if public.success else "🔴",
-            "IP",
+            "PUBLIC IP",
             "OK" if public.success else "FAIL",
             primary=f"detected ip={detected_ip}",
             meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
@@ -218,15 +239,14 @@ class NetworkWatchdog:
                 )
 
             # --- PHASE 2: Cloudflare DNS Update Needed ---
-            update_result = self.cloudflare_client.update_dns(detected_ip)
-            store_cloudflare_ip(detected_ip)
             tlog(
                 "🟡", 
                 "DNS", 
-                "UPDATE", 
+                "CHANGE", 
                 primary=f"{doh_result.ip} → {detected_ip}"
                 )
-
+            update_result = self.cloudflare_client.update_dns(detected_ip)
+            store_cloudflare_ip(detected_ip)
             dns_last_modified = self.time.iso_to_local_string(
                 update_result.get('modified_on')
             )
@@ -264,17 +284,9 @@ class NetworkWatchdog:
 
         # --- WAN is DOWN ---
         self.consec_wan_fails += 1
-        self.logger.warning(
-            f"🌐 IP unresolved "
-            f"({public.elapsed_ms:.1f} ms, {public.attempts} attempts)"
-        )
-        self.logger.warning(
-            f"WAN un-reachable "
-            f"[{self.consec_wan_fails}/{self.max_consec_fails}]"
-        )
 
         tlog(
-            "⚠️",
+            "🟡",
             "WAN",
             "DOWN",
             primary=PING_TARGET_IP,
@@ -287,19 +299,15 @@ class NetworkWatchdog:
             self.watchdog_enabled 
             and self.consec_wan_fails >= self.max_consec_fails
         ):
-            # self.logger.error(
-            #     "Persistent WAN failure → triggering recovery "
-            #     "(likely real outage)"
-            # )
-            tlog("❌", "RECOVERY", "TRIGGER", primary="smart-plug")
 
-            if trigger_recovery():
-                tlog("🟢", "RECOVERY", "OK", primary="power-cycle complete")
-            else:
-                tlog("❌", "RECOVERY", "FAIL")
-
-            # if not trigger_recovery():
-            #     self.logger.error("Recovery action failed")
+            tlog("🔴", "RECOVERY", "TRIGGER", primary="reset smart-plug")
+            status = trigger_recovery()
+            tlog(
+                "🟢" if status else "🔴", 
+                "RECOVERY", 
+                "OK" if status else "FAIL", 
+                primary="power-cycle complete"
+            )
 
             # Always reset counter after recovery attempt
             self.consec_wan_fails = 0
