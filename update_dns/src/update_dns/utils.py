@@ -1,7 +1,6 @@
 # --- Standard library imports ---
 import time
 import socket
-from typing import Optional
 from dataclasses import dataclass
 
 # --- Third-party imports ---
