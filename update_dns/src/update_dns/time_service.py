@@ -1,5 +1,5 @@
+# --- Standard library imports ---
 import os
-
 from zoneinfo import ZoneInfo
 from datetime import datetime
 
@@ -23,9 +23,9 @@ class TimeService:
         except Exception:
             self.tz = ZoneInfo("UTC")
 
-    # ----------------------
-    # Current time utilities
-    # ----------------------
+    # -------------------------
+    # Wall clock utilities
+    # -------------------------
 
     def now_local(self):
         """
@@ -44,9 +44,9 @@ class TimeService:
         """Return 'Sat Dec 07 2025' format."""
         return dt.strftime("%a %b %d %Y")
 
-    # --------------------------
+    # -------------------------------
     # ISO8601 conversion utility
-    # --------------------------
+    # -------------------------------
 
     def iso_to_local_string(self, iso_str: str) -> str:
         """
