@@ -1,4 +1,5 @@
 # --- Standard library imports ---
+import ssl
 import time
 import socket
 from dataclasses import dataclass
@@ -50,6 +51,28 @@ def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
         with socket.create_connection((ip, port), timeout=timeout):
             return True
     except (OSError, socket.timeout):
+        return False
+
+def probe_wan_tls(
+    host: str = "1.1.1.1",
+    port: int = 443,
+    timeout: float = 2.0,
+) -> bool:
+    """
+    Confirm true WAN reachability via application-layer handshake.
+
+    Requires successful:
+      - TCP connection
+      - TLS handshake
+
+    Router-local responses cannot satisfy this probe.
+    """
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            with context.wrap_socket(sock, server_hostname=host):
+                return True
+    except Exception:
         return False
 
 def is_valid_ip(ip: str) -> bool:
