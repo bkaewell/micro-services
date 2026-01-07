@@ -122,43 +122,34 @@ class NetworkWatchdog:
 
         return self.ip_stability_count >= self.MIN_IP_STABILITY_CYCLES
 
-
     def run_cycle(self) -> NetworkState:
         """
-        Execute a single watchdog evaluation cycle and return the observed network state.
+        Execute one watchdog evaluation cycle and return the authoritative network state.
 
-        This function implements a defensive, state-machine-based health check designed
-        to distinguish between normal operation, router reboot scenarios, transient
-        failures, and persistent WAN outages.
+        This method implements a defensive, multi-phase state machine that separates:
+        - LAN reachability (router health)
+        - WAN availability (external connectivity)
+        - WAN readiness (confirmed stability across consecutive cycles)
 
-        Decision flow:
-            1. Router health check (LAN reachability)
-            - If the router is unreachable, assume reboot or offline state.
-            - No recovery action is taken in this state.
+        Core principles:
+        - No single probe is trusted; confidence is accumulated over time.
+        - Expected disruptions (router reboots, ISP warm-up, transient loss) are not escalated.
+        - Recovery actions trigger only after sustained, externally confirmed failures.
 
-            2. WAN health check (external reachability)
-            - If the router is reachable but external connectivity fails,
-                track consecutive failures.
+        State model:
+        - ROUTER_DOWN: Router unreachable; WAN signals ignored, counters reset.
+        - WAN_WARMING: Router up, WAN signals present but not yet stable
+                    (e.g., IP changing or insufficient consecutive confirmations).
+        - HEALTHY: Router reachable and WAN stability confirmed across cycles.
+        - WAN_DOWN: Router reachable but WAN confirmed unreachable after escalation thresholds.
 
-            3. Escalation and recovery
-            - Only after a configurable number of consecutive WAN failures
-                is a recovery action triggered (e.g., power-cycling modem/router).
-            - Counters are reset after recovery attempts.
-
-        Design goals:
-            - Avoid false positives during expected router reboots
-            - Ignore transient packet loss and DNS flakiness
-            - Fail fast, but recover conservatively
-            - Provide clear, observable system state for logging and monitoring
+        Side effects:
+        - Maintains consecutive-failure and IP-stability counters across cycles.
+        - Updates external observability (logs, cache, DNS, audit sinks) only when confidence allows.
+        - Optionally triggers automated recovery after sustained WAN failure.
 
         Returns:
-            NetworkState:
-                HEALTHY        - Router and WAN are reachable
-                ROUTER_DOWN    - Router unreachable (rebooting or offline)
-                WAN_WARMING    - 
-                WAN_DOWN       - Router reachable, WAN unreachable
-                ERROR          - Unexpected internal error
-                UNKNOWN        - Initial or indeterminate state
+            NetworkState: The resolved, confidence-weighted network state for this cycle.
         """
 
         # --- Heartbeat (local process health only) ---
@@ -185,7 +176,6 @@ class NetworkWatchdog:
         # --- PHASE 1 (WAN): External IP Observation (No assumptions) ---
         public = get_ip()
 
-
         # ######################
         # ######################
         # # For testing only
@@ -194,7 +184,6 @@ class NetworkWatchdog:
         # self.count += 1
         # if self.count % 2 == 0:
         #     public.ip = "192.168.0.77"   # For testing only
-
 
         tlog(
             "🟢" if public.success else "🔴",
@@ -220,21 +209,14 @@ class NetworkWatchdog:
         ### --- WAN is now considered STABLE ---
         self.consec_wan_fails = 0
 
-
-
-
-        # # --- High-frequency heartbeat (timestamp) to Google Sheet ---
-        # gsheets_ok = self.gsheets_service.update_status(
-        #     ip_address=None,  # No change
-        #     current_time=dt_str,
-        #     dns_last_modified=None   # No change
-        # )
-
-        # if gsheets_ok:
-        #     tlog("🟢", "GSHEET", "OK")
-
-
-        
+        # --- High-frequency heartbeat (timestamp) to Google Sheet ---
+        gsheets_ok = self.gsheets_service.update_status(
+            ip_address=None,  # No change
+            current_time=dt_str,
+            dns_last_modified=None   # No change
+        )
+        if gsheets_ok:
+            tlog("🟢", "GSHEET", "OK")
 
         # --- Cache check (no network calls) ---
         cache = load_cached_cloudflare_ip()
@@ -243,7 +225,7 @@ class NetworkWatchdog:
             "🟢" if cache_ip_matches_detected else "🟡",
             "CACHE",
             "HIT" if cache_ip_matches_detected else "MISS",
-            primary=f"cache ip={cache.ip}",
+            primary=f"ip={cache.ip}",
             meta=f"rtt={cache.elapsed_ms:.1f}ms"
         )
 
@@ -264,7 +246,7 @@ class NetworkWatchdog:
                     "🟢", 
                     "DNS", 
                     "OK", 
-                    primary=f"DoH ip={doh.ip}",
+                    primary=f"ip={doh.ip}",
                     meta=f"rtt={doh.elapsed_ms:.1f}ms"
                 )
                 store_cloudflare_ip(public.ip)   # Refresh cache
@@ -283,60 +265,64 @@ class NetworkWatchdog:
                 "🟢",
                 "DNS",
                 "UPDATE",
-                primary="Cloudflare record updated",
+                primary="Cloudflare updated",
                 meta=f"modified={dns_last_modified}"
             )
 
-            # # --- Low-frequency audit log ---
-            # gsheets_ok = self.gsheets_service.update_status(
-            #         ip_address=public.ip,
-            #         current_time=None,
-            #         dns_last_modified=dns_last_modified
-            # )
-
-            # if gsheets_ok:
-            #     tlog("🟢", "GSHEET", "OK", primary="audit ip update")
+            # --- Low-frequency audit log ---
+            gsheets_ok = self.gsheets_service.update_status(
+                    ip_address=public.ip,
+                    current_time=None,
+                    dns_last_modified=dns_last_modified
+            )
+            if gsheets_ok:
+                tlog("🟢", "GSHEET", "OK", primary="audit ip update")
 
             return NetworkState.HEALTHY
         
         else:
-    
-            # --- PHASE 3: WAN Failure (Router UP, Internet DOWN) ---
-            #PING_TARGET_IP = "api.cloudflare.com"
-            PING_TARGET_IP = "8.8.8.8"   # Google DNS Primary IP (Stable DNS check)
+            # --- PHASE 3 (WAN): Confidence Collapse & Recovery ---
+            # At this point:
+            # - LAN is reachable
+            # - WAN failed readiness confirmation
+            # - We actively probe a known-stable external endpoint
 
-            if ping_host(PING_TARGET_IP):
-                # WAN reachable but not ready (do not reset failure counter)
-                tlog("🟢", "WAN", "UP", primary=PING_TARGET_IP)
+            PROBE_IP = "8.8.8.8"   # Stable external reachability signal (Google DNS)
+
+            if ping_host(PROBE_IP):
+                # WAN path exists, but higher-level signals are not yet trustworthy
+                # Do NOT reset failure counters — confidence has not been restored
+                tlog("🟢", "WAN", "REACHABLE", primary=PROBE_IP)
                 return NetworkState.WAN_WARMING
 
-            # WAN confirmed DOWN
+            # WAN confirmed un-reachable at external layer
             self.consec_wan_fails += 1
 
             tlog(
                 "🟡",
                 "WAN",
-                "DOWN",
-                primary=PING_TARGET_IP,
+                "UNREACHABLE",
+                primary=PROBE_IP,
                 meta=f"failures={self.consec_wan_fails}/{self.max_consec_fails}"
             )
 
-            # --- Escalation gate ---
+            # --- POLICY: Automated Recovery Escalation ---
+            # Trigger only after sustained, confirmed WAN failures
             if (
                 self.watchdog_enabled 
                 and self.consec_wan_fails >= self.max_consec_fails
             ):
-                tlog("🔴", "RECOVERY", "TRIGGER", primary="reset smart-plug")
+                tlog("🔴", "RECOVERY", "TRIGGER", primary="power-cycle router")
 
                 success = trigger_recovery()
                 tlog(
                     "🟢" if success else "🔴", 
                     "RECOVERY", 
                     "OK" if success else "FAIL", 
-                    primary="power-cycle complete"
+                    primary="recovery attempt complete"
                 )
 
-                # Reset only after recovery attempt
+                # Reset after intervention — confidence must be rebuilt from Phase 0
                 self.consec_wan_fails = 0
             
             return NetworkState.WAN_DOWN
