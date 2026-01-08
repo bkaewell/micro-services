@@ -179,5 +179,43 @@ class NetworkWatchdog:
 
         return self.ip_stability_count >= self.MIN_IP_STABILITY_CYCLES
 
+    def _recover_wan(self) -> bool:
+        """
+        Execute a physical network recovery action by power-cycling
+        the smart plug connected to the router/modem.
 
+        This function performs NO health checks.
+        All validation and escalation decisions are handled upstream
+        by the WAN finite state machine.
+
+        Returns:
+            True if the power-cycle command sequence completed successfully,
+            False otherwise.
+        """
+        plug_ip = Config.Hardware.PLUG_IP
+        reboot_delay = Config.Hardware.REBOOT_DELAY
+
+        try:
+            # Power OFF
+            off = requests.get(
+                f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
+            )
+            off.raise_for_status()
+            self.logger.debug("Smart plug powered OFF")
+            time.sleep(reboot_delay)
+
+            # Power ON
+            on = requests.get(
+                f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
+            )
+            on.raise_for_status()
+            self.logger.debug("Smart plug powered ON")
+            return True
+
+        except requests.RequestException:
+            self.logger.exception("Failed to communicate with smart plug")
+            return False
+        except Exception:
+            self.logger.exception("Unexpected error during recovery")
+            return False
 
