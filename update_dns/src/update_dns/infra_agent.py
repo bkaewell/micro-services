@@ -73,6 +73,27 @@ class WanFSM:
         # WARMING intentionally does not mutate counters
         return False
 
+def classify_wan(
+    lan_ok: bool,
+    wan_probe_ok: bool,
+    wan_ready: bool
+) -> WanVerdict:
+    """
+    Derive WAN confidence verdict from layered observations.
+
+    Module level pure logic (No side effects.)
+    """
+    if not lan_ok:
+        return WanVerdict.UNREACHABLE
+
+    if wan_probe_ok and wan_ready:
+        return WanVerdict.STABLE
+
+    if wan_probe_ok:
+        return WanVerdict.WARMING
+
+    return WanVerdict.UNREACHABLE
+
 class NetworkWatchdog:
     """
     Background agent that maintains consistency between the device’s
