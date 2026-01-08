@@ -158,4 +158,26 @@ class NetworkWatchdog:
         ##################
         self.count = 0
 
+    def _update_ip_stability(self, result: IPResolutionResult) -> bool:
+        """
+        Update WAN IP stability across cycles.
+        Returns True once WAN is considered stable.
+        """
+
+        if not result.success:
+            self.ip_stability_count = 0
+            self.last_detected_ip = None
+            return False
+
+        ip = result.ip  # success guarantees validity
+
+        if ip == self.last_detected_ip:
+            self.ip_stability_count += 1
+        else:
+            self.ip_stability_count = 1
+            self.last_detected_ip = ip
+
+        return self.ip_stability_count >= self.MIN_IP_STABILITY_CYCLES
+
+
 
