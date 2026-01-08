@@ -219,3 +219,48 @@ class NetworkWatchdog:
             self.logger.exception("Unexpected error during recovery")
             return False
 
+    def run_cycle(self) -> NetworkState:
+        """
+        Single evaluation and execution of one cycle from the Wartime CEO
+        """
+
+        # --- Heartbeat (local process health only) ---
+        #_, dt_str = self.time.now_local()
+        tlog("💚", "HEARTBEAT", "OK")
+
+        # --- Observe ---
+
+        # --- LAN (L2/L3) ---
+        lan_ok = ping_host(self.router_ip)
+        tlog(
+            "🟢" if lan_ok else "🟡", 
+            "ROUTER", 
+            "UP" if lan_ok else "DOWN", 
+            primary=f"ip={self.router_ip}"
+            #compute rtt in future?
+        )
+
+        # --- WAN path probe (L4-L7) ---
+        wan_probe_ok = verify_wan_reachability()
+        tlog(
+            "🟢" if wan_probe_ok else "🟡", 
+            "WAN",
+            "REACHABLE" if wan_probe_ok else "UNREACHABLE",
+            primary="probe",
+            #compute rtt in future?
+        )
+
+        # --- Public IP (L7) --- 
+        public = get_ip()
+        tlog(
+            "🟢" if public.success else "🔴",
+            "PUBLIC IP",
+            "OK" if public.success else "FAIL",
+            primary=f"ip={public.ip}",
+            meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
+        )
+
+
+
+
+        return NetworkState.UNKNOWN
