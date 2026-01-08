@@ -260,7 +260,44 @@ class NetworkWatchdog:
             meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
         )
 
+        # --- Confidence building --- 
+        wan_ready = (public.success and self._update_ip_stability(public))
 
+        if public.success:
+            if wan_ready:
+                tlog(
+                    "🟢",
+                    "WAN",
+                    "CONFIRMED",
+                    primary=f"ip={public.ip}",
+                    meta=f"confirmed={self.ip_stability_count} consecutive cycles"
+                )
+            else:
+                tlog(
+                    "🟡",
+                    "WAN",
+                    "WARMING",
+                    primary=f"ip={public.ip}",
+                    meta=f"confirmed={self.ip_stability_count}/{self.MIN_IP_STABILITY_CYCLES} consecutive cycles"
+                )
+
+        # --- Classify ---
+        verdict = classify_wan(
+            lan_ok=lan_ok, 
+            wan_probe_ok=wan_probe_ok, 
+            wan_ready=wan_ready
+        )
+
+        # --- Finite State Machine (FSM) update ---
+        should_escalate = self.wan_fsm.update(verdict)
+
+        tlog(
+            "🟢" if verdict ==  WanVerdict.STABLE else "🟡",
+            "WAN",
+            "VERDICT",
+            primary=verdict.name,
+            meta=f"failures={self.wan_fsm.consec_fails}/{self.wan_fsm.max_consec_fails} | should_escalate={should_escalate}"
+        )
 
 
         return NetworkState.UNKNOWN
