@@ -299,5 +299,23 @@ class NetworkWatchdog:
             meta=f"failures={self.wan_fsm.consec_fails}/{self.wan_fsm.max_consec_fails} | should_escalate={should_escalate}"
         )
 
+        # --- Act (Final state mapping) ---
+        if not lan_ok:
+            return NetworkState.ROUTER_DOWN
+
+        if verdict == WanVerdict.STABLE:
+            # Criteria to update DNS ...
+            # self._update_dns()
+            return NetworkState.HEALTHY
+        
+        if verdict == WanVerdict.WARMING:
+            return NetworkState.WAN_WARMING
+        
+        # UNREACHABLE
+        if verdict == WanVerdict.UNREACHABLE:
+            if self.watchdog_enabled and should_escalate:
+                self._recover_wan()
+            return NetworkState.WAN_DOWN
+
 
         return NetworkState.UNKNOWN
