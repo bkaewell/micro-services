@@ -397,8 +397,8 @@ class NetworkWatchdog:
         #********************************
         #********************************
         #********************************
-        public = self._override_public_ip_for_test(public)  
-        self.count += 1
+        #public = self._override_public_ip_for_test(public)  
+        #self.count += 1
         #********************************
         #********************************
         #********************************
