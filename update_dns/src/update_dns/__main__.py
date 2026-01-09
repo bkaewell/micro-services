@@ -21,27 +21,19 @@ def main_loop(
     """
     Supervisor loop for continuous network monitoring and self-healing.
 
-    This function repeatedly executes the `watchdog.run_cycle()` according to
-    the schedule defined by `policy`. It handles exceptions, logs detailed
-    network state, and enforces timing between cycles.
+    Repeatedly executes the watchdog evaluation cycle according to the
+    configured scheduling policy, handling exceptions and enforcing
+    consistent timing between iterations.
 
     Responsibilities:
-        - Invoke the network watchdog to check LAN/WAN health.
-        - Capture and return the resulting NetworkState for logging and metrics.
-        - Handle unexpected exceptions gracefully, mapping them to NetworkState.ERROR.
-        - Log the current network state with human-readable labels.
-        - Respect the runtime scheduling policy (intervals, drift correction).
-        - Sleep for the remaining interval time before the next cycle.
-
-    Args:
-        policy: SchedulingPolicy instance controlling loop timing.
-        watchdog: NetworkWatchdog instance performing network checks
-                  and self-healing actions.
+        - Invoke the NetworkWatchdog for health evaluation
+        - Capture and log the resulting NetworkState
+        - Handle unexpected exceptions gracefully
+        - Enforce scheduling intervals and drift correction
 
     Notes:
-        - NetworkState captures LAN/WAN/Router health and transient issues.
-        - Logs include both state and sleep interval for observability.
-        - Designed for 24/7 unattended operation with resilient recovery.    
+        - Designed for long-running, unattended operation
+        - NetworkState.ERROR represents unexpected internal failures    
     """
 
     logger = get_logger("main_loop")
@@ -89,9 +81,10 @@ def main_loop(
 
 def main():
     """
-    Entry point for the network maintenance application.
+    Application entry point for the network monitoring agent.
 
-    Configures logging and starts the supervisor loop.
+    Initializes logging, validates runtime configuration, and starts
+    the supervisor loop.
     """
 
     # Setup logging policy
