@@ -13,7 +13,7 @@ def tlog(
     """
     ts = datetime.now().strftime("%H:%M:%S")
 
-    line = f"{ts} {emoji} {subsystem:<12} {state:<18} {primary:<16}"
+    line = f"{ts} {emoji} {subsystem:<11} {state:<17} {primary:<24}"
     if meta:
         line += f" | {meta}"
 
