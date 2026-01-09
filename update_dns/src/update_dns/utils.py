@@ -15,7 +15,7 @@ from .logger import get_logger
 # Define the logger once for the entire module
 logger = get_logger("utils")
 
-@dataclass (frozen=True)
+@dataclass(frozen=True)
 class IPResolutionResult:
     ip: str | None
     elapsed_ms: float
@@ -53,13 +53,14 @@ def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
     except (OSError, socket.timeout):
         return False
 
-def probe_wan_tls(
+def verify_wan_reachability(
     host: str = "1.1.1.1",
     port: int = 443,
     timeout: float = 2.0,
 ) -> bool:
     """
-    Confirm true WAN reachability via application-layer handshake.
+    Confirm true WAN reachability via TLS (Transport Layer Security)
+    application-layer handshake.
 
     Requires successful:
       - TCP connection
