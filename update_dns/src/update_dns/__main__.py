@@ -45,58 +45,47 @@ def main_loop(
     """
 
     logger = get_logger("main_loop")
-    cycle = 0
     state = NetworkState.UNKNOWN
+    loop = 0
 
 
     while True:
         start = time.monotonic()
 
         # --- Heartbeat (local only, no network dependency) ---
-        dt_local, dt_str = local_time.now_local()
+        dt_local, _ = local_time.now_local()
         heartbeat = local_time.heartbeat_string(dt_local)
-        tlog("🔁", "CYCLE", "START", primary=heartbeat, meta=f"cycle={cycle}")
+        tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
             state = watchdog.run_cycle()
         except Exception as e:
-            logger.exception(f"Unhandled exception during run cycle: {e}")
+            logger.exception(f"Unhandled exception during run_cycle: {e}")
             state = NetworkState.ERROR
 
         # Compute sleep interval
-        cycle_rtt = time.monotonic() - start
-        cycle_rtt_ms = cycle_rtt * 1000
-        remaining = policy.next_sleep(cycle_rtt)
-
-        #logger.info(f"💤 Sleeping ... {remaining:.2f} s\n")
+        loop_rtt = time.monotonic() - start
+        loop_rtt_ms = loop_rtt * 1000
+        remaining = policy.next_sleep(loop_rtt)
 
         if state == NetworkState.HEALTHY:
             tlog(
                 "🛜", 
                 "STATE", 
                 f"{state.label}", 
-                primary="All systems nominal 🐾🌤️ ",
-                meta=f"cycle_rtt={cycle_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+                primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
+                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
             )
         else:
             tlog(
                 "🛜", 
                 "STATE", 
                 f"{state.label}",
-                meta=f"cycle_rtt={cycle_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
             )
 
-
-        #logger.info(f"🛜 Network State [{state.label}]")
-        #tlog("🛜", "STATE", f"{state.label}", meta=f"sleeping={remaining:.2f} s\n")
-
-        # if state == NetworkState.HEALTHY:
-        #     #logger.info("🐾🌤️  \033[1mDNS OK - All systems nominal \033[0m")
-        #     tlog("🟢", "DNS", "OK", primary="All systems nominal 🐾🌤️", meta=f"sleeping={remaining:.2f} s\n")
-
-
         time.sleep(remaining)
-        cycle += 1
+        loop += 1
 
 def main():
     """
