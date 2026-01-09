@@ -90,18 +90,27 @@ def classify_wan(lan_ok: bool, wan_path_ok: bool, wan_trusted: bool) -> WanHealt
 
 class NetworkWatchdog:
     """
-    Background agent that maintains consistency between the device’s
-    current public IP and its Cloudflare DNS record.
+    Autonomous background agent that monitors LAN/WAN health and maintains
+    consistency between the device's public IP and its Cloudflare DNS record.
 
-    Optimized for fast no-op cycles under normal conditions when everything's
-    healthy with explicit recovery behavior on sustained failures.
+    The watchdog is optimized for fast, low-noise no-op cycles under healthy
+    conditions and performs explicit recovery actions only after sustained
+    failure is confirmed by policy.
+
+    Responsibilities:
+        - Observe local router, WAN reachability, and public IP state
+        - Build confidence in WAN stability across cycles
+        - Detect and reconcile DNS drift with Cloudflare
+        - Escalate recovery actions via a finite state machine
+        - Expose a single NetworkState result per evaluation cycle
     """
 
     def __init__(self, max_failure_streak: int = 4):
         """
-        Initialize the NetworkWatchdog runtime, clients, and WAN health machinery.
+        Initialize the NetworkWatchdog runtime, policies, and observation state.
 
-        Constructor is defensive by design and must never crash the agent.
+        Startup is defensive by design: failures during initialization are logged
+        but never prevent the agent from running.
         """
 
         # --- Core services (time, external clients, logging) ---
@@ -110,47 +119,22 @@ class NetworkWatchdog:
         self.gsheets_service = GSheetsService()
         self.logger = get_logger("infra_agent")
 
-        # --- Cloudflare IP Cache Priming (authoritative DNS over HTTPS (DoH) ---
-        try:
-
-            doh = doh_lookup(self.cloudflare_client.dns_name)
-
-            if doh.success and doh.ip:
-                store_cloudflare_ip(doh.ip)
-                self.logger.info(
-                    "Cloudflare L1 cache initialized via DoH | "
-                    f"ip={doh.ip} rtt={doh.elapsed_ms:.1f}ms"
-                )
-            else:
-                # DoH completed but returned no usable IP
-                store_cloudflare_ip("__INIT__")
-                self.logger.warning(
-                    "Cloudflare L1 cache not initialized via DoH | "
-                    f"success={doh.success} "
-                    f"rtt={doh.elapsed_ms:.1f}ms"
-                )
-
-        except Exception as e:
-            # Defensive fallback: init must never crash the agent
-            store_cloudflare_ip("")
-            self.logger.error(
-                "Cloudflare L1 cache init failed | "
-                f"error={type(e).__name__}: {e}"
-            )
-
-        # --- Configuration (static) ---
+        # --- Static configuration ---
         self.router_ip = Config.Hardware.ROUTER_IP        # Local router gateway IP
         self.watchdog_enabled = Config.WATCHDOG_ENABLED   # Enable recovery actions
 
-        # --- WAN Failure Policy ---
-        self.wan_fsm = WanFSM(max_failure_streak)
+        # --- WAN health policy (finite state machine) ---
+        self.wan_fsm = WanFSM(max_failure_streak=max_failure_streak)
 
-        # --- WAN Observation State ---
-        self.last_detected_ip: Optional[str] = None   # Last observed public IP
-        self.ip_stability_count: int = 0              # Consecutive identical IP detections
+        # --- WAN observation state (cross-cycle memory) ---
+        self.last_observed_ip: Optional[str] = None
+        self.ip_consistency_count: int = 0
 
-        # --- WAN Readiness Policy ---
-        self.MIN_IP_STABILITY_CYCLES: int = 2   # Required IP stability cycles
+        # --- WAN trust thresholds ---
+        self.MIN_IP_CONSISTENCY_CYCLES: int = 2
+
+        # --- DNS cache priming (authoritative truth via DoH ---
+        self._prime_dns_cache()
 
         ##################
         # For testing only
@@ -158,43 +142,71 @@ class NetworkWatchdog:
         self.count = 0
         self.flag = True
 
+    def _prime_dns_cache(self) -> None:
+        """
+        Prime the local DNS cache using authoritative DNS over HTTPS (DoH).
+
+        This establishes an initial baseline for DNS drift detection.
+        Failures are tolerated and never block agent startup.
+        """
+        try:
+
+            doh = doh_lookup(self.cloudflare_client.dns_name)
+
+            if doh.success and doh.ip:
+                store_cloudflare_ip(doh.ip)
+                self.logger.info(
+                    "DNS cache primed via DoH | "
+                    f"ip={doh.ip} rtt={doh.elapsed_ms:.1f}ms"
+                )
+            else:
+                store_cloudflare_ip("__INIT__")
+                self.logger.warning(
+                    "DNS cache not primed | "
+                    f"success={doh.success} "
+                    f"rtt={doh.elapsed_ms:.1f}ms"
+                )
+    
+        except Exception as e:
+            store_cloudflare_ip("")
+            self.logger.error(
+                f"DNS cache priming failed | error={type(e).__name__}: {e}"
+            )
+
     def _observe_ip_consistency(self, result: IPResolutionResult) -> bool:
         """
-        Track consecutive agreement of the observed public IP across cycles.
+        Track public IP consistency across cycles to determine WAN stability.
 
-        Builds confidence that the WAN IP is no longer flapping after recovery.
-        Resets immediately on resolution failure or IP change.
-
-        Returns:
-            True once the same public IP has been observed for the minimum
-            required number of consecutive cycles, indicating WAN stability.
+        Returns True once the same public IP has been observed for the minimum
+        number of required cycles, indicating a stable WAN state.
         """
 
         if not result.success:
-            self.ip_stability_count = 0
-            self.last_detected_ip = None
+            self.ip_consistency_count = 0
+            self.last_observed_ip = None
             return False
 
-        ip = result.ip  # success guarantees validity
+        ip = result.ip
 
-        if ip == self.last_detected_ip:
-            self.ip_stability_count += 1
+        if ip == self.last_observed_ip:
+            self.ip_consistency_count += 1
         else:
-            self.ip_stability_count = 1
-            self.last_detected_ip = ip
+            self.ip_consistency_count = 1
+            self.last_observed_ip = ip
 
-        return self.ip_stability_count >= self.MIN_IP_STABILITY_CYCLES
+        return self.ip_consistency_count >= self.MIN_IP_CONSISTENCY_CYCLES
 
     def _sync_dns_if_drifted(self, public_ip: str) -> None:
         """
-        Ensure authoritative DNS reflects the current stable public IP.
+        Reconcile Cloudflare DNS if the authoritative record differs from
+        the current public IP.
 
-        Performs a layered reconciliation:
+        Uses a layered approach:
         1. Local cache (fast no-op)
-        2. Authoritative DNS lookup (truth check)
+        2. Authoritative DoH lookup (truth check)
         3. Provider mutation only if drift is detected
 
-        This function is side-effecting and is intentionally invoked
+        This function is idempotent and and safe to call repeatedly 
         only when the WAN is confirmed stable.
         """
 
@@ -251,10 +263,11 @@ class NetworkWatchdog:
 
     def _power_cycle_edge(self) -> bool:
         """
-        Execute a physical recovery by power-cycling the network edge device.
+        Execute a physical recovery action by power-cycling the network edge 
+        device via a smart plug.
 
-        Performs no validation or health assessment.
-        All escalation decisions are handled upstream by the WAN FSM.
+        This function performs no health checks and makes no policy decisions.
+        All escalation logic is handled by the WAN finite state machine.
 
         Returns:
             True if the power-cycle command sequence completed successfully,
@@ -290,7 +303,7 @@ class NetworkWatchdog:
 
     def _escalate_recovery(self) -> None:
         """
-        Execute the configured WAN recovery escalation strategy.
+        Trigger a WAN recovery action after policy-driven escalation.
 
         Currently implemented as a physical power-cycle of the network edge.
         """
@@ -339,11 +352,17 @@ class NetworkWatchdog:
 
     def evaluate_cycle(self) -> NetworkState:
         """
-        Execute a single watchdog evaluation cycle.
+        Execute a single observation, classification, and action cycle.
 
-        Observes LAN/WAN signals, updates WAN health via FSM,
-        performs gated side-effects (DNS sync, recovery),
-        and returns the resulting high-level network state.
+        This method:
+            - Observes LAN, WAN, and public IP state
+            - Classifies WAN health using confidence and FSM policy
+            - Reconciles DNS when WAN is confirmed stable
+            - Escalates recovery actions on sustained failure
+
+        Returns:
+            A NetworkState representing the overall network condition
+            for this evaluation cycle.
         """
 
         # --- Heartbeat (local process health only) ---
@@ -378,8 +397,8 @@ class NetworkWatchdog:
         #********************************
         #********************************
         #********************************
-        #public = self._override_public_ip_for_test(public)  
-        #self.count += 1
+        public = self._override_public_ip_for_test(public)  
+        self.count += 1
         #********************************
         #********************************
         #********************************
@@ -410,12 +429,12 @@ class NetworkWatchdog:
 
         if wan_health == WanHealth.UP:
             meta.append(
-                f"uptime={self.ip_stability_count} loops"
+                f"uptime={self.ip_consistency_count} loops"
             )
 
         if wan_health == WanHealth.DEGRADED:
             meta.append(
-                f"confidence={self.ip_stability_count}/{self.MIN_IP_STABILITY_CYCLES} consecutive loops"
+                f"confidence={self.ip_consistency_count}/{self.MIN_IP_CONSISTENCY_CYCLES} observations"
             )
 
         if wan_health == WanHealth.DOWN:
