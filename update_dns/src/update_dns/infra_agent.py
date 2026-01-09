@@ -157,6 +157,7 @@ class NetworkWatchdog:
         # For testing only
         ##################
         self.count = 0
+        self.flag = True
 
     def _update_ip_stability(self, result: IPResolutionResult) -> bool:
         """
@@ -179,7 +180,61 @@ class NetworkWatchdog:
 
         return self.ip_stability_count >= self.MIN_IP_STABILITY_CYCLES
 
-    def _recover_wan(self) -> bool:
+    def _update_dns_if_needed(self, public_ip: str) -> None:
+        """
+        Wartime CEO
+        """
+
+        # --- L1 Cache (Cheap, local, fast no-op) ---
+        cache = load_cached_cloudflare_ip()
+        cache_match = cache.hit and cache.ip == public_ip
+
+        tlog(
+            "🟢" if cache_match else "🟡",
+            "CACHE",
+            "HIT" if cache_match else "MISS",
+            primary=f"ip={cache.ip}",
+            meta=f"rtt={cache.elapsed_ms:.1f}ms"
+        )
+
+        if cache_match:
+            return  # Fast no-op
+
+        # --- L2 DoH (Authoritative DNS, external truth) ---
+        doh = doh_lookup(self.cloudflare_client.dns_name)
+
+        if doh.success and doh.ip == public_ip:
+            tlog(
+                "🟢",
+                "DNS",
+                "OK",
+                primary=f"ip={doh.ip}",
+                meta=f"rtt={doh.elapsed_ms:.1f}ms"
+            )
+            store_cloudflare_ip(public_ip)   # Refresh cache
+            return
+
+        # --- Mutation required ---
+        tlog("🟡", "DNS", "CHANGE", primary=f"{doh.ip} → {public_ip}")
+
+        result = self.cloudflare_client.update_dns(public_ip)
+        store_cloudflare_ip(public_ip)
+
+        modified = self.time.iso_to_local_string(result.get("modified_on"))
+        tlog(
+            "🟢",
+            "DNS",
+            "UPDATE",
+            primary="Cloudflare updated",
+            meta=f"modified={modified}"
+        )
+
+
+
+
+
+
+    def _power_cycle_router_modem(self):
         """
         Execute a physical network recovery action by power-cycling
         the smart plug connected to the router/modem.
@@ -219,13 +274,57 @@ class NetworkWatchdog:
             self.logger.exception("Unexpected error during recovery")
             return False
 
+    def _recover_wan(self) -> None:
+        tlog("🔴", "RECOVERY", "TRIGGER", primary="power-cycle router/modem")
+
+        success = self._power_cycle_router_modem()
+
+        tlog(
+            "🟢" if success else "🔴",
+            "RECOVERY",
+            "OK" if success else "FAIL",
+            primary="recovery attempt complete"
+        )   
+
+
+    #********************************
+    #********************************
+    #********************************
+    #********************************
+    #********************************
+    def _override_public_ip_for_test(
+        self,
+        public: IPResolutionResult,
+    ) -> IPResolutionResult:
+        
+        if self.count % 3 == 0:
+            self.flag = not self.flag
+        
+        if self.flag:
+            return IPResolutionResult(
+                ip="192.168.0.77",
+                elapsed_ms=public.elapsed_ms,
+                attempts=public.attempts,
+                success=True,
+            )
+        
+        return public
+
+    #********************************
+    #********************************
+    #********************************
+    #********************************
+    #********************************
+
+
+
     def run_cycle(self) -> NetworkState:
         """
         Single evaluation and execution of one cycle from the Wartime CEO
         """
 
         # --- Heartbeat (local process health only) ---
-        #_, dt_str = self.time.now_local()
+        _, dt_str = self.time.now_local()
         tlog("💚", "HEARTBEAT", "OK")
 
         # --- Observe ---
@@ -246,12 +345,26 @@ class NetworkWatchdog:
             "🟢" if wan_probe_ok else "🟡", 
             "WAN",
             "REACHABLE" if wan_probe_ok else "UNREACHABLE",
-            primary="probe",
+            primary="VALIDATING" if wan_probe_ok else ""
             #compute rtt in future?
         )
 
         # --- Public IP (L7) --- 
         public = get_ip()
+
+        #********************************
+        #********************************
+        #********************************
+        #********************************
+        #********************************
+        #public = self._override_public_ip_for_test(public)  
+        #self.count += 1
+        #********************************
+        #********************************
+        #********************************
+        #********************************
+        #********************************
+
         tlog(
             "🟢" if public.success else "🔴",
             "PUBLIC IP",
@@ -270,7 +383,7 @@ class NetworkWatchdog:
                     "WAN",
                     "CONFIRMED",
                     primary=f"ip={public.ip}",
-                    meta=f"confirmed={self.ip_stability_count} consecutive cycles"
+                    meta=f"uptime={self.ip_stability_count} loops"
                 )
             else:
                 tlog(
@@ -278,7 +391,7 @@ class NetworkWatchdog:
                     "WAN",
                     "WARMING",
                     primary=f"ip={public.ip}",
-                    meta=f"confirmed={self.ip_stability_count}/{self.MIN_IP_STABILITY_CYCLES} consecutive cycles"
+                    meta=f"confirmed={self.ip_stability_count}/{self.MIN_IP_STABILITY_CYCLES} consecutive loops"
                 )
 
         # --- Classify ---
@@ -296,7 +409,7 @@ class NetworkWatchdog:
             "WAN",
             "VERDICT",
             primary=verdict.name,
-            meta=f"failures={self.wan_fsm.consec_fails}/{self.wan_fsm.max_consec_fails} | should_escalate={should_escalate}"
+            meta=f"failures={self.wan_fsm.consec_fails}/{self.wan_fsm.max_consec_fails} loops | should_escalate={should_escalate}"
         )
 
         # --- Act (Final state mapping) ---
@@ -304,8 +417,19 @@ class NetworkWatchdog:
             return NetworkState.ROUTER_DOWN
 
         if verdict == WanVerdict.STABLE:
-            # Criteria to update DNS ...
-            # self._update_dns()
+            #tlog("🟢", "WAN", "STABLE", primary="confidence restored")
+            assert public.success and public.ip, "STABLE WAN requires valid public IP"
+            self._update_dns_if_needed(public.ip)
+
+            # --- High-frequency heartbeat (timestamp) to Google Sheet ---
+            gsheets_ok = self.gsheets_service.update_status(
+                ip_address=None,  # No change
+                current_time=dt_str,
+                dns_last_modified=None   # No change
+            )
+            if gsheets_ok:
+                tlog("🟢", "GSHEET", "OK")
+
             return NetworkState.HEALTHY
         
         if verdict == WanVerdict.WARMING:
@@ -317,5 +441,5 @@ class NetworkWatchdog:
                 self._recover_wan()
             return NetworkState.WAN_DOWN
 
-
         return NetworkState.UNKNOWN
+    
