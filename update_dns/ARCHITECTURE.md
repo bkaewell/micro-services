@@ -37,5 +37,101 @@ The watchdog performs one evaluation loop per cycle. Each execution cycle follow
 
 ---
 
-## High-Level Architecture
+## High-Level Architecture (ASCII)
 
+┌────────────────────┐
+│  main_loop()       │
+│  (Supervisor)      │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ NetworkWatchdog    │
+│ evaluate_cycle()   │
+└─────────┬──────────┘
+          │
+ ┌────────┼─────────┐
+ │        │         │
+ ▼        ▼         ▼
+LAN     WAN      Public IP
+Probe   Probe    Resolution
+ │        │         │
+ └────────┼─────────┘
+          ▼
+ WAN Health Classifier
+          │
+          ▼
+    WanFSM (Policy)
+          │
+          ▼
+ DNS Sync / Recovery
+
+ ---
+
+## State Model
+### WAN Health (Internal)
+| State      | Meaning                        |
+| ---------- | ------------------------------ |
+| `UP`       | Public IP stable across cycles |
+| `DEGRADED` | Reachable but not yet trusted  |
+| `DOWN`     | Unreachable or failing         |
+
+
+### Network State (External)
+| State      | Meaning                               |
+| ---------- | ------------------------------------- |
+| `HEALTHY`  | All systems nominal                   |
+| `DEGRADED` | WAN reachable but unstable            |
+| `DOWN`     | WAN unavailable or router unreachable |
+| `ERROR`    | Internal failure                      |
+| `UNKNOWN`  | Fallback                              |
+
+---
+
+## WAN Health State Diagram (ASCII)
+
+            ┌─────────────┐
+            │             │
+            │    DOWN     │◄──────────────┐
+            │             │               │
+            └─────▲───────┘               │
+                  │                       │
+        sustained │ failures              │
+                  │                       │
+            ┌─────┴───────┐        probe failure
+            │             │─────────────────────┐
+            │  DEGRADED   │                     │
+            │             │─────────────────────┘
+            └─────▲───────┘
+                  │
+       stable IP  │
+      confirmed   │
+                  │
+            ┌─────┴───────┐
+            │             │
+            │     UP      │
+            │             │
+            └─────────────┘
+
+---
+
+## WAN Health State Diagram (Mermaid)
+
+stateDiagram-v2
+    [*] --> DEGRADED
+    DEGRADED --> UP : IP stable across cycles
+    UP --> DEGRADED : instability detected
+    DEGRADED --> DOWN : sustained failures
+    DOWN --> DEGRADED : partial recovery
+
+---
+
+## Failure Escalation Policy
+TBD
+
+---
+
+## DNS Reconciliation Strategy
+TBD
+
+---
