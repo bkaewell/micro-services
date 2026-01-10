@@ -280,18 +280,22 @@ class NetworkWatchdog:
         try:
             # Power OFF
             off = requests.get(
-                f"http://{plug_ip}/relay/0?turn=off", timeout=Config.API_TIMEOUT
+                f"http://{plug_ip}/relay/0?turn=off", 
+                timeout=Config.API_TIMEOUT
             )
             off.raise_for_status()
             self.logger.debug("Smart plug powered OFF")
+
             time.sleep(reboot_delay)
 
             # Power ON
             on = requests.get(
-                f"http://{plug_ip}/relay/0?turn=on", timeout=Config.API_TIMEOUT
+                f"http://{plug_ip}/relay/0?turn=on", 
+                timeout=Config.API_TIMEOUT
             )
             on.raise_for_status()
             self.logger.debug("Smart plug powered ON")
+
             return True
 
         except requests.RequestException:
@@ -308,20 +312,46 @@ class NetworkWatchdog:
         Currently implemented as a physical power-cycle of the network edge.
         """
 
-        tlog("🔴", "RECOVERY", "TRIGGER", primary="power-cycle router/modem")
+        plug_ip = Config.Hardware.PLUG_IP
+        sleep = Config.Hardware.REBOOT_DELAY
+
+        tlog(
+            "🔴", 
+            "RECOVERY", 
+            "TRIGGER", 
+            primary="power-cycle edge device",
+            meta=f"sleep={sleep}s"
+        )
+    
+        plug_ok = ping_host(plug_ip)
+
+        tlog(
+            "🟡",
+            "EDGE",
+            "COMMAND",
+            primary="plug-relay toggle",
+            meta=f"plug_ip={plug_ip}"
+        )
 
         success = self._power_cycle_edge()
 
         if success:
-            # Reset FSM bookkeeping after a successful recovery
+            # --- CRITICAL RESET ---
+            # Recovery breaks trust, even if IP remains unchanged
+            # Enforce re-promotion of WAN (DOWN → DEGRADED → UP)           
             self.wan_fsm.failure_streak = 0
+            self.ip_consistency_count = 0
+            self.last_observed_ip = None        
+
+        plug_ok_after = ping_host(plug_ip)
 
         tlog(
             "🟢" if success else "🔴",
             "RECOVERY",
             "OK" if success else "FAIL",
-            primary="recovery attempt complete"
-        )   
+            primary="recovery attempt complete",
+            meta=f"plug_pre_toggle={plug_ok} | plug_post_toggle={plug_ok_after}"
+        )
 
 
     #********************************
