@@ -58,20 +58,31 @@ class WanFSM:
     def __init__(self, max_failure_streak: int):
         self.max_failure_streak = max_failure_streak
         self.failure_streak = 0
+        self.escalation_fired = False
 
     def advance(self, health: WanHealth) -> bool:
         """
-        Returns True if recovery escalation should trigger.
+        Advance WAN failure state.
+
+        Returns True only once per outage when escalation should trigger.
         """
         if health == WanHealth.DOWN:
             self.failure_streak += 1
-            return self.failure_streak >= self.max_failure_streak
 
-        if health == WanHealth.UP:
-            self.failure_streak = 0
+            if (
+                self.failure_streak >= self.max_failure_streak
+                and not self.escalation_fired
+            ):
+                self.escalation_fired = True
+                return True
 
-        # DEGRADED does not affect counters
-        return False
+            return False
+
+        # Any non-DOWN state resets failure tracking
+        self.failure_streak = 0
+        self.escalation_fired = False
+        return False    
+
 
 def classify_wan(lan_ok: bool, wan_path_ok: bool, wan_trusted: bool) -> WanHealth:
     """
@@ -465,18 +476,24 @@ class NetworkWatchdog:
             meta.append(
                 f"uptime={self.ip_consistency_count} loops"
             )
+            meta.append(f"escalate={escalate}")
 
         if wan_health == WanHealth.DEGRADED:
             meta.append(
                 f"confidence={self.ip_consistency_count}/{self.MIN_IP_CONSISTENCY_CYCLES} observations"
             )
+            meta.append(f"escalate={escalate}")
 
         if wan_health == WanHealth.DOWN:
-            meta.append(
-                f"failures={self.wan_fsm.failure_streak}/{self.wan_fsm.max_failure_streak} loops"
-            )
+            # meta.append(
+            #     f"failures={self.wan_fsm.failure_streak}/{self.wan_fsm.max_failure_streak} loops"
+            # )
+            meta.append(f"failures={self.wan_fsm.failure_streak}")
+            meta.append(f"threshold={self.wan_fsm.max_failure_streak}")
+            meta.append(f"escalate={escalate}")
+            meta.append(f"escalated={self.wan_fsm.escalation_fired}")
 
-        meta.append(f"escalate={escalate}")
+        #meta.append(f"escalate={escalate}")
 
         tlog(
             emoji,
@@ -510,8 +527,18 @@ class NetworkWatchdog:
         
         # DOWN
         if wan_health == WanHealth.DOWN:
-            if self.watchdog_enabled and escalate:
+            if escalate and self.watchdog_enabled:
                 self._escalate_recovery()
+
+            if escalate and not self.watchdog_enabled:
+                tlog(
+                    "🟡",
+                    "RECOVERY",
+                    "SUPPRESSED",
+                    primary="watchdog disabled",
+                    meta="escalation threshold reached"
+                )
+
             return NetworkState.DOWN
 
         return NetworkState.UNKNOWN
