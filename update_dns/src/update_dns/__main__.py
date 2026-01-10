@@ -66,14 +66,14 @@ def main_loop(
                 "STATE", 
                 f"{state.label}", 
                 primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
-                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s\n"
             )
         else:
             tlog(
                 "🛜", 
                 "STATE", 
                 f"{state.label}",
-                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s"
+                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s\n"
             )
 
         time.sleep(remaining)

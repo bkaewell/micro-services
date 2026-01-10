@@ -312,6 +312,10 @@ class NetworkWatchdog:
 
         success = self._power_cycle_edge()
 
+        if success:
+            # Reset FSM bookkeeping after a successful recovery
+            self.wan_fsm.failure_streak = 0
+
         tlog(
             "🟢" if success else "🔴",
             "RECOVERY",

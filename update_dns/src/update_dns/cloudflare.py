@@ -33,7 +33,7 @@ class CloudflareClient:
         self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
         self.dns_record_id = os.getenv("CLOUDFLARE_DNS_RECORD_ID")
         self.validate_cloudflare()
-        self.logger.info("🐾🌤️  Cloudflare config OK")
+        self.logger.info("Cloudflare config OK")
 
         # Pre-calculated and necessary instance variables
         self.headers = {
