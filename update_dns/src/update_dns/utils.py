@@ -128,10 +128,10 @@ def get_ip() -> IPResolutionResult:
                     success=True,
                 )
             
-            logger.warning(f"Invalid IP returned from {url}: {ip!r}")
+            logger.debug(f"Invalid IP returned from {url}: {ip!r}")
 
         except requests.RequestException as e:
-            logger.warning(f"IP lookup failed via {url} ({e.__class__.__name__})")
+            logger.debug(f"IP lookup failed via {url} ({e.__class__.__name__})")
     
     return IPResolutionResult(
         ip=None,
