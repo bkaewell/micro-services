@@ -6,34 +6,10 @@ import logging
 from .config import Config
 
 
-# --- Custom log levels ---
-TIMING = 25   # Between INFO (20) and WARNING (30)
-logging.addLevelName(TIMING, "TIME")
-
-def timing(self, message, *args, **kwargs):
-    """Add `timing` method to Logger for TIMING-level logs."""
-    if self.isEnabledFor(TIMING):
-        self._log(TIMING, message, args, stacklevel=2, **kwargs)
-
-logging.Logger.timing = timing
-
-# --- Filters ---
-class TimingFilter(logging.Filter):
-    """Filter out TIMING logs unless explicitly enabled."""
-    def __init__(self, enabled: bool):
-        super().__init__()
-        self.enabled = enabled
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.levelno == TIMING:
-            return self.enabled
-        return True
-
 # --- Format configuration constants ---
 LOG_LEVEL_EMOJIS = {
     logging.DEBUG: "🧱",
     logging.INFO: "🟢",
-    TIMING: "⚡️",
     logging.WARNING: "⚠️ ",
     logging.ERROR: "❌",
     logging.CRITICAL: "🔥",
@@ -73,8 +49,8 @@ def setup_logging(level=logging.INFO) -> None:
     )
     handler.setFormatter(formatter)
 
-    # Apply optional TIMING filter based on config
-    handler.addFilter(TimingFilter(enabled=Config.LOG_TIMING))
+    # Apply optional filter
+    # handler.addFilter()
     root.addHandler(handler)
 
 def get_logger(name: str) -> logging.Logger:

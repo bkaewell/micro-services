@@ -29,10 +29,9 @@ class Config:
 
     # --- Observability Policy ---
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")    
-    LOG_TIMING = os.getenv("LOG_TIMING", "false").lower() == "true"
 
     # --- Recovery Policy ---
-    WATCHDOG_ENABLED = os.getenv("WATCHDOG_ENABLED", "false").lower() == "true"
+    RECOVERY_ESCALATION_ENABLED = os.getenv("RECOVERY_ESCALATION_ENABLED", "false").lower() == "true"
 
     # --- Hardware ---
     class Hardware:
