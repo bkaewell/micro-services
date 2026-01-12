@@ -28,7 +28,7 @@ class DoHLookupResult:
     elapsed_ms: float
     success: bool
 
-def ping_host(ip: str, port: int = 80, timeout: float = 1.0) -> bool:
+def ping_host(ip: str, port: int = 80, timeout: float = 1.5) -> bool:
     """
     Check host reachability efficiently and cross-platform.
 
