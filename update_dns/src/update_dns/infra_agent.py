@@ -35,15 +35,15 @@ class NetworkState(Enum):
             NetworkState.UNKNOWN: "UNKNOWN",
         }[self]
 
-class WanHealth(Enum):
+class WanState(Enum):
     UP = auto()        # Confirmed stable
     DEGRADED = auto()  # Reachable but not yet trusted
     DOWN = auto()      # Unreachable
 
-HEALTH_EMOJI = {
-    WanHealth.UP: "🟢",
-    WanHealth.DEGRADED: "🟡",
-    WanHealth.DOWN: "🔴",
+WAN_HEALTH_EMOJI = {
+    WanState.UP: "🟢",
+    WanState.DEGRADED: "🟡",
+    WanState.DOWN: "🔴",
 }
 
 class WanFSM:
@@ -62,22 +62,25 @@ class WanFSM:
     """
 
     def __init__(self, min_consistency: int = 2):
-        self.state: WanHealth = WanHealth.DOWN
+        self.state: WanState = WanState.DOWN
         self.min_consistency = min_consistency
         self.consistency_count = 0
 
     def _enter_down(self) -> None:
-        self.state = WanHealth.DOWN
+        self.state = WanState.DOWN
         self.consistency_count = 0
 
-    def advance(
+    def transition(
         self,
         lan_ok: bool,
         wan_path_ok: bool,
         public_ok: bool,
-    ) -> WanHealth:
+    ) -> WanState:
         """
-        Advance WAN state based on observed signals.
+        Transition WAN state from strongest observed signals 
+        Weak: LAN (currently omitted) 
+        Strong: WAN
+        Strongest: Public IP
         """
 
         # # Any failure immediately collapses confidence
@@ -89,13 +92,13 @@ class WanFSM:
         if wan_path_ok and public_ok:
             self.consistency_count += 1
 
-            if self.state == WanHealth.DOWN:
-                self.state = WanHealth.DEGRADED
+            if self.state == WanState.DOWN:
+                self.state = WanState.DEGRADED
             elif (
-                self.state == WanHealth.DEGRADED
+                self.state == WanState.DEGRADED
                 and self.consistency_count >= self.min_consistency
             ):
-                self.state = WanHealth.UP
+                self.state = WanState.UP
 
             return self.state
     
@@ -103,12 +106,12 @@ class WanFSM:
         self._enter_down()
         return self.state
 
-class NetworkWatchdog:
+class NetworkControlAgent:
     """
     Autonomous background agent that monitors LAN/WAN health and maintains
     consistency between the device's public IP and its Cloudflare DNS record.
 
-    The watchdog is optimized for fast, low-noise no-op cycles under healthy
+    The agent is optimized for fast, low-noise no-op cycles under healthy
     conditions and performs explicit recovery actions only after sustained
     failure is confirmed by policy.
 
@@ -120,9 +123,9 @@ class NetworkWatchdog:
         - Expose a single NetworkState result per evaluation cycle
     """
 
-    def __init__(self, max_failure_streak: int = 4):
+    def __init__(self):
         """
-        Initialize the NetworkWatchdog runtime, policies, and observation state.
+        Initialize the NetworkControlAgent runtime, policies, and observation state.
 
         Startup is defensive by design: failures during initialization are logged
         but never prevent the agent from running.
@@ -135,39 +138,28 @@ class NetworkWatchdog:
         self.logger = get_logger("infra_agent")
 
         # --- Static configuration ---
-        self.router_ip = Config.Hardware.ROUTER_IP   # Local router gateway IP
-        self.recovery_escalation_enabled = Config.RECOVERY_ESCALATION_ENABLED
+        self.router_ip = Config.Hardware.ROUTER_IP
+        self.allow_physical_recovery = Config.ALLOW_PHYSICAL_RECOVERY
 
-
-
-
-        # --- WAN trust thresholds ---
-        self.MIN_IP_CONSISTENCY_CYCLES: int = 2
-
-
-
-        # --- WAN health policy (finite state machine) ---
+        # --- WAN policy ---
+        self.MIN_WAN_PROMOTION_CYCLES = 2
+        self.MAX_CONSECUTIVE_FAILS = 4
+        # MIN_IP_CONSISTENCY_CYCLES = 2   # Future work, IP can flap during startup
         self.wan_fsm = WanFSM(
-            min_consistency=self.MIN_IP_CONSISTENCY_CYCLES
+            min_consistency=self.MIN_WAN_PROMOTION_CYCLES
         )
 
-
         # --- WAN observation state (cross-cycle memory) ---
-        self.last_observed_ip: Optional[str] = None
-        self.ip_consistency_count: int = 0
+        # self.last_observed_ip: Optional[str] = None
+        # self.ip_consistency_count: int = 0
+        # self.last_public_ip = None
+        self.last_wan_state: Optional[WanState] = None
+        self.consecutive_fails: int = 0
 
-
-        self.down_streak = 0
-        self.MAX_DOWN_STREAK = 4
-
-
-        self.last_wan_health = None
+        # --- Telemetry / epochs ---
         self.wan_epoch = 0
-        #self.ip_consistency_count = 0
-        self.last_public_ip = None
 
-
-        # --- DNS cache priming (authoritative truth via DoH ---
+        # --- startup priming ---
         self._prime_dns_cache()
 
         ##################
@@ -207,42 +199,18 @@ class NetworkWatchdog:
                 f"DNS cache priming failed | error={type(e).__name__}: {e}"
             )
 
-    def _update_ip_confidence(self, public_ip: str):
-        """
-        TBD
-        """
-        if self.last_public_ip is None:
-            self.ip_consistency_count = 1
-        elif public_ip == self.last_public_ip:
-            self.ip_consistency_count += 1
-        else:
-            self.ip_consistency_count = 1
-
-        self.last_public_ip = public_ip
-
-
-    # def _observe_ip_consistency(self, result: IPResolutionResult) -> bool:
+    # def _update_ip_confidence(self, public_ip: str):
     #     """
-    #     Track public IP consistency across cycles to determine WAN stability.
-
-    #     Returns True once the same public IP has been observed for the minimum
-    #     number of required cycles, indicating a stable WAN state.
+    #     TBD
     #     """
-
-    #     if not result.success:
-    #         self.ip_consistency_count = 0
-    #         self.last_observed_ip = None
-    #         return False
-
-    #     ip = result.ip
-
-    #     if ip == self.last_observed_ip:
+    #     if self.last_public_ip is None:
+    #         self.ip_consistency_count = 1
+    #     elif public_ip == self.last_public_ip:
     #         self.ip_consistency_count += 1
     #     else:
     #         self.ip_consistency_count = 1
-    #         self.last_observed_ip = ip
 
-    #     return self.ip_consistency_count >= self.MIN_IP_CONSISTENCY_CYCLES
+    #     self.last_public_ip = public_ip
 
     def _on_wan_down_transition(self):
         """
@@ -361,7 +329,7 @@ class NetworkWatchdog:
             self.logger.exception("Unexpected error during recovery")
             return False
 
-    def _escalate_recovery(self) -> None:
+    def _trigger_physical_recovery(self) -> None:
         """
         Trigger a WAN recovery action after policy-driven escalation.
 
@@ -397,7 +365,7 @@ class NetworkWatchdog:
             # Enforce re-promotion of WAN (DOWN → DEGRADED → UP)           
             self.wan_fsm.failure_streak = 0
             self.ip_consistency_count = 0
-            self.last_observed_ip = None        
+            #self.last_observed_ip = None        
 
         plug_ok_after = ping_host(plug_ip)
 
@@ -450,10 +418,7 @@ class NetworkWatchdog:
         _, dt_str = self.time.now_local()
         tlog("💚", "HEARTBEAT", "OK")
 
-        # =========================
-        # OBSERVE
-        # =========================
-
+        # ---OBSERVE ---
         # --- LAN ---
         lan_ok = ping_host(self.router_ip)
         tlog(
@@ -493,70 +458,57 @@ class NetworkWatchdog:
             meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
         )
 
-        # =========================
-        # CLASSIFY (FSM owns health)
-        # =========================
 
-        wan_health = self.wan_fsm.advance(
+        # --- ASSESS (FSM owns health) ---
+        wan_state = self.wan_fsm.transition(
             lan_ok=lan_ok,
             wan_path_ok=wan_path_ok,
             public_ok=public.success
         )
 
-        # =========================
-        # DECIDE (policy & escalation)
-        # =========================
-
-        if wan_health == WanHealth.DOWN:
-            self.down_streak += 1
+        # --- DECIDE (policy & escalation) ---
+        if wan_state == WanState.DOWN:
+            self.consecutive_fails += 1
         else:
-            self.down_streak = 0
+            self.consecutive_fails = 0
 
         escalate = (
-            wan_health == WanHealth.DOWN
-            and self.down_streak >= self.MAX_DOWN_STREAK
+            wan_state == WanState.DOWN
+            and self.consecutive_fails >= self.MAX_CONSECUTIVE_FAILS
         )
 
         # Detect first transition into DOWN (telemetry hook)
-        if wan_health == WanHealth.DOWN and self.last_wan_health != WanHealth.DOWN:
+        if wan_state == WanState.DOWN and self.last_wan_state != WanState.DOWN:
             self._on_wan_down_transition()
 
-        self.last_wan_health = wan_health
+        self.last_wan_state = wan_state
 
-        # =========================
-        # REPORT (telemetry)
-        # =========================
-
+        # --- REPORT (telemetry) ---
         meta = []
-        if wan_health == WanHealth.UP:
+        if wan_state == WanState.UP:
             meta.append(f"confidence={self.wan_fsm.consistency_count} loops")
-
-        elif wan_health == WanHealth.DEGRADED:
+        elif wan_state == WanState.DEGRADED:
             meta.append(
                 f"confidence={self.wan_fsm.consistency_count}/"
                 f"{self.wan_fsm.min_consistency} loops"
             )
-
-        elif wan_health == WanHealth.DOWN:
-            meta.append(f"failures={self.down_streak}/{self.MAX_DOWN_STREAK}")
+        elif wan_state == WanState.DOWN:
+            meta.append(f"failures={self.consecutive_fails}/{self.MAX_CONSECUTIVE_FAILS}")
             meta.append(f"escalate={escalate}")
 
         tlog(
-            HEALTH_EMOJI[wan_health],
+            WAN_HEALTH_EMOJI[wan_state],
             "WAN",
-            "HEALTH",
-            primary=wan_health.name,
+            "STATE",
+            primary=wan_state.name,
             meta=" | ".join(meta)
         )
 
-        # =========================
-        # ACT (side effects)
-        # =========================
-
+        # --- ACT (side effects) ---
         if not lan_ok:
             return NetworkState.DOWN
 
-        if wan_health == WanHealth.UP:
+        if wan_state == WanState.UP:
             assert public.success and public.ip, "UP WAN requires valid public IP"
 
             self._sync_dns_if_drifted(public.ip)
@@ -571,16 +523,16 @@ class NetworkWatchdog:
 
             return NetworkState.HEALTHY
 
-        if wan_health == WanHealth.DEGRADED:
+        if wan_state == WanState.DEGRADED:
             return NetworkState.DEGRADED
 
         # --- WAN DOWN ---
-        if escalate and self.recovery_escalation_enabled:
-            self._escalate_recovery()
+        if escalate and self.allow_physical_recovery:
+            self._trigger_physical_recovery()
 
             # CRITICAL:
             # Reset streak AFTER escalation to prevent rapid re-trigger loops
-            self.down_streak = 0
+            self.consecutive_fails = 0
 
         elif escalate:
             tlog(
