@@ -19,21 +19,22 @@ def main_loop(
         agent: NetworkControlAgent
     ):
     """
-    Supervisor loop for continuous network monitoring and self-healing.
+    Supervisor loop for autonomous network control, dynamic DNS reconciliation,
+    and self-healing infrastructure.
 
-    Repeatedly executes the network control agent's evaluation cycle 
-    according to the configured scheduling policy, handling exceptions and 
-    enforcing consistent timing between iterations.
+    Built to maintain a dynamic WireGuard VPN, this agent monitors LAN/WAN 
+    health, stabilizes the public IP, and updates Cloudflare DNS only once WAN 
+    stability is confirmed. As a stretch goal, it can trigger physical recovery
+    if the network becomes unresponsive. Scheduling includes subtle timing 
+    adjustments to avoid Cloudflare API rate limits while maximizing telemetry 
+    and observability.
 
-    Responsibilities:
-        - Invoke the NetworkControlAgent for health evaluation
-        - Capture and log the resulting NetworkState
-        - Handle unexpected exceptions gracefully
-        - Enforce scheduling intervals and drift correction
-
-    Notes:
-        - Designed for long-running, unattended operation
-        - NetworkState.ERROR represents unexpected internal failures    
+    Features:
+        - Continuously run the NetworkControlAgent evaluation cycle
+        - Sync Cloudflare DNS only when WAN and IP are verified stable
+        - Maintain telemetry and NetworkState logging for long-running operation
+        - Enforce drift-aware scheduling to balance consistency and API friendliness
+        - Escalate physical WAN recovery after repeated failures
     """
 
     logger = get_logger("main_loop")
@@ -80,10 +81,12 @@ def main_loop(
 
 def main():
     """
-    Application entry point for the network monitoring agent.
+    Entry point for the autonomous network control agent.
 
-    Initializes logging, validates runtime configuration, and starts
-    the supervisor loop.
+    Sets up observability, validates configuration, and launches the 
+    resilient, self-healing supervisor loop that monitors LAN/WAN, 
+    stabilizes public IP, and reconciles Cloudflare DNS in real time.
+    Designed for production-grade reliability even on a home network.
     """
 
     # Setup logging policy
