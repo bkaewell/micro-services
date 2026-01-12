@@ -36,9 +36,28 @@ class NetworkState(Enum):
         }[self]
 
 class WanState(Enum):
-    UP = auto()        # Confirmed stable
-    DEGRADED = auto()  # Reachable but not yet trusted
-    DOWN = auto()      # Unreachable
+    """
+    Canonical WAN health states with monotonic promotion semantics.
+
+    DOWN:
+        No trustworthy evidence of external reachability.
+        This state represents *absence of confidence*, not merely a transient failure.
+        Any ambiguity or signal disagreement collapses the system into DOWN.
+
+    DEGRADED:
+        Partial or emerging evidence of WAN viability.
+        External reachability may exist, but stability and continuity
+        have not yet been established.
+        DEGRADED is a probationary state and MUST NOT be treated as operationally safe.
+
+    UP:
+        Sustained, corroborated evidence of WAN health.
+        Entry into UP requires consecutive good observations and explicit promotion gating.
+        UP implies the system may perform side-effecting network actions.
+    """
+    UP = auto()
+    DEGRADED = auto()
+    DOWN = auto()
 
 WAN_HEALTH_EMOJI = {
     WanState.UP: "🟢",
@@ -48,47 +67,88 @@ WAN_HEALTH_EMOJI = {
 
 class WanFSM:
     """
-    Pure WAN health finite-state machine.
+    Deterministic finite-state machine that models WAN health confidence
+    over time.
 
-    Responsibilities:
-    - Classify WAN health from raw signals
-    - Enforce DOWN → DEGRADED → UP promotion
-    - Reset confidence on any failure
+    This component is intentionally narrow in scope: it converts raw,
+    per-cycle network observations into a stable, policy-friendly WAN
+    health signal. It smooths transient noise, enforces monotonic promotion
+    (DOWN → DEGRADED → UP), and collapses trust immediately on verified
+    failure.
 
-    Non-responsibilities:
-    - No recovery actions
-    - No timers
-    - No side effects
+    Design principles:
+        - Signal > action: classification only, no recovery side effects
+        - Deterministic and testable: same inputs always yield the same state
+        - Noise-tolerant: requires consecutive good observations to promote
+        - Fail-fast: any true failure resets confidence immediately
+
+    Explicitly out of scope:
+        - Recovery or escalation logic
+        - Timers, sleeps, or wall-clock dependencies
+        - External side effects or I/O
     """
 
     def __init__(self, promotion_threshold: int = 2):
+        """
+        Initialize the WAN health state machine.
+
+        Args:
+            promotion_threshold:
+                Number of consecutive, clean observations required to
+                promote WAN health from DEGRADED to UP. This encodes
+                confidence-building rather than instantaneous trust.
+        """
         self.state: WanState = WanState.DOWN
         self.promotion_threshold = promotion_threshold
         self.good_observation_count = 0
 
     def _enter_down(self) -> None:
+        """
+        Force a transition to DOWN and discard all accumulated confidence.
+
+        This method represents a hard trust reset and is invoked whenever
+        the WAN is observed to be definitively unhealthy. Recovery and
+        remediation decisions are handled by higher-level policy layers.
+        """
         self.state = WanState.DOWN
         self.good_observation_count = 0
 
     def transition(
         self,
-        lan_ok: bool,
+        #lan_ok: bool,
         wan_path_ok: bool,
         public_ok: bool,
         allow_promotion: bool = True,
     ) -> WanState:
         """
-        Transition WAN state from strongest observed signals. 
-        Weak: LAN (currently omitted) 
-        Strong: WAN
-        Strongest: Public IP
-        Promotion to UP is gated by allow_promotion.
-        """
+        Advance the WAN health state based on the strongest available signals.
 
-        # # Any failure immediately collapses confidence
-        # if not lan_ok or not wan_path_ok or not public_ok:
-        #     self._enter_down()
-        #     return self.state
+        This method evaluates observations in order of trustworthiness and
+        updates internal confidence accordingly. Promotion is monotonic and
+        gated by both signal quality and explicit policy approval.
+
+        Signal model:
+            - WAN path reachability: strong
+            - Public IP resolution: strongest
+            - LAN reachability: intentionally excluded to avoid false negatives
+
+        State transitions:
+            - Any verified failure → DOWN (confidence reset)
+            - First clean observation → DEGRADED
+            - N consecutive clean observations → UP (if promotion allowed)
+
+        Args:
+            wan_path_ok:
+                Whether external WAN reachability succeeded.
+            public_ok:
+                Whether a public IP was successfully observed.
+            allow_promotion:
+                External policy gate used to delay DEGRADED → UP
+                (e.g., IP stability requirements).
+
+        Returns:
+            The updated WanState after applying this observation.
+        """
 
         # Strong WAN evidence overrides LAN probe noise
         if wan_path_ok and public_ok:
@@ -112,19 +172,21 @@ class WanFSM:
 
 class NetworkControlAgent:
     """
-    Autonomous background agent that monitors LAN/WAN health and maintains
-    consistency between the device's public IP and its Cloudflare DNS record.
+    Autonomous control-plane agent responsible for WAN health assessment,
+    public IP stabilization, and Cloudflare DNS reconciliation.
 
-    The agent is optimized for fast, low-noise no-op cycles under healthy
-    conditions and performs explicit recovery actions only after sustained
-    failure is confirmed by policy.
+    Designed for low-noise operation under healthy conditions, the agent
+    builds confidence in network stability across cycles and performs
+    corrective actions only after sustained failure is confirmed by policy.
+    Although deployed on a home network, it is engineered with real-world
+    reliability, observability, and failure isolation in mind.
 
-    Responsibilities:
-        - Observe local router, WAN reachability, and public IP state
-        - Build confidence in WAN stability across cycles
-        - Detect and reconcile DNS drift with Cloudflare
-        - Escalate recovery actions via a finite state machine
-        - Expose a single NetworkState result per evaluation cycle
+    Features:
+        - Observes LAN reachability, WAN path health, and public IP state
+        - Promotes WAN health through a finite-state confidence model
+        - Reconciles Cloudflare DNS only after stability is established
+        - Escalates recovery actions when failure thresholds are exceeded
+        - Emits a single authoritative NetworkState per control cycle
     """
 
     def __init__(self):
@@ -176,10 +238,18 @@ class NetworkControlAgent:
 
     def _prime_dns_cache(self) -> None:
         """
-        Prime the local DNS cache using authoritative DNS over HTTPS (DoH).
+        Opportunistically seed the local DNS cache using authoritative DNS-over-HTTPS (DoH).
 
-        This establishes an initial baseline for DNS drift detection.
-        Failures are tolerated and never block agent startup.
+        This function establishes an initial reference point for future DNS drift detection
+        without asserting correctness or availability guarantees.
+
+        Design principles:
+        - Best-effort only: failures are explicitly tolerated
+        - Non-blocking: never delays or aborts agent startup
+        - Non-authoritative: primes signal state, not system truth
+
+        A successful prime reduces unnecessary external lookups during early runtime.
+        An unsuccessful prime degrades gracefully and defers correctness to later reconciliation.
         """
         try:
 
@@ -207,8 +277,19 @@ class NetworkControlAgent:
 
     def _update_ip_stability(self, public_ip: Optional[str]) -> bool:
         """
-        Track whether public IP is stable across consecutive cycles.
-        Used ONLY during WAN DEGRADED promotion.
+        Evaluate public IP continuity across consecutive observation cycles.
+
+        This function tracks *stability*, not correctness, and is used exclusively
+        as a promotion guard when transitioning WAN state from DEGRADED → UP.
+
+        Semantics:
+        - Any missing or invalid IP immediately resets stability confidence
+        - Stability is defined as repeated identical observations over time
+        - This function has no side effects beyond internal counters
+
+        Returns:
+            True if the public IP has remained stable for the required
+            promotion window; False otherwise.
         """
 
         if not public_ip:
@@ -226,7 +307,17 @@ class NetworkControlAgent:
 
     def _on_wan_down_transition(self):
         """
-        TBD
+        Execute epochal reset logic on WAN DOWN transitions.
+
+        This hook is invoked exactly once per DOWN entry and is responsible
+        for invalidating all accumulated promotion confidence.
+
+        Actions:
+        - Advance the WAN epoch to invalidate stale observations
+        - Clear IP stability tracking
+        - Reset any DEGRADED/UP promotion state
+
+        This ensures that recovery always requires fresh, post-failure evidence.
         """
         self.wan_epoch += 1
         #self.ip_good_observation_count = 0
@@ -235,16 +326,26 @@ class NetworkControlAgent:
 
     def _sync_dns_if_drifted(self, public_ip: str) -> None:
         """
-        Reconcile Cloudflare DNS if the authoritative record differs from
-        the current public IP.
+        Reconcile authoritative DNS state with the currently observed public IP.
 
-        Uses a layered approach:
-        1. Local cache (fast no-op)
-        2. Authoritative DoH lookup (truth check)
-        3. Provider mutation only if drift is detected
+        This method enforces eventual consistency between runtime network identity
+        and provider-managed DNS records using a strictly layered strategy:
 
-        This function is idempotent and and safe to call repeatedly 
-        only when the WAN is confirmed stable.
+            L1: Local cache
+                Fast, zero-cost short-circuit for known-good state
+
+            L2: Authoritative DoH verification
+                External truth check without mutation
+
+            L3: Provider mutation
+                Executed only when drift is positively identified
+
+        Safety and correctness guarantees:
+        - Idempotent: repeated calls converge without side effects
+        - Mutation-safe: provider updates occur only after authoritative mismatch
+        - Stability-gated: MUST be called only when WAN state is confirmed UP
+
+        This function represents the sole mutation path for DNS correction.
         """
 
         # --- L1 Cache (Cheap, local, fast no-op) ---
@@ -300,15 +401,25 @@ class NetworkControlAgent:
 
     def _power_cycle_edge(self) -> bool:
         """
-        Execute a physical recovery action by power-cycling the network edge 
-        device via a smart plug.
+        Execute a hard, out-of-band recovery by power-cycling the network edge device.
 
-        This function performs no health checks and makes no policy decisions.
-        All escalation logic is handled by the WAN finite state machine.
+        This method represents the lowest-level physical remediation primitive available
+        to the system. It performs a deterministic OFF → delay → ON sequence via a
+        smart power relay and makes no attempt to assess network health, validate outcomes,
+        or infer recovery success beyond command execution.
+
+        Architectural boundaries:
+        - This function is deliberately policy-agnostic
+        - It performs no retries, backoff, or escalation
+        - It MUST NOT be invoked except by higher-level recovery orchestration
+
+        Any decision about *when* or *whether* to invoke this action is owned entirely
+        by the WAN finite-state machine and its escalation policy.
 
         Returns:
-            True if the power-cycle command sequence completed successfully,
-            False otherwise.
+            True if the relay command sequence completed successfully end-to-end.
+            False if communication with the smart plug failed or an unexpected
+            execution error occurred.
         """
 
         plug_ip = Config.Hardware.PLUG_IP
@@ -344,12 +455,26 @@ class NetworkControlAgent:
 
     def _trigger_physical_recovery(self) -> bool:
         """
-        Trigger a WAN recovery action after policy-driven escalation.
+        Execute a policy-authorized physical WAN recovery action.
 
-        Currently implemented as a physical power-cycle of the network edge.
+        This method acts as the orchestration boundary between abstract failure
+        classification (WAN FSM) and concrete physical remediation. It is invoked
+        only after escalation thresholds have been met and recovery has been deemed
+        permissible by policy.
+
+        Responsibilities:
+        - Emit operator-grade telemetry before and after recovery
+        - Execute exactly one physical recovery attempt
+        - Provide a boolean execution outcome to the control loop
+
+        Non-responsibilities:
+        - No health re-evaluation
+        - No retry logic
+        - No suppression or rate limiting (handled upstream)
 
         Returns:
-            bool: True if recovery action was successfully executed.
+            True if the recovery command sequence executed successfully.
+            False otherwise.
         """
 
         plug_ip = Config.Hardware.PLUG_IP
@@ -374,14 +499,6 @@ class NetworkControlAgent:
         )
 
         success = self._power_cycle_edge()
-
-        # if success:
-        #     # --- CRITICAL RESET ---
-        #     # Recovery breaks trust, even if IP remains unchanged
-        #     # Enforce re-promotion of WAN (DOWN → DEGRADED → UP)           
-        #     self.wan_fsm.failure_streak = 0
-        #     self.ip_consistency_count = 0
-        #     #self.last_observed_ip = None        
 
         plug_ok_after = ping_host(plug_ip)
 
@@ -428,8 +545,35 @@ class NetworkControlAgent:
 
     def run_control_cycle(self) -> NetworkState:
         """
-        Execute a single control loop:
-            Observe → Assess → Decide → Act → Report
+        Execute one deterministic network control-loop iteration.
+
+        This method implements a closed-loop control system with strict phase
+        separation and single-source-of-truth semantics:
+
+            Observe  →  Assess  →  Decide  →  Act  →  Report
+
+        Phase responsibilities:
+        - Observe:
+            Collect raw, fallible signals (LAN, WAN path, public IP) with no inference.
+        - Assess:
+            Delegate all WAN health classification to the WanFSM.
+            The FSM output is treated as ground truth.
+        - Decide:
+            Apply policy thresholds and escalation rules without reinterpreting health.
+        - Act:
+            Perform side effects (DNS mutation, physical recovery) only when authorized.
+        - Report:
+            Emit structured telemetry for operators and external audit systems.
+
+        Core invariants:
+        - WanFSM is the sole authority on WAN health state
+        - Side effects are gated on explicit, stable health states
+        - Physical recovery is rate-limited via consecutive failure accounting
+        - UP state implies a verified, stable public IP
+
+        Returns:
+            NetworkState reflecting the externally visible health of the system
+            after this control cycle completes.
         """
 
         # --- Heartbeat (process liveness only) ---
@@ -458,7 +602,6 @@ class NetworkControlAgent:
         # --- Public IP ---
         public = get_ip()
 
-
         #********************************
         #********************************
         #********************************
@@ -484,8 +627,10 @@ class NetworkControlAgent:
         if self.wan_fsm.state == WanState.DEGRADED:
             allow_promotion = self._update_ip_stability(public.ip)
 
+        # WanFSM is the sole authority for WAN health
+        # Treat its output as ground truth
         wan_state = self.wan_fsm.transition(
-            lan_ok=lan_ok,
+            #lan_ok=lan_ok,
             wan_path_ok=wan_path_ok,
             public_ok=public.success,
             allow_promotion = allow_promotion,

@@ -81,12 +81,13 @@ def main_loop(
 
 def main():
     """
-    Entry point for the autonomous network control agent.
+    Application entry point for the autonomous network control agent.
 
-    Sets up observability, validates configuration, and launches the 
-    resilient, self-healing supervisor loop that monitors LAN/WAN, 
-    stabilizes public IP, and reconciles Cloudflare DNS in real time.
-    Designed for production-grade reliability even on a home network.
+    Initializes observability, validates runtime configuration, and composes
+    the production-grade control loop responsible for WAN health assessment,
+    public IP stabilization, and Cloudflare DNS reconciliation. Although built
+    for a home network, the system is engineered with real-world reliability,
+    failure handling, and operational discipline in mind.
     """
 
     # Setup logging policy
