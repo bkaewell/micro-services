@@ -61,26 +61,28 @@ class WanFSM:
     - No side effects
     """
 
-    def __init__(self, min_consistency: int = 2):
+    def __init__(self, promotion_threshold: int = 2):
         self.state: WanState = WanState.DOWN
-        self.min_consistency = min_consistency
-        self.consistency_count = 0
+        self.promotion_threshold = promotion_threshold
+        self.good_observation_count = 0
 
     def _enter_down(self) -> None:
         self.state = WanState.DOWN
-        self.consistency_count = 0
+        self.good_observation_count = 0
 
     def transition(
         self,
         lan_ok: bool,
         wan_path_ok: bool,
         public_ok: bool,
+        allow_promotion: bool = True,
     ) -> WanState:
         """
-        Transition WAN state from strongest observed signals 
+        Transition WAN state from strongest observed signals. 
         Weak: LAN (currently omitted) 
         Strong: WAN
         Strongest: Public IP
+        Promotion to UP is gated by allow_promotion.
         """
 
         # # Any failure immediately collapses confidence
@@ -90,13 +92,15 @@ class WanFSM:
 
         # Strong WAN evidence overrides LAN probe noise
         if wan_path_ok and public_ok:
-            self.consistency_count += 1
+            self.good_observation_count += 1
 
             if self.state == WanState.DOWN:
                 self.state = WanState.DEGRADED
+
             elif (
                 self.state == WanState.DEGRADED
-                and self.consistency_count >= self.min_consistency
+                and self.good_observation_count >= self.promotion_threshold
+                and allow_promotion
             ):
                 self.state = WanState.UP
 
@@ -127,37 +131,39 @@ class NetworkControlAgent:
         """
         Initialize the NetworkControlAgent runtime, policies, and observation state.
 
-        Startup is defensive by design: failures during initialization are logged
-        but never prevent the agent from running.
+        The agent is designed to be resilient at startup: initialization failures
+        are logged but do not prevent execution.
         """
 
-        # --- Core services (time, external clients, logging) ---
+        # --- Core services (pure dependencies) --- 
         self.time = TimeService()
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
+        # Future work - add notifications via Telegram API
         self.logger = get_logger("infra_agent")
 
         # --- Static configuration ---
         self.router_ip = Config.Hardware.ROUTER_IP
         self.allow_physical_recovery = Config.ALLOW_PHYSICAL_RECOVERY
 
-        # --- WAN policy ---
-        self.MIN_WAN_PROMOTION_CYCLES = 2
-        self.MAX_CONSECUTIVE_FAILS = 4
-        # MIN_IP_CONSISTENCY_CYCLES = 2   # Future work, IP can flap during startup
+        # --- WAN promotion policy (health → trust) ---
+        self.WAN_PROMOTION_CYCLES = 2   # DEGRADED → UP requires N clean observations
+        self.MAX_CONSECUTIVE_FAILS = 4  # Escalation threshold
+
         self.wan_fsm = WanFSM(
-            min_consistency=self.MIN_WAN_PROMOTION_CYCLES
+            promotion_threshold=self.WAN_PROMOTION_CYCLES
         )
 
         # --- WAN observation state (cross-cycle memory) ---
-        # self.last_observed_ip: Optional[str] = None
-        # self.ip_consistency_count: int = 0
-        # self.last_public_ip = None
         self.last_wan_state: Optional[WanState] = None
         self.consecutive_fails: int = 0
 
+        # IP stability (used ONLY during WAN DEGRADED)
+        self.last_public_ip: Optional[str] = None
+        self.ip_stability_count: int = 0        
+
         # --- Telemetry / epochs ---
-        self.wan_epoch = 0
+        self.wan_epoch: int = 0
 
         # --- startup priming ---
         self._prime_dns_cache()
@@ -199,25 +205,32 @@ class NetworkControlAgent:
                 f"DNS cache priming failed | error={type(e).__name__}: {e}"
             )
 
-    # def _update_ip_confidence(self, public_ip: str):
-    #     """
-    #     TBD
-    #     """
-    #     if self.last_public_ip is None:
-    #         self.ip_consistency_count = 1
-    #     elif public_ip == self.last_public_ip:
-    #         self.ip_consistency_count += 1
-    #     else:
-    #         self.ip_consistency_count = 1
+    def _update_ip_stability(self, public_ip: Optional[str]) -> bool:
+        """
+        Track whether public IP is stable across consecutive cycles.
+        Used ONLY during WAN DEGRADED promotion.
+        """
 
-    #     self.last_public_ip = public_ip
+        if not public_ip:
+            self.ip_stability_count = 0
+            self.last_public_ip = None
+            return False
+
+        if public_ip == self.last_public_ip:
+            self.ip_stability_count += 1
+        else:
+            self.ip_stability_count = 1
+            self.last_public_ip = public_ip
+
+        return self.ip_stability_count >= self.WAN_PROMOTION_CYCLES
 
     def _on_wan_down_transition(self):
         """
         TBD
         """
         self.wan_epoch += 1
-        self.ip_consistency_count = 0
+        #self.ip_good_observation_count = 0
+        self.ip_stability_count = 0
         self.last_public_ip = None
 
     def _sync_dns_if_drifted(self, public_ip: str) -> None:
@@ -329,11 +342,14 @@ class NetworkControlAgent:
             self.logger.exception("Unexpected error during recovery")
             return False
 
-    def _trigger_physical_recovery(self) -> None:
+    def _trigger_physical_recovery(self) -> bool:
         """
         Trigger a WAN recovery action after policy-driven escalation.
 
         Currently implemented as a physical power-cycle of the network edge.
+
+        Returns:
+            bool: True if recovery action was successfully executed.
         """
 
         plug_ip = Config.Hardware.PLUG_IP
@@ -359,13 +375,13 @@ class NetworkControlAgent:
 
         success = self._power_cycle_edge()
 
-        if success:
-            # --- CRITICAL RESET ---
-            # Recovery breaks trust, even if IP remains unchanged
-            # Enforce re-promotion of WAN (DOWN → DEGRADED → UP)           
-            self.wan_fsm.failure_streak = 0
-            self.ip_consistency_count = 0
-            #self.last_observed_ip = None        
+        # if success:
+        #     # --- CRITICAL RESET ---
+        #     # Recovery breaks trust, even if IP remains unchanged
+        #     # Enforce re-promotion of WAN (DOWN → DEGRADED → UP)           
+        #     self.wan_fsm.failure_streak = 0
+        #     self.ip_consistency_count = 0
+        #     #self.last_observed_ip = None        
 
         plug_ok_after = ping_host(plug_ip)
 
@@ -376,6 +392,8 @@ class NetworkControlAgent:
             primary="recovery attempt complete",
             meta=f"plug_pre_toggle={plug_ok} | plug_post_toggle={plug_ok_after}"
         )
+
+        return success
 
 
     #********************************
@@ -408,10 +426,10 @@ class NetworkControlAgent:
     #********************************
 
 
-    def evaluate_cycle(self) -> NetworkState:
+    def run_control_cycle(self) -> NetworkState:
         """
         Execute a single control loop:
-            Observe → Classify → Decide → Act → Report
+            Observe → Assess → Decide → Act → Report
         """
 
         # --- Heartbeat (process liveness only) ---
@@ -458,13 +476,26 @@ class NetworkControlAgent:
             meta=f"rtt={public.elapsed_ms:.1f}ms | attempts={public.attempts}"
         )
 
-
         # --- ASSESS (FSM owns health) ---
+
+        # Determine whether promotion (DEGRADED → UP) is allowed
+        allow_promotion = True
+
+        if self.wan_fsm.state == WanState.DEGRADED:
+            allow_promotion = self._update_ip_stability(public.ip)
+
         wan_state = self.wan_fsm.transition(
             lan_ok=lan_ok,
             wan_path_ok=wan_path_ok,
-            public_ok=public.success
+            public_ok=public.success,
+            allow_promotion = allow_promotion,
         )
+
+        # Detect first transition into DOWN (telemetry hook)
+        if wan_state == WanState.DOWN and self.last_wan_state != WanState.DOWN:
+            self._on_wan_down_transition()
+
+        self.last_wan_state = wan_state
 
         # --- DECIDE (policy & escalation) ---
         if wan_state == WanState.DOWN:
@@ -477,20 +508,14 @@ class NetworkControlAgent:
             and self.consecutive_fails >= self.MAX_CONSECUTIVE_FAILS
         )
 
-        # Detect first transition into DOWN (telemetry hook)
-        if wan_state == WanState.DOWN and self.last_wan_state != WanState.DOWN:
-            self._on_wan_down_transition()
-
-        self.last_wan_state = wan_state
-
         # --- REPORT (telemetry) ---
         meta = []
         if wan_state == WanState.UP:
-            meta.append(f"confidence={self.wan_fsm.consistency_count} loops")
+            meta.append(f"confidence={self.wan_fsm.good_observation_count} loops")
         elif wan_state == WanState.DEGRADED:
             meta.append(
-                f"confidence={self.wan_fsm.consistency_count}/"
-                f"{self.wan_fsm.min_consistency} loops"
+                f"confidence={self.wan_fsm.good_observation_count}/"
+                f"{self.wan_fsm.promotion_threshold} observations"
             )
         elif wan_state == WanState.DOWN:
             meta.append(f"failures={self.consecutive_fails}/{self.MAX_CONSECUTIVE_FAILS}")
@@ -506,7 +531,7 @@ class NetworkControlAgent:
 
         # --- ACT (side effects) ---
         if not lan_ok:
-            return NetworkState.DOWN
+            return NetworkState.DOWN   # ??????
 
         if wan_state == WanState.UP:
             assert public.success and public.ip, "UP WAN requires valid public IP"
@@ -528,12 +553,13 @@ class NetworkControlAgent:
 
         # --- WAN DOWN ---
         if escalate and self.allow_physical_recovery:
-            self._trigger_physical_recovery()
+            recovery_ok = self._trigger_physical_recovery()
 
-            # CRITICAL:
-            # Reset streak AFTER escalation to prevent rapid re-trigger loops
-            self.consecutive_fails = 0
-
+            if recovery_ok:
+                # CRITICAL:
+                # Successful recovery prevents rapid re-trigger loops
+                self.consecutive_fails = 0
+ 
         elif escalate:
             tlog(
                 "🟡",

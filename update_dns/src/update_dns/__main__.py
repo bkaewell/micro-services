@@ -49,9 +49,9 @@ def main_loop(
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
-            state = agent.evaluate_cycle()
+            state = agent.run_control_cycle()
         except Exception as e:
-            logger.exception(f"Unhandled exception during evaluate_cycle: {e}")
+            logger.exception(f"Unhandled exception during run_control_cycle: {e}")
             state = NetworkState.ERROR
 
         # Compute sleep interval
