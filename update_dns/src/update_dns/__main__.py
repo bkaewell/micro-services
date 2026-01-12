@@ -10,23 +10,23 @@ from .time_service import TimeService
 from .logger import get_logger, setup_logging
 from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
-from .infra_agent import NetworkState, NetworkWatchdog
+from .infra_agent import NetworkState, NetworkControlAgent
 
 
 def main_loop(
         local_time: TimeService,
         policy: SchedulingPolicy,
-        watchdog: NetworkWatchdog
+        agent: NetworkControlAgent
     ):
     """
     Supervisor loop for continuous network monitoring and self-healing.
 
-    Repeatedly executes the watchdog evaluation cycle according to the
-    configured scheduling policy, handling exceptions and enforcing
-    consistent timing between iterations.
+    Repeatedly executes the network control agent's evaluation cycle 
+    according to the configured scheduling policy, handling exceptions and 
+    enforcing consistent timing between iterations.
 
     Responsibilities:
-        - Invoke the NetworkWatchdog for health evaluation
+        - Invoke the NetworkControlAgent for health evaluation
         - Capture and log the resulting NetworkState
         - Handle unexpected exceptions gracefully
         - Enforce scheduling intervals and drift correction
@@ -40,7 +40,6 @@ def main_loop(
     state = NetworkState.UNKNOWN
     loop = 1
 
-
     while True:
         start = time.monotonic()
 
@@ -50,7 +49,7 @@ def main_loop(
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
-            state = watchdog.evaluate_cycle()
+            state = agent.evaluate_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during evaluate_cycle: {e}")
             state = NetworkState.ERROR
@@ -102,9 +101,9 @@ def main():
     policy = SchedulingPolicy()    
 
     # Core infra agent
-    watchdog = NetworkWatchdog()
+    agent = NetworkControlAgent()
     
-    main_loop(local_time, policy, watchdog)
+    main_loop(local_time, policy, agent)
 
 if __name__ == "__main__":
     main()

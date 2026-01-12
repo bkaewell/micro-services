@@ -31,7 +31,7 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")    
 
     # --- Recovery Policy ---
-    RECOVERY_ESCALATION_ENABLED = os.getenv("RECOVERY_ESCALATION_ENABLED", "false").lower() == "true"
+    ALLOW_PHYSICAL_RECOVERY = os.getenv("ALLOW_PHYSICAL_RECOVERY", "false").lower() == "true"
 
     # --- Hardware ---
     class Hardware:
