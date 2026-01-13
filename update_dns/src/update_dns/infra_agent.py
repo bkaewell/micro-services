@@ -115,7 +115,6 @@ class WanFSM:
 
     def transition(
         self,
-        #lan_ok: bool,
         wan_path_ok: bool,
         public_ok: bool,
         allow_promotion: bool = True,
@@ -582,21 +581,23 @@ class NetworkControlAgent:
 
         # ---OBSERVE ---
         # --- LAN ---
-        lan_ok = ping_host(self.router_ip)
+        lan = ping_host(self.router_ip)
         tlog(
-            "🟢" if lan_ok else "🔴",
+            "🟢" if lan.success else "🔴",
             "ROUTER",
-            "UP" if lan_ok else "DOWN",
-            primary=f"ip={self.router_ip}"
+            "UP" if lan.success else "DOWN",
+            primary=f"ip={self.router_ip}",
+            meta=f"rtt={lan.elapsed_ms:.1f}ms"
         )
 
         # --- WAN path ---
-        wan_path_ok = verify_wan_reachability()
+        wan_path = verify_wan_reachability()
         tlog(
-            "🟢" if wan_path_ok else "🔴",
+            "🟢" if wan_path.success else "🔴",
             "WAN",
             "PATH",
-            primary="OK" if wan_path_ok else "FAIL"
+            primary="OK" if wan_path.success else "FAIL",
+            meta=f"rtt={wan_path.elapsed_ms:.1f}ms"
         )
 
         # --- Public IP ---
@@ -630,8 +631,7 @@ class NetworkControlAgent:
         # WanFSM is the sole authority for WAN health
         # Treat its output as ground truth
         wan_state = self.wan_fsm.transition(
-            #lan_ok=lan_ok,
-            wan_path_ok=wan_path_ok,
+            wan_path_ok=wan_path.success,
             public_ok=public.success,
             allow_promotion = allow_promotion,
         )
@@ -678,9 +678,9 @@ class NetworkControlAgent:
         # NOTE:
         # LAN/router reachability is a weak, noisy signal and must never
         # override WAN FSM health once public IP and WAN path are confirmed.
-        if not lan_ok and wan_state == WanState.UP:
+        if not lan.success and wan_state == WanState.UP:
             tlog(
-                "🟡",
+                "🟡",  # Upgrade Router/LAN
                 "LAN",
                 "FLAKY",
                 primary="router ICMP unreliable",
