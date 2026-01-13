@@ -88,18 +88,18 @@ class WanFSM:
         - External side effects or I/O
     """
 
-    def __init__(self, promotion_threshold: int = 2):
+    def __init__(self, min_degraded_confirmations: int = 2):
         """
         Initialize the WAN health state machine.
 
         Args:
-            promotion_threshold:
+            min_degraded_confirmations:
                 Number of consecutive, clean observations required to
                 promote WAN health from DEGRADED to UP. This encodes
                 confidence-building rather than instantaneous trust.
         """
         self.state: WanState = WanState.DOWN
-        self.promotion_threshold = promotion_threshold
+        self.min_degraded_confirmations = min_degraded_confirmations
         self.good_observation_count = 0
 
     def _enter_down(self) -> None:
@@ -159,7 +159,7 @@ class WanFSM:
 
             elif (
                 self.state == WanState.DEGRADED
-                and self.good_observation_count >= self.promotion_threshold
+                and self.good_observation_count >= self.min_degraded_confirmations
                 and allow_promotion
             ):
                 self.state = WanState.UP
@@ -213,7 +213,7 @@ class NetworkControlAgent:
         self.MAX_CONSECUTIVE_FAILS = 4  # Escalation threshold
 
         self.wan_fsm = WanFSM(
-            promotion_threshold=self.WAN_PROMOTION_CYCLES
+            min_degraded_confirmations=self.WAN_PROMOTION_CYCLES
         )
 
         # --- WAN observation state (cross-cycle memory) ---
@@ -660,7 +660,7 @@ class NetworkControlAgent:
         elif wan_state == WanState.DEGRADED:
             meta.append(
                 f"confidence={self.wan_fsm.good_observation_count}/"
-                f"{self.wan_fsm.promotion_threshold} observations"
+                f"{self.wan_fsm.min_degraded_confirmations} observations"
             )
         elif wan_state == WanState.DOWN:
             meta.append(f"failures={self.consecutive_fails}/{self.MAX_CONSECUTIVE_FAILS}")
@@ -675,8 +675,17 @@ class NetworkControlAgent:
         )
 
         # --- ACT (side effects) ---
-        if not lan_ok:
-            return NetworkState.DOWN   # ??????
+        # NOTE:
+        # LAN/router reachability is a weak, noisy signal and must never
+        # override WAN FSM health once public IP and WAN path are confirmed.
+        if not lan_ok and wan_state == WanState.UP:
+            tlog(
+                "🟡",
+                "LAN",
+                "FLAKY",
+                primary="router ICMP unreliable",
+                meta="WAN confirmed healthy"
+            )
 
         if wan_state == WanState.UP:
             assert public.success and public.ip, "UP WAN requires valid public IP"
@@ -701,7 +710,6 @@ class NetworkControlAgent:
             recovery_ok = self._trigger_physical_recovery()
 
             if recovery_ok:
-                # CRITICAL:
                 # Successful recovery prevents rapid re-trigger loops
                 self.consecutive_fails = 0
  
