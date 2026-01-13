@@ -2,6 +2,7 @@
 import ssl
 import time
 import socket
+from typing import Optional
 from dataclasses import dataclass
 
 # --- Third-party imports ---
@@ -16,6 +17,12 @@ from .logger import get_logger
 logger = get_logger("utils")
 
 @dataclass(frozen=True)
+class ReachabilityResult:
+    success: bool
+    elapsed_ms: float
+    error: Optional[str] = None
+
+@dataclass(frozen=True)
 class IPResolutionResult:
     ip: str | None
     elapsed_ms: float
@@ -28,53 +35,61 @@ class DoHLookupResult:
     elapsed_ms: float
     success: bool
 
-def ping_host(ip: str, port: int = 80, timeout: float = 1.5) -> bool:
+def ping_host(ip: str, port: int = 80, timeout: float = 1.5) -> ReachabilityResult:
     """
-    Check host reachability efficiently and cross-platform.
+    Check host reachability via a TCP connect probe (Layer 4).
 
-    Performs a TCP connection (Layer 4) to the given IP/hostname and port, 
-    avoiding ICMP so no admin privileges are required.  
+    This probe is intentionally lightweight and ICMP-free to avoid
+    elevated privileges and platform-specific behavior.
 
-    Conceptually, this function helps distinguish:
-      - LAN health (router reachability)
-      - WAN health (external routing)
-
-    Args:
-        ip: IP address or hostname to check.
-        port: TCP port to attempt (default 80).
-        timeout: Seconds before giving up.
-
-    Returns:
-        True if the host is reachable, False otherwise.
+    Signal strength:
+        Weak — used for observability and diagnostics only.
     """
+
+    start = time.monotonic()
+
     try:
         with socket.create_connection((ip, port), timeout=timeout):
-            return True
-    except (OSError, socket.timeout):
-        return False
+            return ReachabilityResult(
+                success=True,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+            )
+    except (OSError, socket.timeout) as e:
+        return ReachabilityResult(
+            success=False,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+            error=type(e).__name__,
+        )
 
 def verify_wan_reachability(
     host: str = "1.1.1.1",
     port: int = 443,
     timeout: float = 2.0,
-) -> bool:
+) -> ReachabilityResult:
     """
-    Confirm true WAN reachability via TLS (Transport Layer Security)
-    application-layer handshake.
+    Confirm true WAN reachability using a TCP + TLS handshake.
 
-    Requires successful:
-      - TCP connection
-      - TLS handshake
-
-    Router-local responses cannot satisfy this probe.
+    This probe cannot be satisfied by router-local responses and
+    therefore represents a strong indicator of upstream connectivity.
     """
+
+    start = time.monotonic()
+
     try:
         context = ssl.create_default_context()
         with socket.create_connection((host, port), timeout=timeout) as sock:
             with context.wrap_socket(sock, server_hostname=host):
-                return True
-    except Exception:
-        return False
+                return ReachabilityResult(
+                    success=True,
+                    elapsed_ms=(time.monotonic() - start) * 1000,
+                )
+
+    except Exception as e:
+        return ReachabilityResult(
+            success=False,
+            elapsed_ms=(time.monotonic() - start) * 1000,
+            error=type(e).__name__,
+        )
 
 def is_valid_ip(ip: str) -> bool:
     """
