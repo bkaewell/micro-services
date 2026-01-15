@@ -10,12 +10,12 @@ from .time_service import TimeService
 from .logger import get_logger, setup_logging
 from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
-from .infra_agent import NetworkState, NetworkControlAgent
+from .infra_agent import NetworkState, NETWORK_EMOJI, NetworkControlAgent
 
 
 def main_loop(
         local_time: TimeService,
-        policy: SchedulingPolicy,
+        scheduling_policy: SchedulingPolicy,
         agent: NetworkControlAgent
     ):
     """
@@ -38,7 +38,7 @@ def main_loop(
     """
 
     logger = get_logger("main_loop")
-    state = NetworkState.UNKNOWN
+    network_state = NetworkState.DOWN
     loop = 1
 
     while True:
@@ -50,33 +50,33 @@ def main_loop(
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
-            state = agent.run_control_cycle()
+            network_state = agent.update_network_health()
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
-            state = NetworkState.ERROR
+            #network_state = NetworkState.ERROR
 
         # Compute sleep interval
-        loop_rtt = time.monotonic() - start
-        loop_rtt_ms = loop_rtt * 1000
-        remaining = policy.next_sleep(loop_rtt)
+        elapsed = time.monotonic() - start
+        elapsed_ms = elapsed * 1000
+        sleep_for = scheduling_policy.next_sleep(elapsed=elapsed, state=network_state)
 
-        if state == NetworkState.HEALTHY:
+        if network_state == NetworkState.UP:
             tlog(
-                "🛜", 
-                "STATE", 
-                f"{state.label}", 
+                NETWORK_EMOJI[network_state], 
+                "NET HEALTH", 
+                network_state.label, 
                 primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
-                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s\n"
+                meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
             )
         else:
             tlog(
-                "🛜", 
-                "STATE", 
-                f"{state.label}",
-                meta=f"loop_rtt={loop_rtt_ms:.1f}ms | sleeping={remaining:.2f}s\n"
+                NETWORK_EMOJI[network_state], 
+                "NET HEALTH", 
+                network_state.label,
+                meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
             )
 
-        time.sleep(remaining)
+        time.sleep(sleep_for)
         loop += 1
 
 def main():
@@ -90,24 +90,20 @@ def main():
     failure handling, and operational discipline in mind.
     """
 
-    # Setup logging policy
     setup_logging(level=getattr(logging, Config.LOG_LEVEL))
     logger = get_logger("main")
-    logger.info("🚀 Starting Cloudflare DNS Reconciliation Infra Agent")
+    logger.info("🚀 Starting Network Health & DNS Reconciliation Agent")
     logger.debug(f"Python version: {sys.version}")
 
     validate_runtime_config()
 
-    # Time
+    # Dependencies
     local_time = TimeService()
-    
-    # Policy
-    policy = SchedulingPolicy()    
-
-    # Core infra agent
+    scheduling_policy = SchedulingPolicy()
     agent = NetworkControlAgent()
     
-    main_loop(local_time, policy, agent)
+    logger.info("Entering supervisor loop...")
+    main_loop(local_time, scheduling_policy, agent)
 
 if __name__ == "__main__":
     main()
