@@ -27,6 +27,7 @@ class IPResolutionResult:
     ip: str | None
     elapsed_ms: float
     attempts: int
+    max_attempts: int
     success: bool
 
 @dataclass(frozen=True)
@@ -127,6 +128,7 @@ def get_ip() -> IPResolutionResult:
     timeout = Config.API_TIMEOUT
     start = time.monotonic()
     attempts = 0
+    max_attempts = len(services)
 
     for url in services:
         attempts += 1
@@ -140,6 +142,7 @@ def get_ip() -> IPResolutionResult:
                     ip=ip,
                     elapsed_ms=(time.monotonic() - start) * 1000,
                     attempts=attempts,
+                    max_attempts=max_attempts,
                     success=True,
                 )
             
@@ -152,6 +155,7 @@ def get_ip() -> IPResolutionResult:
         ip=None,
         elapsed_ms=(time.monotonic() - start) * 1000,
         attempts=attempts,
+        max_attempts=max_attempts,
         success=False,
     )
 
@@ -159,10 +163,19 @@ def doh_lookup(hostname : str) -> DoHLookupResult:
     """
     Resolve a hostname to an IPv4 address using Cloudflare DNS-over-HTTPS.
 
-    This is an authoritative, non-cached verification step used to confirm
-    public DNS state after updates.
+    This function performs an authoritative, non-cached DNS lookup against
+    Cloudflare's DoH endpoint and is used to verify public DNS state during
+    initialization and recovery paths.
 
+    Invariant:
+        - If success is True, ip is guaranteed to be a valid IPv4 string.
+        - If success is False, ip will be None.
+
+    Callers may therefore safely assume that a successful result always
+    contains a usable IP address and do not need to perform additional
+    validation.
     """
+
     url = "https://cloudflare-dns.com/dns-query"
     params = {"name": hostname, "type": "A"}
     headers = {"Accept": "application/dns-json"}
