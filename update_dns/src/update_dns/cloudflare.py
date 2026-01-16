@@ -7,7 +7,7 @@ import requests
 from dotenv import load_dotenv
 
 # --- Project imports ---
-from .config import Config
+from .config import config
 from .logger import get_logger
 
 
@@ -85,7 +85,7 @@ class CloudflareClient:
         
         try:
             resp = requests.put(
-                url, headers=self.headers, json=payload, timeout=Config.API_TIMEOUT
+                url, headers=self.headers, json=payload, timeout=config.API_TIMEOUT_S
             )
             resp.raise_for_status()
         except requests.RequestException as e:
@@ -135,7 +135,7 @@ class CloudflareClient:
         
         try:
             resp = requests.get(
-                url, headers=self.headers, timeout=Config.API_TIMEOUT
+                url, headers=self.headers, timeout=config.API_TIMEOUT_S
             )
             resp.raise_for_status()
         except requests.RequestException as e:

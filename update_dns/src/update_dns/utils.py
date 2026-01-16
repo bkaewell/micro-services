@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import requests
 
 # --- Project imports ---
-from .config import Config
+from .config import config
 from .logger import get_logger
 
 
@@ -125,7 +125,7 @@ def get_ip() -> IPResolutionResult:
         "https://ipecho.net/plain", 
     )
 
-    timeout = Config.API_TIMEOUT
+    timeout = config.API_TIMEOUT_S
     start = time.monotonic()
     attempts = 0
     max_attempts = len(services)
@@ -187,7 +187,7 @@ def doh_lookup(hostname : str) -> DoHLookupResult:
             url, 
             params=params, 
             headers=headers, 
-            timeout=Config.API_TIMEOUT
+            timeout=config.API_TIMEOUT_S
         )
         resp.raise_for_status()
 

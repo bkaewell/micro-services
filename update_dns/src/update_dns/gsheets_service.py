@@ -12,7 +12,7 @@ from google.auth.exceptions import TransportError
 from google.auth import exceptions as auth_exceptions
 
 # --- Project imports ---
-from .config import Config
+from .config import config
 from .logger import get_logger
 from .cache import GOOGLE_SHEET_ID_FILE
 
@@ -78,7 +78,7 @@ class GSheetsService:
                 SCOPES
             )
 
-            client.set_timeout(Config.API_TIMEOUT)
+            client.set_timeout(config.API_TIMEOUT_S)
             self.client = client
             self.logger.info(
                 f"New gspread client initialized with GSheets JSON creds"

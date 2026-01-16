@@ -2,32 +2,19 @@
 import random
 
 # --- Project imports ---
-from .config import Config
+from .config import config
 from .logger import get_logger
 from .infra_agent import NetworkState
 
 
-DNS_UPDATE_JITTER = 5  # seconds (internal safety margin)
-
-# config.py
-CYCLE_INTERVAL = 60          # baseline (steady state)
-FAST_POLL_SCALAR = 0.5       # 4x faster when unstable
-#SLOW_POLL_SCALAR = 2.0       # steady-state
-SLOW_POLL_SCALAR = 1.0       # steady-state
-
 class SchedulingPolicy:
     def __init__(self):
-        self.base_interval = Config.CYCLE_INTERVAL
-        self.min_ttl = Config.CLOUDFLARE_MIN_TTL
-        self.enforce_policy = Config.ENFORCE_TTL_POLICY
-        self.jitter = DNS_UPDATE_JITTER
-
-        #self.fast_scalar = Config.FAST_POLL_SCALAR
-        #self.slow_scalar = Config.SLOW_POLL_SCALAR
-
-        self.fast_scalar = FAST_POLL_SCALAR
-        self.slow_scalar = SLOW_POLL_SCALAR       
-
+        self.base_interval = config.CYCLE_INTERVAL_S
+        self.polling_jitter = config.POLLING_JITTER_S
+        self.fast_scalar = config.FAST_POLL_SCALAR
+        self.slow_scalar = config.SLOW_POLL_SCALAR
+        self.min_ttl = config.CLOUDFLARE_MIN_TTL_S
+        self.enforce_policy = config.ENFORCE_TTL_POLICY
         self.logger = get_logger("scheduling_policy")
 
     def interval_for_state(self, state: NetworkState) -> int:
@@ -38,7 +25,7 @@ class SchedulingPolicy:
         scalar = self._scalar_for_state(state)
         requested = int(self.base_interval * scalar)
 
-        min_safe = self.min_ttl + self.jitter
+        min_safe = self.min_ttl + self.polling_jitter
 
         # if self.enforce_policy and requested < min_safe:
         #     self.logger.debug(
@@ -57,5 +44,5 @@ class SchedulingPolicy:
 
     def next_sleep(self, *, elapsed: float, state: NetworkState) -> float:
         interval = self.interval_for_state(state)
-        jittered = interval + random.uniform(-self.jitter, self.jitter)
+        jittered = interval + random.uniform(-self.polling_jitter, self.polling_jitter)
         return max(0.0, jittered - elapsed)
