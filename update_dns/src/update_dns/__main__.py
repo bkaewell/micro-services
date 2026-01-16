@@ -63,16 +63,16 @@ def main_loop(
         if network_state == NetworkState.UP:
             tlog(
                 NETWORK_EMOJI[network_state], 
-                "NET HEALTH", 
-                network_state.label, 
+                "NET_HEALTH", 
+                network_state.name, 
                 primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
                 meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
             )
         else:
             tlog(
                 NETWORK_EMOJI[network_state], 
-                "NET HEALTH", 
-                network_state.label,
+                "NET_HEALTH", 
+                network_state.name,
                 meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
             )
 

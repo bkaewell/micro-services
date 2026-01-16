@@ -7,7 +7,7 @@ from typing import Optional
 import requests
 
 # ─── Project imports ───
-from .config import Config
+from .config import config
 from .telemetry import tlog
 from .logger import get_logger
 from .time_service import TimeService
@@ -197,9 +197,12 @@ class NetworkControlAgent:
         self.gsheets_service = GSheetsService()
 
         # ─── 2. Static configuration & policy thresholds ─── 
-        self.router_ip = Config.Hardware.ROUTER_IP
-        self.allow_physical_recovery = Config.ALLOW_PHYSICAL_RECOVERY
-        self.recovery_cooldown = Config.Hardware.RECOVERY_COOLDOWN or 1800   # seconds
+        self.router_ip = config.Hardware.ROUTER_IP
+        self.max_cache_age_s = config.MAX_CACHE_AGE_S
+        self.plug_ip = config.Hardware.PLUG_IP
+        self.reboot_delay_s = config.Hardware.REBOOT_DELAY_S
+        self.allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
+        self.recovery_cooldown_s = config.Hardware.RECOVERY_COOLDOWN_S
 
         # Promotion & escalation policy
         self.confirmations_required_for_up = 2   # consecutive stable IPs needed
@@ -337,10 +340,9 @@ class NetworkControlAgent:
         """
 
         # ─── L1 Cache (Cheap, local, fast no-op) ───
-        MAX_CACHE_AGE_S = 86400  # 24 hours (TBD - tune to DNS TTL + safety margin)
-
+        # Only proceed to DoH if cache is absent, stale, or mismatched
         cache = load_cached_cloudflare_ip()
-        cache_fresh = cache.hit and (cache.age_s <= MAX_CACHE_AGE_S)
+        cache_fresh = cache.hit and (cache.age_s <= self.max_cache_age_s)
         cache_match = cache_fresh and (cache.ip == public_ip)
 
         tlog(
@@ -348,7 +350,10 @@ class NetworkControlAgent:
             "CACHE",
             "HIT" if cache_match else ("STALE" if cache.hit else "MISS"),
             primary=f"ip={cache.ip}" if cache.hit else "no cache",
-            meta=f"rtt={cache.elapsed_ms:.1f}ms | age={cache.age_s:.0f}s" if cache.hit else "",
+            meta=(
+                f"rtt={cache.elapsed_ms:.1f}ms | "
+                f"age={cache.age_s:.0f}s / {self.max_cache_age_s}s " 
+            ) if cache.hit else ""
         )
 
         if cache_match:
@@ -363,7 +368,7 @@ class NetworkControlAgent:
                 "DNS",
                 "MATCH",
                 primary=f"ip={doh.ip}",
-                meta=f"rtt={doh.elapsed_ms:.1f}ms"
+                meta=f"rtt={doh.elapsed_ms:.1f}ms | cache refreshed"
             )
             store_cloudflare_ip(public_ip)   # Safe: DoH confirmed current IP is what DNS has
             return
@@ -407,24 +412,23 @@ class NetworkControlAgent:
             False on any communication or execution error.
         """
 
-        plug_ip = Config.Hardware.PLUG_IP
-        reboot_delay = Config.Hardware.REBOOT_DELAY
+
 
         try:
             # Power OFF
             off = requests.get(
-                f"http://{plug_ip}/relay/0?turn=off", 
-                timeout=Config.API_TIMEOUT
+                f"http://{self.plug_ip}/relay/0?turn=off", 
+                timeout=config.API_TIMEOUT_S
             )
             off.raise_for_status()
             self.logger.debug("Smart plug powered OFF")
 
-            time.sleep(reboot_delay)
+            time.sleep(self.reboot_delay_s)
 
             # Power ON
             on = requests.get(
-                f"http://{plug_ip}/relay/0?turn=on", 
-                timeout=Config.API_TIMEOUT
+                f"http://{self.plug_ip}/relay/0?turn=on", 
+                timeout=config.API_TIMEOUT_S
             )
             on.raise_for_status()
             self.logger.debug("Smart plug powered ON")
@@ -464,47 +468,42 @@ class NetworkControlAgent:
         now = time.monotonic()
         
         # ─── Cooldown Guardrail ───
-        # cooldown_s = getattr(Config.Hardware, "RECOVERY_COOLDOWN_S", 1800)
-        cooldown_s = self.recovery_cooldown
         time_since_last = now - self.last_recovery_time
         
-        if time_since_last < cooldown_s:
+        if time_since_last < self.recovery_cooldown_s:
             tlog(
                 "🔴",
                 "RECOVERY",
                 "SUPPRESSED",
                 primary="cooldown active",
-                meta=f"last_attempt={int(time_since_last)}s ago | window={cooldown_s}s"
+                meta=f"last_attempt={int(time_since_last)}s ago | window={self.recovery_cooldown_s}s"
             )
             return False
-
-        plug_ip = Config.Hardware.PLUG_IP
-        reboot_delay = Config.Hardware.REBOOT_DELAY
 
         tlog(
             "🔴", 
             "RECOVERY", 
             "TRIGGER", 
             primary="power-cycle edge device",
-            meta=f"smart_plug_ip={plug_ip} | reboot_delay={reboot_delay}s"
+            meta=f"smart_plug_ip={self.plug_ip} | reboot_delay={self.reboot_delay_s}s"
         )
     
         # Pre-check plug reachability (optional but useful for telemetry)
-        plug_ok_before = ping_host(plug_ip).success
+        plug_ok_before = ping_host(self.plug_ip).success
 
         tlog(
             "🟡" if plug_ok_before else "🔴",
             "EDGE",
             "REACHABLE" if plug_ok_before else "UNREACHABLE",
             primary="pre-recovery check",
-            meta=f"smart_plug_ip={plug_ip}"
+            meta=f"smart_plug_ip={self.plug_ip}"
         )
 
         # ─── Execute recovery ───
         success = self._power_cycle_edge()
 
         # Post-check plug reachability (telemetry only, not decision factor)
-        plug_ok_after = ping_host(plug_ip).success
+        plug_ok_after = ping_host(self.plug_ip).success
 
         tlog(
             "🟢" if success else "🔴",

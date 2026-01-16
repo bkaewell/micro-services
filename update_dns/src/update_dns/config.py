@@ -47,7 +47,8 @@ class Config:
     # ─── DNS & Cache Policy (freshness & reconciliation behavior) ───
     # Maximum age before cache is considered stale and forces re-verification
     # Chosen to cover ~5 slow UP cycles (~120s) while expiring quickly enough during fast recovery (~30s)
-    MAX_CACHE_AGE_S: int = 600  # 10 minutes
+    #MAX_CACHE_AGE_S: int = 600  # 10 minutes
+    MAX_CACHE_AGE_S: int = 3600  # 60 minutes
 
     # ─── Cloudflare / DNS constraints (hard limits) ─── 
     CLOUDFLARE_MIN_TTL_S: int = 60
