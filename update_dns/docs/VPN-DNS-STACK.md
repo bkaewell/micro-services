@@ -65,6 +65,29 @@ Cache seeded + DNS reconciled
 WireGuard ready → clients connect via vpn.mydomain.com
 
 
+
+
+```mermaid
+Boot ──► Netplan → stable IP 192.168.0.123
+         │
+         ▼
+Agent starts ──► FSM in DEGRADED
+         │
+         ▼
+Observe (30–130s cycles) ──► WAN + IP stability checks
+         │
+         ▼
+Stable 2× IP? ──► Promote to UP
+         │
+         ▼
+Cache seeded + DNS reconciled
+         │
+         ▼
+WireGuard ready → clients connect via vpn.mydomain.com
+```
+
+
+
 ## Simplified Workflow
 
 ```mermaid
