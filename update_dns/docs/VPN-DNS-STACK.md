@@ -1,0 +1,82 @@
+# Adaptive Home Network Stack 🏠🔒🚀
+**Always-on Mini-PC VPN + Auto DNS Reconciliation**
+
+Minimal, resilient, self-healing remote access setup.  
+One mini PC → WireGuard VPN + dynamic Cloudflare DNS.  
+Router is disposable. Clients never notice changes.
+
+## Architecture Layers (Clean Separation of Concerns)
+
+| Layer              | Responsibility                          |
+|--------------------|-----------------------------------------|
+| Mini PC            | Stable LAN IP (192.168.0.123)           |
+| Router             | NAT + 2–3 port forwards                 |
+| Cloudflare DNS     | vpn.mydomain.com → current public IP    |
+| Clients            | Connect via DNS name                    |
+
+## Core Components & Workflow
+
+1. **Mini PC** (always-on, low-power: Intel N100/Beelink/etc.)
+   - Ubuntu Server 24.04 LTS
+   - Static IP via Netplan (Ethernet primary + Wi-Fi fallback)
+   - Two Docker containers:
+     - `update_dns` (custom agent): monitors public IP → updates Cloudflare
+     - `wg-easy`: WireGuard server + web UI (kernel-space Layer 3 VPN)
+
+2. **Netplan** – Rock-solid LAN identity
+   - `10-wired.yaml`: metric 100 (preferred)
+   - `20-wifi.yaml`: metric 600 or no default route (fallback)
+
+3. **Dynamic DNS Agent** – The brain
+   - Deterministic FSM: DOWN → DEGRADED → UP (monotonic, fail-fast)
+   - Adaptive polling: ~30 s (unhealthy) vs ~130 s (healthy)
+   - Cache-aware DoH + stability gating → minimizes Cloudflare API calls
+
+4. **WireGuard (wg-easy)** – Fast & audited
+   - UDP 51820 forwarded to mini PC
+   - Web UI (TCP 51821, optional forward)
+   - Clients: `vpn.mydomain.com:51820`
+
+## Router Checklist (Minimal)
+
+- LAN: 192.168.0.0/24
+- Gateway: 192.168.0.1
+- Forward:
+  - UDP 51820 → 192.168.0.123:51820 (WireGuard)
+  - TCP 51821 → 192.168.0.123:51821 (UI, optional)
+  - TCP 22 → 192.168.0.123:22 (SSH, optional)
+
+## Simplified Workflow
+Boot ──► Netplan → stable IP 192.168.0.123
+         │
+         ▼
+Agent starts ──► FSM in DEGRADED
+         │
+         ▼
+Observe (30–130s cycles) ──► WAN + IP stability checks
+         │
+         ▼
+Stable 2× IP? ──► Promote to UP
+         │
+         ▼
+Cache seeded + DNS reconciled
+         │
+         ▼
+WireGuard ready → clients connect via vpn.mydomain.com
+
+
+
+## Why It Works So Well
+
+- Router swap = 2 minutes of port forwards
+- Mini PC replacement = copy config + same IP
+- IP change = agent detects & updates DNS in <2 minutes
+- No third-party DDNS → full control
+- Fail-safe by design → monotonic FSM + gating
+- Extremely low I/O in steady state → adaptive + jitter + cache
+
+**Happy remote-accessing!** 🏠🔒🚀
+
+See also:  
+- [TUNING.md](./TUNING.md) – parameter guide  
+- [AGENT.md](./AGENT.md) – FSM & reconciliation deep dive
