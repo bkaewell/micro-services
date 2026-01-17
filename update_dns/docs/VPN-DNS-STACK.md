@@ -529,7 +529,7 @@ graph TD
 
     Slow --> Sleep
 
-    Sleep -->|time.sleep(sleep_for)| Loop
+    Sleep -->|sleep_for| Loop
 
     %% Visual highlights
     style Fast fill:#ffe6e6,stroke:#cc0000
