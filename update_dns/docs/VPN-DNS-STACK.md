@@ -190,7 +190,9 @@ graph TD
 
     F --> G{Stable 2× IP?}
     G -->|Yes| H([Promote to UP])
-    G -->|No| E  %% loop back for more observations
+    G -->|No| E  
+    
+    %% loop back for more observations
 
     H --> I([Cache seeded + DNS reconciled])
     I --> J([WireGuard ready])
