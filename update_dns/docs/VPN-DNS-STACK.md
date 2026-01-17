@@ -93,7 +93,7 @@ WireGuard ready → clients connect via vpn.mydomain.com
 
 ```mermaid
 flowchart TD
-    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
@@ -110,7 +110,7 @@ flowchart TD
 
 ```mermaid
 graph TD
-    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
@@ -124,7 +124,7 @@ graph TD
 
 ```mermaid
 graph TD
-    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
