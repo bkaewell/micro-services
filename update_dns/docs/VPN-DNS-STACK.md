@@ -367,6 +367,46 @@ graph TD
 
 
 
+```mermaid
+graph TD
+    A([Boot]) --> B([Netplan → Stable LAN IP<br>192.168.0.123])
+
+    B --> C([Agent Starts<br>DNS Updater + wg-easy VPN])
+
+    subgraph "Health Engine – Monotonic FSM"
+        C --> D([DEGRADED<br>Safe-by-default / Probation])
+        D --> E[Fast Poll ~30s + jitter<br>Observe WAN + IP]
+        E --> F{Stable 2× IP?}
+        F -->|No – Retry| E
+        F -->|Yes| G([UP<br>Monotonic Promotion])
+        G --> H[Slow Poll ~130s + jitter<br>Quiet & Efficient]
+    end
+
+    H --> I[Cache Freshness Check<br>≤ 600s]
+    I --> J[DNS Reconciled<br>Only if drifted]
+    J --> K[WireGuard Ready<br>Secure Remote Access]
+
+    %% Visual power: fast = urgent, slow = calm
+    %% Fast = red urgency
+    style E fill:#ffe6e6,stroke:#cc0000,stroke-width:2px 
+    %% Slow = green calm
+    style H fill:#e6ffe6,stroke:#006600,stroke-width:2px  
+    %% DEGRADED = orange caution
+    style D fill:#fff3e6,stroke:#cc6600,stroke-width:2px 
+    %% UP = green success
+    style G fill:#ccffcc,stroke:#006600,stroke-width:2px  
+    %% End goal 
+    style K fill:#cce5ff,stroke:#004080,stroke-width:2px,rx:12,ry:12  
+
+    %% Clean arrows
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+
+
+
+
 ## Why It Works So Well
 
 - Router swap = 2 minutes of port forwards
