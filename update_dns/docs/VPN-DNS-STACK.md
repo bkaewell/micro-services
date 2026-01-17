@@ -204,6 +204,50 @@ graph TD
 ```
 
 
+```mermaid
+---
+title: Simplified Workflow
+config:
+   look: handDrawn
+   theme: 'forest'
+---
+graph TD
+    %% Title & Styling
+    A([Boot]) --> B([Netplan assigns stable LAN IP<br>192.168.0.123])
+
+    B --> C{Agent starts<br>Two independent Docker containers}
+    C -->|DNS Updater| D[Tracks & publishes public IP]
+    C -->|wg-easy VPN| E[WireGuard kernel-space Layer 3 VPN]
+
+    subgraph "Core Control Loop (The Brain)"
+        D --> F([FSM initializes in DEGRADED<br>probationary / safe-by-default])
+        F --> G[Observe cycle<br>30–130s + jitter<br>Fast Poll when unhealthy]
+        G --> H[WAN path + public IP checks]
+        H --> I{Stable 2× IP?}
+        I -->|No → loop| G
+        I -->|Yes| J[Promote to UP<br>monotonic + fail-fast]
+        J --> K[Switch to Slow Poll<br>~120s cycle + jitter<br>quiet & efficient]
+        J --> L[Cache freshness check<br>age ≤ 600s]
+        L --> M[Cache seeded / refreshed<br>only after authoritative confirmation]
+        M --> N[DNS reconciled<br>if drift detected]
+    end
+
+    N --> O[WireGuard ready<br>UDP 51820 forwarded]
+    O --> P[Clients connect securely<br>via vpn.mydomain.com]
+
+    %% Styling for visual impact
+    style A fill:#e6f3ff,stroke:#0066cc,stroke-width:2px,rx:12,ry:12
+    style J fill:#ccffcc,stroke:#006600,stroke-width:2px,rx:12,ry:12
+    style O fill:#cce5ff,stroke:#004080,stroke-width:2px,rx:12,ry:12
+    style P fill:#fff0e6,stroke:#cc6600,stroke-width:2px,rx:12,ry:12
+
+    %% Link styling
+    linkStyle default stroke:#0066cc,stroke-width:2px
+```
+
+
+
+
 ## Why It Works So Well
 
 - Router swap = 2 minutes of port forwards
