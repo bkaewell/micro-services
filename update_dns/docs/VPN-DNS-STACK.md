@@ -470,6 +470,39 @@ graph TD
 
 
 
+```mermaid
+graph TD
+    A([Boot]) --> B([Stable LAN IP<br>192.168.0.123])
+
+    B --> C([Agent Runtime<br>DNS Updater + wg-easy VPN])
+
+    subgraph "Monotonic Health FSM<br>Single Source of Truth"
+        C --> D([DEGRADED<br>Safe & Probationary])
+        D --> E[Fast Poll ~30s + jitter<br>WAN + IP Checks]
+        E --> F{2× Stable IP?}
+        F -->|No| E
+        F -->|Yes| G([UP<br>Trust Achieved])
+        G --> H[Slow Poll ~130s + jitter<br>Quiet & Efficient]
+    end
+
+    H --> I[Cache Freshness ≤ 600s]
+    I --> J[DNS Reconciled<br>Only if drifted]
+
+    J --> K([WireGuard Ready<br>Layer 3 Kernel VPN<br>UDP 51820])
+
+    %% Styling: fast=urgent, slow=calm, success=green
+    style E fill:#ffe6e6,stroke:#cc0000
+    style H fill:#e6ffe6,stroke:#006600
+    style D fill:#fff3e6,stroke:#cc6600
+    style G fill:#ccffcc,stroke:#006600
+    style K fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    %% Clean arrows
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+
 ## Why It Works So Well
 
 - Router swap = 2 minutes of port forwards
