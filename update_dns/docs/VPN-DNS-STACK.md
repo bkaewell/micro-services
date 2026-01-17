@@ -65,6 +65,25 @@ Cache seeded + DNS reconciled
 WireGuard ready → clients connect via vpn.mydomain.com
 
 
+## Simplified Workflow
+
+```mermaid
+graph TD
+    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
+    B --> C[Agent starts]
+    C --> D[FSM in DEGRADED]
+    D --> E[Observe 30–130s cycles]
+    E --> F[WAN + IP stability checks]
+    F -->|Yes| G[Stable 2× IP?]
+    G -->|Yes| H[Promote to UP]
+    H --> I[Cache seeded + DNS reconciled]
+    I --> J[WireGuard ready]
+    J --> K[Clients connect via vpn.mydomain.com]
+    
+    style A fill:#f9f,stroke:#333
+    style J fill:#bbf,stroke:#333
+
+
 
 ## Why It Works So Well
 
