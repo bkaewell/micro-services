@@ -503,6 +503,102 @@ graph TD
 
 
 
+
+
+
+
+```mermaid
+graph TD
+    A([Boot]) --> B([Netplan → Stable LAN IP<br>192.168.0.123])
+
+    B --> C([Launch Docker Containers<br>DNS Updater + wg-easy VPN])
+
+    C --> Loop{while True<br>Supervisor Loop}
+
+    Loop --> Cycle([Cycle Start<br>Timestamp + Heartbeat])
+
+    Cycle --> Update([update_network_health()])
+
+    Update --> State{Get NetworkState<br>Single Source of Truth}
+
+    State -->|DEGRADED / DOWN| Fast[Fast Poll<br>~30s + jitter<br>Quick recovery]
+
+    State -->|UP| Slow[Slow Poll<br>~130s + jitter<br>Quiet & Efficient]
+
+    Fast --> Sleep[Compute sleep_for<br>Adaptive + jitter]
+
+    Slow --> Sleep
+
+    Sleep -->|time.sleep(sleep_for)| Loop
+
+    %% Visual highlights
+    style Fast fill:#ffe6e6,stroke:#cc0000
+    style Slow fill:#e6ffe6,stroke:#006600
+    style Loop fill:#f0f8ff,stroke:#004080,rx:12,ry:12
+    style B fill:#e6f3ff,stroke:#0066cc,rx:10,ry:10
+    style C fill:#fff3e6,stroke:#cc6600,rx:10,ry:10
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+
+
+
+
+
+
+
+```mermaid
+graph TD
+    Start([Cycle Start]) --> Observe([Observe Raw Signals<br>LAN / WAN Path / Public IP])
+
+    Observe --> Assess([Assess → FSM Transition<br>Single Source of Truth])
+
+    Assess --> State{New State?}
+
+    State -->|DOWN| Down([Enter DOWN<br>Immediate Fail-Fast])
+
+    State -->|DEGRADED| Deg([DEGRADED<br>Probationary])
+
+    State -->|UP| Up([UP<br>Monotonic Promotion])
+
+    Down --> Decide([Decide: Escalate?])
+    Deg --> Decide
+    Up --> Act([Act: Safe Side-Effects<br>DNS Reconciliation])
+
+    Decide -->|Yes + Allowed| Recover([Trigger Physical Recovery<br>Power-Cycle Edge])
+
+    Decide -->|No| Report([Report Telemetry<br>High-signal when unhealthy])
+
+    Recover --> Report
+
+    Act --> Report
+
+    Report --> End([Return State<br>Adaptive Sleep → Next Cycle])
+
+    %% Visual power
+    style Observe fill:#f0f8ff,stroke:#666
+    style Up fill:#ccffcc,stroke:#006600
+    style Down fill:#ffe6e6,stroke:#cc0000
+    style Deg fill:#fff3e6,stroke:#cc6600
+    style Recover fill:#ffcccc,stroke:#990000,rx:10,ry:10
+    style End fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+
+
+
+
+
+
+
+
+
+
 ## Why It Works So Well
 
 - Router swap = 2 minutes of port forwards
