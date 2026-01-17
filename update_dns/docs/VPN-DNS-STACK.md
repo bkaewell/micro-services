@@ -93,7 +93,7 @@ WireGuard ready → clients connect via vpn.mydomain.com
 
 ```mermaid
 flowchart TD
-    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
@@ -110,7 +110,7 @@ flowchart TD
 
 ```mermaid
 graph TD
-    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
@@ -124,7 +124,7 @@ graph TD
 
 ```mermaid
 graph TD
-    A [Boot] --> B[Netplan → stable IP 192.168.0.123]
+    A[Boot] --> B[Netplan → stable IP 192.168.0.123]
     B --> C[Agent starts]
     C --> D[FSM in DEGRADED]
     D --> E[Observe 30–130s cycles]
@@ -142,6 +142,63 @@ graph TD
     %% Styling for highlights
     style A fill:#f9f,stroke:#333
     style J fill:#bbf,stroke:#333
+```
+
+```mermaid
+---
+title: Simplified Workflow
+config:
+   look: handDrawn
+   theme: 'default'
+---
+graph TD
+    A([Boot]) --> B([Netplan → stable IP 192.168.0.123])
+    B --> C([Agent starts])
+    C --> D([FSM in DEGRADED])
+    D --> E([Observe 30–130s cycles])
+    E --> F([WAN + IP stability checks])
+
+    F --> G{Stable 2× IP?}
+    G -->|Yes| H([Promote to UP])
+    G -->|No| E  %% loop back for more observations
+
+    H --> I([Cache seeded + DNS reconciled])
+    I --> J([WireGuard ready])
+    J --> K([Clients connect via vpn.mydomain.com])
+
+    %% Optional visual highlights
+    style A fill:#f9f,stroke:#333,stroke-width:2px,rx:10,ry:10
+    style J fill:#bbf,stroke:#333,stroke-width:2px,rx:10,ry:10
+```
+
+
+
+
+```mermaid
+---
+title: Simplified Workflow
+config:
+   look: handDrawn
+   theme: 'forest'
+---
+graph TD
+    A([Boot]) --> B([Netplan → stable IP 192.168.0.123])
+    B --> C([Agent starts])
+    C --> D([FSM in DEGRADED])
+    D --> E([Observe 30–130s cycles])
+    E --> F([WAN + IP stability checks])
+
+    F --> G{Stable 2× IP?}
+    G -->|Yes| H([Promote to UP])
+    G -->|No| E  %% loop back for more observations
+
+    H --> I([Cache seeded + DNS reconciled])
+    I --> J([WireGuard ready])
+    J --> K([Clients connect via vpn.mydomain.com])
+
+    %% Optional visual highlights
+    style A fill:#f9f,stroke:#333,stroke-width:2px,rx:10,ry:10
+    style J fill:#bbf,stroke:#333,stroke-width:2px,rx:10,ry:10
 ```
 
 
