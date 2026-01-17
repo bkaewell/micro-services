@@ -332,6 +332,35 @@ graph TD
 ```
 
 
+```mermaid
+graph TD
+    A([Boot]) --> B([Stable LAN IP<br>192.168.0.123])
+    B --> C([Agent Starts<br>2 Containers: VPN + DNS Updater])
+
+    subgraph "Health FSM – Single Source of Truth"
+        C --> D([DEGRADED<br>Safe / Probationary])
+        D --> E{Observe Cycle}
+        E -->|Fast Poll ~30s + jitter| F[WAN + IP Checks]
+        F --> G{Stable 2× IP?}
+        G -->|No| E
+        G -->|Yes| H([UP<br>Monotonic Promotion])
+        H --> I[Switch to Slow Poll<br>~130s + jitter]
+    end
+
+    I --> J[Cache Freshness Check<br>≤ 600s]
+    J --> K[DNS Reconciled<br>Only if drifted]
+    K --> L([WireGuard Ready<br>Secure Remote Access])
+
+    %% Visual power: fast = red/orange, slow = green/blue
+    style E fill:#ffe6e6,stroke:#cc0000  %% Fast poll = urgent/red
+    style I fill:#e6ffe6,stroke:#006600  %% Slow poll = calm/green
+    style D fill:#fff3e6,stroke:#cc6600  %% DEGRADED = caution/orange
+    style H fill:#ccffcc,stroke:#006600  %% UP = success/green
+
+    %% End-state highlight
+    style L fill:#cce5ff,stroke:#004080,rx:12,ry:12
+```
+
 
 
 ## Why It Works So Well
