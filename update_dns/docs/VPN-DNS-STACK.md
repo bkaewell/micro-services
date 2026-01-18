@@ -517,7 +517,7 @@ graph TD
 
     Loop --> Cycle([Cycle Start<br>Timestamp + Heartbeat])
 
-    Cycle --> Update([update_network_health()])
+    Cycle --> Update([update_network_health])
 
     Update --> State{Get NetworkState<br>Single Source of Truth}
 
