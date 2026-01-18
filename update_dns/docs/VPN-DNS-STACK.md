@@ -352,10 +352,14 @@ graph TD
     K --> L([WireGuard Ready<br>Secure Remote Access])
 
     %% Visual power: fast = red/orange, slow = green/blue
-    style E fill:#ffe6e6,stroke:#cc0000  %% Fast poll = urgent/red
-    style I fill:#e6ffe6,stroke:#006600  %% Slow poll = calm/green
-    style D fill:#fff3e6,stroke:#cc6600  %% DEGRADED = caution/orange
-    style H fill:#ccffcc,stroke:#006600  %% UP = success/green
+    %% Fast poll = urgent/red
+    style E fill:#ffe6e6,stroke:#cc0000  
+    %% Slow poll = calm/green
+    style I fill:#e6ffe6,stroke:#006600  
+    %% DEGRADED = caution/orange
+    style D fill:#fff3e6,stroke:#cc6600  
+    %% UP = success/green
+    style H fill:#ccffcc,stroke:#006600  
 
     %% End-state highlight
     style L fill:#cce5ff,stroke:#004080,rx:12,ry:12
