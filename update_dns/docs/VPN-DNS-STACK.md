@@ -404,6 +404,69 @@ graph TD
 
 
 
+```mermaid
+graph TD
+    %% High-level system overview with separate containers and I/O flow
+
+    A([Boot]) --> B([Netplan → Stable LAN IP<br>192.168.0.123])
+
+    B --> C([Mini-PC Agent Runtime<br>Supervisor Loop])
+
+    C --> D{Health FSM<br>Single Source of Truth}
+
+    %% Left branch: DNS Updater container
+    subgraph "DNS Updater Container (Dynamic IP → Cloudflare)"
+        D --> E([DEGRADED<br>Safe-by-default])
+        E --> F[Fast Poll ~30s + jitter<br>Observe WAN + IP]
+        F --> G{Stable 2× IP?}
+        G -->|No → Retry| F
+        G -->|Yes| H([UP<br>Monotonic Promotion])
+        H --> I[Slow Poll ~130s + jitter<br>Quiet & Efficient]
+        I --> J[Cache Freshness Check<br>≤ 600s]
+        J --> K[DNS Reconciled<br>Only if drifted]
+    end
+
+    %% Right branch: wg-easy VPN container
+    subgraph "wg-easy VPN Container (Kernel-space Layer 3 VPN)"
+        L([WireGuard Ready<br>UDP 51820 forwarded])
+        L --> M([Web UI<br>TCP 51821 – Admin Interface])
+        M --> N[Clients connect securely<br>via vpn.mydomain.com]
+    end
+
+    %% I/O and Config Flow
+    O([.env File<br>WG_HOST, WG_PORT=51820<br>WG_WEB_UI_PORT=51821<br>PASSWORD_HASH]) -->|Config & Secrets| L
+    O -->|Public IP/Hostname| D
+
+    %% Connect the two worlds: DNS feeds the VPN endpoint
+    K -->|DNS resolves to current public IP| N
+
+    %% Visual styling: fast=urgent, slow=calm, containers highlighted
+
+    %% Fast poll = red urgency
+    style F fill:#ffe6e6,stroke:#cc0000  
+
+    %% Slow poll = green calm
+    style I fill:#e6ffe6,stroke:#006600  
+
+    %% DEGRADED = orange caution
+    style E fill:#fff3e6,stroke:#cc6600  
+
+    %% UP = green success
+    style H fill:#ccffcc,stroke:#006600  
+
+    %% VPN container
+    style L fill:#cce5ff,stroke:#004080,rx:12,ry:12  
+
+    %% .env config source
+    style O fill:#f0f0f0,stroke:#666,rx:8,ry:8  
+
+    %% Web UI
+    style M fill:#e6f3ff,stroke:#0066cc,rx:12,ry:12  
+
+    %% Clean arrows
+    linkStyle default stroke:#666,stroke-width:2px
+   ```
+
 
 
 
