@@ -596,6 +596,65 @@ graph TD
 
 
 
+```mermaid
+graph TD
+    A([Boot / Power-On]) --> B([Netplan → Stable IP<br>192.168.0.123])
+
+    B --> C([Launch Docker Containers<br>unless-stopped policy])
+
+    subgraph "Always-Running Services"
+        C --> D[update_dns_app<br>Public IP → Cloudflare DNS]
+        C --> E[wg-easy<br>WireGuard VPN Server<br>UDP 51820 / TCP 51821]
+    end
+
+    D -->|Tracks & updates DNS| F([vpn.mydomain.com<br>Always points to current IP])
+    E -->|Secure tunnel| G([Clients connect remotely<br>via DNS name])
+
+    %% Power resilience highlight
+    Power([Battery Backup<br>APC UPS]) -->|Continuous Operation| C
+    Power -->|Survives outages| B
+
+    %% Styling: containers green, power blue
+    style D fill:#e6ffe6,stroke:#006600,rx:10,ry:10
+    style E fill:#e6ffe6,stroke:#006600,rx:10,ry:10
+    style Power fill:#cce5ff,stroke:#004080,rx:12,ry:12
+    style B fill:#f0f8ff,stroke:#0066cc,rx:10,ry:10
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+```mermaid
+graph TD
+    Start([Agent Init]) --> Loop{while True<br>Supervisor Loop}
+
+    Loop --> Cycle([Cycle Start<br>Timestamp + Heartbeat])
+
+    Cycle --> Update([update_network_health])
+
+    Update --> State{Get NetworkState}
+
+    State -->|DEGRADED / DOWN| Fast[Fast Poll<br>Quick recovery]
+
+    State -->|UP| Slow[Slow Poll<br>Quiet & Efficient]
+
+    Fast --> Sleep[Compute sleep_for<br>Adaptive + jitter]
+
+    Slow --> Sleep
+
+    Sleep -->|sleep| Loop
+
+    %% Visual highlights: fast=urgent, slow=calm, loop=infinite
+    style Fast fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
+    style Slow fill:#e6ffe6,stroke:#006600,stroke-width:2px
+    style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
+    style Update fill:#fff3e6,stroke:#cc6600,stroke-width:2px
+    style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+
 
 
 
