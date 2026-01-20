@@ -1,11 +1,12 @@
-# Adaptive Home Network Stack 🏠🔒🚀
+# Resilient Home Network Stack 🏠🔒🚀
+
 **Always-on Mini-PC VPN + Auto DNS Reconciliation**
 
-Minimal, resilient, self-healing remote access setup.  
-One mini PC → WireGuard VPN + dynamic Cloudflare DNS.  
+Minimal, self-healing remote access infrastructure.  
+One mini PC anchors stable identity → WireGuard VPN + dynamic Cloudflare DNS.  
 Router is disposable. Clients never notice changes.
 
-## Architecture Layers (Clean Separation of Concerns)
+## Clean Layer Separation
 
 | Layer              | Responsibility                          |
 |--------------------|-----------------------------------------|
@@ -14,13 +15,13 @@ Router is disposable. Clients never notice changes.
 | Cloudflare DNS     | vpn.mydomain.com → current public IP    |
 | Clients            | Connect via DNS name                    |
 
-## Core Components & Workflow
+## Core Components
 
-1. **Mini PC** (always-on, low-power: Intel N100/Beelink/etc.)
-   - Ubuntu Server 24.04 LTS
+1. **Mini PC** (always-on, low-power: System76)
+   - Ubuntu Server 24.04.1 LTS
    - Static IP via Netplan (Ethernet primary + Wi-Fi fallback)
-   - Two Docker containers:
-     - `update_dns` (custom agent): monitors public IP → updates Cloudflare
+   - Two Docker containers (restart: unless-stopped):
+     - `update_dns_app`: monitors public IP → pushes to Cloudflare
      - `wg-easy`: WireGuard server + web UI (kernel-space Layer 3 VPN)
 
 2. **Netplan** – Rock-solid LAN identity
@@ -28,8 +29,9 @@ Router is disposable. Clients never notice changes.
    - `20-wifi.yaml`: metric 600 or no default route (fallback)
 
 3. **Dynamic DNS Agent** – The brain
-   - Deterministic FSM: DOWN → DEGRADED → UP (monotonic, fail-fast)
-   - Adaptive polling: ~30 s (unhealthy) vs ~130 s (healthy)
+   - Monotonic FSM: DOWN → DEGRADED → UP (fail-fast, safe-by-default)
+   - Adaptive polling: ~30s (unhealthy) vs ~130s (healthy)
+     → **Aggressive when recovering, throttled when stable** — drastically reduces expensive external IP lookups (ipify/DoH) in steady state while preserving fast failure detection 
    - Cache-aware DoH + stability gating → minimizes Cloudflare API calls
 
 4. **WireGuard (wg-easy)** – Fast & audited
@@ -47,6 +49,89 @@ Router is disposable. Clients never notice changes.
   - TCP 22 → 192.168.0.123:22 (SSH, optional)
 
 ## Simplified Workflow
+
+```mermaid
+graph TD
+    A([Boot]) --> B([Netplan → Stable IP<br>192.168.0.123])
+
+    B --> C([Launch Docker Containers<br>unless-stopped policy])
+
+    subgraph "Always-Running Services"
+        C --> D[update_dns_app<br>Public IP → Cloudflare DNS]
+        C --> E[wg-easy<br>WireGuard VPN Server<br>UDP 51820 / TCP 51821]
+    end
+
+    D -->|Tracks & updates DNS| F([vpn.mydomain.com<br>Always points to current IP])
+    E -->|Secure tunnel| G([Clients connect remotely<br>via DNS name])
+
+    %% Power resilience highlight
+    Power([UPS Battery Backup]) -->|Continuous Operation| C
+    Power -->|Survives outages| B
+
+    %% Styling: containers green, power blue
+    style D fill:#e6ffe6,stroke:#006600,rx:10,ry:10
+    style E fill:#e6ffe6,stroke:#006600,rx:10,ry:10
+    style Power fill:#cce5ff,stroke:#004080,rx:12,ry:12
+    style B fill:#f0f8ff,stroke:#0066cc,rx:10,ry:10
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+```mermaid
+---
+title: Main Supervisor Loop
+config:
+   look: classic
+   theme: 'default'
+---
+graph TD
+    Start([Agent Init]) --> Loop{while True<br>Supervisor Loop}
+
+    Loop --> Update([Update Network Health<br>Reconcile DNS])
+
+    Update --> State{Get NetworkState}
+
+    State -->|DEGRADED / DOWN| Fast[Fast Poll<br>Quick recovery]
+
+    State -->|UP| Slow[Slow Poll<br>Quiet & Efficient]
+
+    Fast --> Sleep[Compute sleep_for<br>Adaptive + jitter]
+
+    Slow --> Sleep
+
+    Sleep -->|sleep| Loop
+
+    %% Visual highlights: fast=urgent, slow=calm, loop=infinite
+    style Fast fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
+    style Slow fill:#e6ffe6,stroke:#006600,stroke-width:2px
+    style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
+    style Update fill:#fff3e6,stroke:#cc6600,stroke-width:2px
+    style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+## Why It Works So Well
+
+- Router swap = 2 minutes of port forwards
+- Mini PC replacement = copy config + same IP
+- IP change = agent detects & updates DNS in <2 minutes
+- No third-party DDNS → full control
+- Fail-safe by design → monotonic FSM + gating
+- Extremely low I/O in steady state → adaptive + jitter + cache
+
+**Happy remote-accessing!**
+
+See also:  
+- [TUNING.md](./TUNING.md) – parameter guide  
+- TBD
+
+
+
+
+
+# BACKUP
+
 Boot ──► Netplan → stable IP 192.168.0.123
          │
          ▼
@@ -87,99 +172,15 @@ Cache seeded + DNS reconciled
 WireGuard ready → clients connect via vpn.mydomain.com
 ```
 
-
-
-
-## Simplified Workflow
-## Final draft:
-
 ```mermaid
 ---
-title: Big Picture
+title: Resilient Home Network Stack
 config:
    look: classic
    theme: 'default'
 ---
-graph TD
-    A([Boot / Power-On]) --> B([Netplan → Stable IP<br>192.168.0.123])
-
-    B --> C([Launch Docker Containers<br>unless-stopped policy])
-
-    subgraph "Always-Running Services"
-        C --> D[update_dns_app<br>Public IP → Cloudflare DNS]
-        C --> E[wg-easy<br>WireGuard VPN Server<br>UDP 51820 / TCP 51821]
-    end
-
-    D -->|Tracks & updates DNS| F([vpn.mydomain.com<br>Always points to current IP])
-    E -->|Secure tunnel| G([Clients connect remotely<br>via DNS name])
-
-    %% Power resilience highlight
-    Power([Battery Backup<br>APC UPS]) -->|Continuous Operation| C
-    Power -->|Survives outages| B
-
-    %% Styling: containers green, power blue
-    style D fill:#e6ffe6,stroke:#006600,rx:10,ry:10
-    style E fill:#e6ffe6,stroke:#006600,rx:10,ry:10
-    style Power fill:#cce5ff,stroke:#004080,rx:12,ry:12
-    style B fill:#f0f8ff,stroke:#0066cc,rx:10,ry:10
-
-    linkStyle default stroke:#666,stroke-width:2px
 ```
 
-
-```mermaid
----
-title: Main Supervisor Loop
-config:
-   look: classic
-   theme: 'default'
----
-graph TD
-    Start([Agent Init]) --> Loop{while True<br>Supervisor Loop}
-
-    Loop --> Cycle([Cycle Start<br>Timestamp + Heartbeat])
-
-    Cycle --> Update([update_network_health])
-
-    Update --> State{Get NetworkState}
-
-    State -->|DEGRADED / DOWN| Fast[Fast Poll<br>Quick recovery]
-
-    State -->|UP| Slow[Slow Poll<br>Quiet & Efficient]
-
-    Fast --> Sleep[Compute sleep_for<br>Adaptive + jitter]
-
-    Slow --> Sleep
-
-    Sleep -->|sleep| Loop
-
-    %% Visual highlights: fast=urgent, slow=calm, loop=infinite
-    style Fast fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
-    style Slow fill:#e6ffe6,stroke:#006600,stroke-width:2px
-    style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
-    style Update fill:#fff3e6,stroke:#cc6600,stroke-width:2px
-    style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
-
-    linkStyle default stroke:#666,stroke-width:2px
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Simplified Workflow
 
 ```mermaid
 flowchart TD
@@ -605,7 +606,7 @@ graph TD
 
     C --> Loop{while True<br>Supervisor Loop}
 
-    Loop --> Cycle([Cycle Start<br>Timestamp + Heartbeat])
+    Loop --> Cycle([Cycle Start])
 
     Cycle --> Update([update_network_health])
 
@@ -630,12 +631,6 @@ graph TD
 
     linkStyle default stroke:#666,stroke-width:2px
 ```
-
-
-
-
-
-
 
 
 
@@ -678,31 +673,3 @@ graph TD
     linkStyle default stroke:#666,stroke-width:2px
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Why It Works So Well
-
-- Router swap = 2 minutes of port forwards
-- Mini PC replacement = copy config + same IP
-- IP change = agent detects & updates DNS in <2 minutes
-- No third-party DDNS → full control
-- Fail-safe by design → monotonic FSM + gating
-- Extremely low I/O in steady state → adaptive + jitter + cache
-
-**Happy remote-accessing!**
-
-See also:  
-- [TUNING.md](./TUNING.md) – parameter guide  
