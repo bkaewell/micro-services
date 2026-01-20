@@ -1,14 +1,16 @@
+# ─── Future imports ───
 from __future__ import annotations
 
+# ─── Standard library imports ───
 import os
 from dataclasses import dataclass, field
 
+# ─── Third-party imports ───
 from dotenv import load_dotenv
 
 
 # ─── Load environment variables once at module level ───
 load_dotenv()
-
 
 @dataclass(frozen=True)
 class HardwareConfig:
@@ -29,10 +31,12 @@ class Config:
     """
 
     # ─── Scheduling & Polling ─── 
+    # Baseline control-loop interval in seconds.
+    # May be scaled shorter or longer based on network state, with jitter applied.
     CYCLE_INTERVAL_S: int = int(os.getenv("CYCLE_INTERVAL_S", "60"))
 
-    # Jitter added to each interval to make polling appear human-like
-    # Helps avoid Cloudflare rate limiting patterns
+    # Maximum positive jitter added to the minimum polling interval.
+    # Used to prevent detectable periodic API access patterns (Cloudflare, etc.).
     POLLING_JITTER_S: int = 10
 
     # Adaptive polling scalars (multipliers applied to base interval)

@@ -27,6 +27,12 @@ class SchedulingPolicy:
         return minimum_interval
 
     def _scalar_for_state(self, state: NetworkState) -> float:
+        """
+        Return the polling interval scalar for the given network state.
+
+        DOWN and DEGRADED states use a faster polling scalar to accelerate recovery;
+        all other states use a slower, steady-state scalar.
+        """
         if state in (NetworkState.DOWN, NetworkState.DEGRADED):
             return self.fast_scalar
         return self.slow_scalar 
