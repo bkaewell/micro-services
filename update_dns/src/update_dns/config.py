@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import os
@@ -31,18 +29,15 @@ class Config:
     """
 
     # ─── Scheduling & Polling ─── 
-    CYCLE_INTERVAL_S: int = int(os.getenv("CYCLE_INTERVAL_S", "65"))
+    CYCLE_INTERVAL_S: int = int(os.getenv("CYCLE_INTERVAL_S", "60"))
 
     # Jitter added to each interval to make polling appear human-like
     # Helps avoid Cloudflare rate limiting patterns
-    POLLING_JITTER_S: int = 5
+    POLLING_JITTER_S: int = 10
 
     # Adaptive polling scalars (multipliers applied to base interval)
-    FAST_POLL_SCALAR: float = 0.5  # ~2x faster during DOWN/DEGRADED
-    SLOW_POLL_SCALAR: float = 2.0  # ~2x slower in steady state (UP)
-
-    # Whether to enforce minimum TTL safety during DNS updates
-    ENFORCE_TTL_POLICY: bool = os.getenv("ENFORCE_TTL_POLICY", "true").lower() in ("true", "1", "yes")
+    FAST_POLL_SCALAR: float = 0.5  # 2x FASTER during DOWN/DEGRADED
+    SLOW_POLL_SCALAR: float = 2.0  # 2x SLOWER in steady state (UP)
 
     # ─── DNS & Cache Policy (freshness & reconciliation behavior) ───
     # Maximum age before cache is considered stale and forces re-verification
