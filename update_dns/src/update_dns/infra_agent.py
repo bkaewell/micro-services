@@ -341,19 +341,35 @@ class NetworkControlAgent:
 
         # ─── L1 Cache (Cheap, local, fast no-op) ───
         # Only proceed to DoH if cache is absent, stale, or mismatched
+
         cache = load_cached_cloudflare_ip()
-        cache_fresh = cache.hit and (cache.age_s <= self.max_cache_age_s)
+
+        cache_hit = cache.hit
+        cache_fresh = cache_hit and (cache.age_s <= self.max_cache_age_s)
         cache_match = cache_fresh and (cache.ip == public_ip)
 
+        if not cache_hit:
+            cache_state = "MISS"
+        elif not cache_fresh:
+            cache_state = "STALE"
+        elif not cache_match:
+            cache_state = "MISMATCH"
+        else:
+            cache_state = "HIT"
+
         tlog(
-            "🟢" if cache_match else "🟡",
+            {
+                "HIT": "🟢",
+                "MISMATCH": "🟡",
+                "STALE": "🟠",
+                "MISS": "🔴",
+            }[cache_state],
             "CACHE",
-            "HIT" if cache_match else ("STALE" if cache.hit else "MISS"),
-            primary=f"ip={cache.ip}" if cache.hit else "no cache",
+            cache_state,
+            primary=f"ip={cache.ip}" if cache_hit else "no cache",
             meta=(
-                f"rtt={cache.elapsed_ms:.1f}ms | "
-                f"age={cache.age_s:.0f}s / {self.max_cache_age_s}s " 
-            ) if cache.hit else ""
+                f"age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
+            ) if cache_hit else None,
         )
 
         if cache_match:
