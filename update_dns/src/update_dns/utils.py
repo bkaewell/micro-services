@@ -109,13 +109,20 @@ def is_valid_ip(ip: str) -> bool:
     except socket.error:
         return False
 
-def get_ip() -> IPResolutionResult:
+def get_ip(wan_ok: bool) -> IPResolutionResult:
     """
-    Resolve the current external IPv4 address using multiple fallback services.
+    Resolve the current external IPv4 address using prioritized public endpoints.
 
-    Services are queried in priority order until a valid IPv4 address 
-    (in plaintext) is returned or all sources fail. The reported latency 
-    reflects both network response time and any fallback usage.
+    The lookup is policy-aware and bounded:
+    - When WAN reachability is uncertain (wan_ok=False), the function aborts early
+      after a limited number of attempts to avoid blocking network state
+      transitions on slow or degraded connectivity.
+    - When WAN reachability is confirmed (wan_ok=True), all configured fallback
+      services may be attempted to obtain a stable external IP.
+
+    The reported latency reflects total wall-clock time spent across all attempts.
+    A failed result does not imply WAN failure; it may indicate an intentional
+    early abort due to insufficient network confidence.
     """
 
     services = (
@@ -125,13 +132,32 @@ def get_ip() -> IPResolutionResult:
         "https://ipecho.net/plain", 
     )
 
-    timeout = config.API_TIMEOUT_S
+    if not wan_ok:
+        timeout = 2
+        max_attempts = 2
+    else:
+        timeout = 4
+        max_attempts = len(services)
+
+    # timeout = config.API_TIMEOUT_S
     start = time.monotonic()
     attempts = 0
-    max_attempts = len(services)
+    # max_attempts = len(services)
 
     for url in services:
+
         attempts += 1
+
+        # Early abort: WAN is unstable; do not block FSM on IP resolution
+        if not wan_ok and attempts >= max_attempts:
+            return IPResolutionResult(
+                ip=None,
+                elapsed_ms=(time.monotonic() - start) * 1000,
+                attempts=attempts,
+                max_attempts=max_attempts,
+                success=False,
+            )
+
         try:
             resp = requests.get(url, timeout=timeout)
             resp.raise_for_status()

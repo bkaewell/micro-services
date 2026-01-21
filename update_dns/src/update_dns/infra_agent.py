@@ -213,6 +213,7 @@ class NetworkControlAgent:
         # ─── 3. State machine (single source of truth for health) ─── 
         self.network_fsm = NetworkHealthFSM()
         # Starts in DEGRADED — probationary until 2 consecutive stable IPs confirmed
+        # (self.confirmations_required_for_up = 2)
         # Cache seeds naturally during probation window (no priming needed)
 
         # ─── 4. Runtime / cross-cycle state (memory between control loops) ─── 
@@ -411,7 +412,7 @@ class NetworkControlAgent:
             dns_last_modified=dns_last_modified
         )
         if gsheets_ok:
-            tlog("🟢", "GSHEET", "OK", primary="audit dns update", meta=f"rtt={elapsed_ms:.1f}")
+            tlog("🟢", "GSHEET", "OK", primary="audit dns update", meta=f"rtt={elapsed_ms:.1f}ms")
 
     def _power_cycle_edge(self) -> bool:
         """
@@ -620,7 +621,7 @@ class NetworkControlAgent:
         public = None
 
         if self.network_fsm.state in (NetworkState.DEGRADED, NetworkState.UP):
-            public = get_ip()
+            public = get_ip(wan_ok=wan_path)
             #public = self._override_public_ip_for_test(public)  # DEBUG hook
             #self.count += 1
 
@@ -698,7 +699,7 @@ class NetworkControlAgent:
                 dns_last_modified=None
             )
             if gsheets_ok:
-                tlog("🟢", "GSHEET", "OK", meta=f"rtt={elapsed_ms:.1f}")
+                tlog("🟢", "GSHEET", "OK", meta=f"rtt={elapsed_ms:.1f}ms")
 
         elif escalate and self.allow_physical_recovery:
             if self._trigger_physical_recovery():
