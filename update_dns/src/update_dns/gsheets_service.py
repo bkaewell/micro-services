@@ -1,17 +1,17 @@
-# --- Standard library imports ---
+# ─── Standard library imports ───
 import os
 import time
 import json
 import gspread
 import requests
 
-# --- Third-party imports ---
+# ─── Third-party imports ───
 from typing import Optional
 from dotenv import load_dotenv
 from google.auth.exceptions import TransportError
 from google.auth import exceptions as auth_exceptions
 
-# --- Project imports ---
+# ─── Project imports ───
 from .config import config
 from .logger import get_logger
 from .cache import GOOGLE_SHEET_ID_FILE
@@ -89,6 +89,32 @@ class GSheetsService:
             self.logger.error(f"Failed to authenticate gspread client: {e}")
             raise
 
+    def warmup(self) -> None:
+        """
+        Performs a lightweight, non-mutating warm-up of Google Sheets access.
+
+        This method prepares:
+        - gspread client
+        - spreadsheet ID cache
+        - worksheet binding
+        - target row discovery
+
+        Safe to call at boot; does not perform writes.
+        """
+        self.logger.info("Warming up GSheets service...")
+
+        try:
+            self.get_client()
+            self.get_worksheet()
+            self._ensure_target_row()
+
+            self.logger.info("GSheets warm-up complete")
+
+        except Exception as e:
+            self.logger.warning(
+                f"GSheets warm-up failed; will retry when network is UP: "
+                f"{e.__class__.__name__}: {e}"
+            )
 
     def get_client(self) -> gspread.Client:
         """
@@ -97,7 +123,6 @@ class GSheetsService:
         if self.client is None:
             return self._create_client()
         return self.client
-
 
     def get_worksheet(self) -> gspread.Worksheet:
         """
@@ -149,13 +174,13 @@ class GSheetsService:
             # Search for the DNS name; Returns Cell object or None
             cell = ws.find(dns_name, in_column=1)
 
-            # --- Found ---
+            # ─── Found ───
             if cell:
                 self.target_row = cell.row
                 self.logger.info(f"DNS '{dns_name}' detected at persistent row {self.target_row}.")
                 return self.target_row
 
-            # --- Not Found (cell is None) ---
+            # ─── Not Found (cell is None) ───
             self.logger.info(f"DNS '{dns_name}' not found; appending new row...")
             
             # Append the new row data.
@@ -178,16 +203,17 @@ class GSheetsService:
             self.logger.error(f"Critical GSpread error during row establishment: {e.__class__.__name__}")
             raise
 
-
     def update_status(
             self, 
             ip_address: str,
             current_time: time,
             dns_last_modified: str
-        ) -> bool:
+        ) -> tuple[bool, float]:
             """
             Uses the persistently stored target_row to efficiently perform partial updates.
             """
+            start = time.monotonic()
+            
             try:
                 # Verify the target row is found/established (only runs heavy logic once)
                 target_row = self._ensure_target_row()
@@ -208,10 +234,11 @@ class GSheetsService:
                 
                 if updates:
                     ws.update_cells(updates, value_input_option='USER_ENTERED')
-                    return True
+                    elapsed_ms = (time.monotonic() - start) * 1000
+                    return True, elapsed_ms
                     #self.logger.info(f"Updated persistent row {target_row} for {self.gsheet_dns}")
 
-            # --- EXCEPTION HANDLING ---
+            # ─── EXCEPTION HANDLING ───
             # Catch network failures and Google API/authorization errors (high-level)
             except(
                 requests.RequestException,   # Network and HTTP/API
@@ -223,7 +250,8 @@ class GSheetsService:
                     f"Skipping GSheets update due to network/API error: " 
                     f"{e.__class__.__name__}: {e}"
                 )
-                return False
+                elapsed_ms = (time.monotonic() - start) * 1000
+                return False, elapsed_ms
             
             # The crucial safety net for truly unexpected system failures
             except Exception as e:

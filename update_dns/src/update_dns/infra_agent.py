@@ -195,6 +195,8 @@ class NetworkControlAgent:
         self.logger = get_logger("infra_agent")
         self.cloudflare_client = CloudflareClient()
         self.gsheets_service = GSheetsService()
+        self.gsheets_service.warmup()
+
 
         # ─── 2. Static configuration & policy thresholds ─── 
         self.router_ip = config.Hardware.ROUTER_IP
@@ -368,7 +370,7 @@ class NetworkControlAgent:
             cache_state,
             primary=f"ip={cache.ip}" if cache_hit else "no cache",
             meta=(
-                f"age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
+                f"rtt={cache.elapsed_ms:.1f}ms | age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
             ) if cache_hit else None,
         )
 
@@ -403,13 +405,13 @@ class NetworkControlAgent:
         )
 
         # ─── Low-frequency audit log ───
-        gsheets_ok = self.gsheets_service.update_status(
-                ip_address=public_ip,
-                current_time=None,
-                dns_last_modified=dns_last_modified
+        gsheets_ok, elapsed_ms = self.gsheets_service.update_status(
+            ip_address=public_ip,
+            current_time=None,
+            dns_last_modified=dns_last_modified
         )
         if gsheets_ok:
-            tlog("🟢", "GSHEET", "OK", primary="audit dns update")
+            tlog("🟢", "GSHEET", "OK", primary="audit dns update", meta=f"rtt={elapsed_ms:.1f}")
 
     def _power_cycle_edge(self) -> bool:
         """
@@ -427,8 +429,6 @@ class NetworkControlAgent:
             True if the full relay command sequence completed successfully.
             False on any communication or execution error.
         """
-
-
 
         try:
             # Power OFF
@@ -692,12 +692,13 @@ class NetworkControlAgent:
             self._sync_dns_if_drifted(public.ip)
 
             # High-frequency uptime heartbeat
-            if self.gsheets_service.update_status(
+            gsheets_ok, elapsed_ms = self.gsheets_service.update_status(
                 ip_address=None,
                 current_time=dt_str,
                 dns_last_modified=None
-            ):
-                tlog("🟢", "GSHEET", "OK")
+            )
+            if gsheets_ok:
+                tlog("🟢", "GSHEET", "OK", meta=f"rtt={elapsed_ms:.1f}")
 
         elif escalate and self.allow_physical_recovery:
             if self._trigger_physical_recovery():
