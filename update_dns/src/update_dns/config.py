@@ -18,9 +18,6 @@ class HardwareConfig:
     ROUTER_IP: str = field(default_factory=lambda: os.getenv("ROUTER_IP", "192.168.0.1"))
     PLUG_IP: str = field(default_factory=lambda: os.getenv("PLUG_IP", "192.168.0.150"))
 
-    REBOOT_DELAY_S: int = int(os.getenv("REBOOT_DELAY_S", "30"))
-    RECOVERY_COOLDOWN_S: int = int(os.getenv("RECOVERY_COOLDOWN_S", "1800"))
-
 @dataclass(frozen=True)
 class Config:
     """
@@ -46,13 +43,13 @@ class Config:
     # ─── DNS & Cache Policy (freshness & reconciliation behavior) ───
     # Maximum age before cache is considered stale and forces re-verification
     # Chosen to cover ~5 slow UP cycles (~120s) while expiring quickly enough during fast recovery (~30s)
-    #MAX_CACHE_AGE_S: int = 600  # 10 minutes
+    #MAX_CACHE_AGE_S: int = 600-900  # 10 minutes - 15 minutes
     MAX_CACHE_AGE_S: int = 3600  # 60 minutes
 
     # ─── Cloudflare / DNS constraints (hard limits) ─── 
     CLOUDFLARE_MIN_TTL_S: int = 60
 
-    # ─── Network I/O & safety (timesouts, throttling) ───
+    # ─── Network I/O & safety (timeouts, throttling) ───
     API_TIMEOUT_S: int = 8  # Safe timeout for all external HTTP/DoH calls
 
     # ─── Observability (logging & monitoring) ───

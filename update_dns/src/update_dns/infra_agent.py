@@ -13,6 +13,7 @@ from .logger import get_logger
 from .time_service import TimeService
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
+from .recovery_policy import recovery_policy
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult
 from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult
 #from .db import log_metrics
@@ -197,18 +198,14 @@ class NetworkControlAgent:
         self.gsheets_service = GSheetsService()
         self.gsheets_service.warmup()
 
-
         # ─── 2. Static configuration & policy thresholds ─── 
         self.router_ip = config.Hardware.ROUTER_IP
         self.max_cache_age_s = config.MAX_CACHE_AGE_S
         self.plug_ip = config.Hardware.PLUG_IP
-        self.reboot_delay_s = config.Hardware.REBOOT_DELAY_S
         self.allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
-        self.recovery_cooldown_s = config.Hardware.RECOVERY_COOLDOWN_S
 
-        # Promotion & escalation policy
+        # Promotion policy
         self.confirmations_required_for_up = 2   # consecutive stable IPs needed
-        self.max_consecutive_failures_before_escalation = 4
 
         # ─── 3. State machine (single source of truth for health) ─── 
         self.network_fsm = NetworkHealthFSM()
@@ -440,7 +437,7 @@ class NetworkControlAgent:
             off.raise_for_status()
             self.logger.debug("Smart plug powered OFF")
 
-            time.sleep(self.reboot_delay_s)
+            time.sleep(recovery_policy.reboot_settle_delay_s)
 
             # Power ON
             on = requests.get(
@@ -487,13 +484,13 @@ class NetworkControlAgent:
         # ─── Cooldown Guardrail ───
         time_since_last = now - self.last_recovery_time
         
-        if time_since_last < self.recovery_cooldown_s:
+        if time_since_last < recovery_policy.recovery_cooldown_s:
             tlog(
                 "🔴",
                 "RECOVERY",
                 "SUPPRESSED",
                 primary="cooldown active",
-                meta=f"last_attempt={int(time_since_last)}s ago | window={self.recovery_cooldown_s}s"
+                meta=f"last_attempt={int(time_since_last)}s ago | window={recovery_policy.recovery_cooldown_s}s"
             )
             return False
 
@@ -502,7 +499,7 @@ class NetworkControlAgent:
             "RECOVERY", 
             "TRIGGER", 
             primary="power-cycle edge device",
-            meta=f"smart_plug_ip={self.plug_ip} | reboot_delay={self.reboot_delay_s}s"
+            meta=f"smart_plug_ip={self.plug_ip} | reboot_delay={recovery_policy.reboot_settle_delay_s}s"
         )
     
         # Pre-check plug reachability (optional but useful for telemetry)
@@ -666,6 +663,7 @@ class NetworkControlAgent:
 
 
         # ─── Decide: escalation check ───
+        # Escalation counter increments only during DOWN
         if network_state == NetworkState.DOWN:
             self.consecutive_down_count += 1
         else:
@@ -673,7 +671,7 @@ class NetworkControlAgent:
 
         escalate = (
             network_state == NetworkState.DOWN
-            and self.consecutive_down_count >= self.max_consecutive_failures_before_escalation
+            and self.consecutive_down_count >= recovery_policy.max_consecutive_down_before_escalation()
         )
         failures_at_decision = self.consecutive_down_count
 
@@ -726,7 +724,7 @@ class NetworkControlAgent:
             )
 
         elif network_state == NetworkState.DOWN:
-            meta.append(f"down_streak={self.consecutive_down_count}/{self.max_consecutive_failures_before_escalation}")
+            meta.append(f"down_streak={self.consecutive_down_count}/{recovery_policy.max_consecutive_down_before_escalation()}")
             meta.append(f"escalate={escalate}")
 
         # Only log detailed NET_HEALTH when something is wrong or building confidence
