@@ -18,6 +18,12 @@ services:
     container_name: update_dns_app
     restart: unless-stopped
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "15"
+
   # ================================
   # On-Demand Execution (Manual Run)
   # ================================
