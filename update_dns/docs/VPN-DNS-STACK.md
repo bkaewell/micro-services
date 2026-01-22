@@ -688,13 +688,13 @@ config:
 graph TD
     Start([Init]) --> Loop{Supervisor<br>Loop ♾️}
 
-    Loop --> Update([Network Health Monitor<br>Reconcile DNS])
+    Loop --> Update([Network Health Monitor 🩺 <br>Reconcile DNS 🌐])
 
-    Update --> Poll([Adaptive Polling Engine])
+    Update --> |"Network State<br>(DOWN / DEGRADED / UP)"| Poll([Adaptive Polling Engine 🦍])
 
-    Poll --> Sleep[Sleep → Next Cycle<br>Fast Poll if DEGRADED/DOWN<br>Slow Poll if UP]
+    Poll -->  |"Polling Speed<br>(Fast: DOWN/DEGRADED<br>Slow: UP)"| Sleep[Sleep → Next Cycle]
 
-    Sleep --> Loop
+    Sleep -->  Loop
 
     %% Visual highlights
     style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
