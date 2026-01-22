@@ -692,7 +692,7 @@ graph TD
 
     Update --> Poll([Adaptive Polling Engine])
 
-    Poll --> Sleep[Sleep → Next Cycle<br>(Fast Poll if DEGRADED/DOWN<br>Slow Poll if UP)]
+    Poll --> Sleep[Sleep → Next Cycle<br>Fast Poll if DEGRADED/DOWN<br>Slow Poll if UP)]
 
     Sleep --> Loop
 
