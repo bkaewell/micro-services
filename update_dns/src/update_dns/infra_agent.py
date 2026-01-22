@@ -390,7 +390,7 @@ class NetworkControlAgent:
             return
 
         # ─── L3 Mutation required ───
-        result = self.cloudflare_client.update_dns(public_ip)
+        result, elapsed_ms = self.cloudflare_client.update_dns(public_ip)
         store_cloudflare_ip(public_ip)       # Safe: we just wrote it
         dns_last_modified = \
             self.time.iso_to_local_string(result.get("modified_on"))
@@ -399,7 +399,7 @@ class NetworkControlAgent:
             "DNS",
             "UPDATED",
             primary="Cloudflare",
-            meta=f"{doh.ip if doh.success else 'unknown'} → {public_ip} | modified={dns_last_modified}"
+            meta=f"rtt={elapsed_ms:.1f}ms | {doh.ip if doh.success else 'unknown'} → {public_ip} | modified={dns_last_modified}"
         )
 
         # ─── Low-frequency audit log ───
@@ -552,9 +552,11 @@ class NetworkControlAgent:
                 ip="192.168.0.77",
                 elapsed_ms=public.elapsed_ms,
                 attempts=public.attempts,
+                max_attempts=4,
                 success=True,
             )
-        
+            ip: str | None
+
         return public
 
     #********************************

@@ -1,12 +1,13 @@
-# --- Standard library imports ---
+# ─── Standard library imports ───
 import os
 import json
+import time
 import requests
 
-# --- Third-party imports ---
+# ─── Third-party imports ───
 from dotenv import load_dotenv
 
-# --- Project imports ---
+# ─── Project imports ───
 from .config import config
 from .logger import get_logger
 
@@ -58,7 +59,7 @@ class CloudflareClient:
         ):
             raise ValueError(f"Cloudflare config invalid: {data}")
     
-    def update_dns(self, new_ip: str) -> dict:
+    def update_dns(self, new_ip: str) -> tuple[dict, float]:
         """
         Update the DNS record to point to the provided IP address.
 
@@ -68,6 +69,8 @@ class CloudflareClient:
         Raises:
             RuntimeError: If the API request fails or response is invalid
         """
+
+        start = time.monotonic()
 
         url = (
             f"{self.api_base_url}/zones/"
@@ -113,7 +116,8 @@ class CloudflareClient:
                 "PUT succeeded but response contained no DNS record"
             )
 
-        return new_dns_record
+        elapsed_ms = (time.monotonic() - start) * 1000
+        return new_dns_record, elapsed_ms
     
     def get_dns_record(self) -> dict:
         """
