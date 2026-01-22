@@ -61,16 +61,28 @@ class CloudflareClient:
     
     def update_dns(self, new_ip: str) -> tuple[dict, float]:
         """
-        Update the DNS record to point to the provided IP address.
+        Update the Cloudflare DNS record to point to the provided IP address.
+
+        Performs a synchronous PUT against the Cloudflare API and validates
+        the response payload. On success, returns the updated DNS record and
+        the total operation latency.
+
+        Args:
+            new_ip (str): IPv4 address to publish for the DNS record.
 
         Returns:
-            dict: Updated DNS record from Cloudflare response
+            tuple[dict, float]:
+                - dict: Updated DNS record as returned by Cloudflare ("result" field)
+                - float: End-to-end operation latency in milliseconds
 
         Raises:
-            RuntimeError: If the API request fails or response is invalid
+            RuntimeError:
+                - If the Cloudflare API request fails (network error, timeout, non-2xx)
+                - If the response payload is invalid or missing the DNS record
         """
 
         start = time.monotonic()
+        resp = None
 
         url = (
             f"{self.api_base_url}/zones/"
@@ -91,34 +103,34 @@ class CloudflareClient:
                 url, headers=self.headers, json=payload, timeout=config.API_TIMEOUT_S
             )
             resp.raise_for_status()
+
+            # Extract the new record from the PUT response body
+            put_resp_data = resp.json()
+            new_dns_record = put_resp_data.get("result")
+            if not new_dns_record:
+                raise RuntimeError(
+                    "PUT succeeded but response contained no DNS record"
+                )
+
+            elapsed_ms = (time.monotonic() - start) * 1000
+            return new_dns_record, elapsed_ms
+
         except requests.RequestException as e:
+            elapsed_ms = (time.monotonic() - start) * 1000
+
             raise RuntimeError(
                 f"Cloudflare PUT failed for DNS record " 
-                f"[{self.dns_record_id}] → {new_ip}"
+                f"[{self.dns_record_id}] → {new_ip} "
+                f"(elapsed={elapsed_ms:.1f}ms)"
             ) from e
 
-        # Extract the new record from the PUT response body
-        try:
-            put_resp_data = resp.json()
         except ValueError as e:
+            elapsed_ms = (time.monotonic() - start) * 1000
             raise RuntimeError(
-                "PUT succeeded but response was not valid JSON"
+                f"PUT succeeded but response was not valid JSON "
+                f"(elapsed={elapsed_ms:.1f}ms)"
             ) from e
         
-        self.logger.debug(
-            f"PUT JSON response:\n%s",
-            json.dumps(put_resp_data, indent=2),
-        )
-
-        new_dns_record = put_resp_data.get("result")
-        if not new_dns_record:
-            raise RuntimeError(
-                "PUT succeeded but response contained no DNS record"
-            )
-
-        elapsed_ms = (time.monotonic() - start) * 1000
-        return new_dns_record, elapsed_ms
-    
     def get_dns_record(self) -> dict:
         """
         Fetch the current Cloudflare DNS record for this hostname.
