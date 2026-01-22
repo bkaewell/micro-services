@@ -109,54 +109,33 @@ def is_valid_ip(ip: str) -> bool:
     except socket.error:
         return False
 
-def get_ip(wan_ok: bool) -> IPResolutionResult:
+def get_ip() -> IPResolutionResult:
     """
     Resolve the current external IPv4 address using prioritized public endpoints.
 
-    The lookup is policy-aware and bounded:
-    - When WAN reachability is uncertain (wan_ok=False), the function aborts early
-      after a limited number of attempts to avoid blocking network state
-      transitions on slow or degraded connectivity.
-    - When WAN reachability is confirmed (wan_ok=True), all configured fallback
-      services may be attempted to obtain a stable external IP.
+    Returns:
+        IPResolutionResult: Resolved IP (or None), elapsed time in ms, attempts,
+        max attempts, and success status. Success indicates high confidence in
+        the returned IP.
 
-    The reported latency reflects total wall-clock time spent across all attempts.
-    A failed result does not imply WAN failure; it may indicate an intentional
-    early abort due to insufficient network confidence.
+    Notes:
+        - Caller should verify WAN reachability before calling.
+        - Failure reflects inability to obtain a confident IP, not necessarily a WAN outage.
+        - elapsed_ms is total wall-clock time for all attempts.
     """
-
+    start = time.monotonic()
     services = (
         "https://api.ipify.org", 
         "https://ifconfig.me/ip", 
         "https://ipv4.icanhazip.com", 
         "https://ipecho.net/plain", 
     )
-
-    if not wan_ok:
-        timeout = 2
-        max_attempts = 2
-    else:
-        timeout = 4
-        max_attempts = len(services)
-
-    # timeout = config.API_TIMEOUT_S
-    start = time.monotonic()
     attempts = 0
-    # max_attempts = len(services)
+    max_attempts = len(services)
+    timeout = config.API_TIMEOUT_S
 
     for url in services:
-
         attempts += 1
-
-        # Early abort: WAN is unstable; do not block FSM on IP resolution
-        if not wan_ok and attempts >= max_attempts:
-            return IPResolutionResult(
-                ip=None,
-                elapsed_ms=(time.monotonic() - start) * 1000,
-                attempts=attempts,
-                max_attempts=max_attempts,
-                success=False,
-            )
 
         try:
             resp = requests.get(url, timeout=timeout)
@@ -176,7 +155,7 @@ def get_ip(wan_ok: bool) -> IPResolutionResult:
 
         except requests.RequestException as e:
             logger.debug(f"IP lookup failed via {url} ({e.__class__.__name__})")
-    
+
     return IPResolutionResult(
         ip=None,
         elapsed_ms=(time.monotonic() - start) * 1000,
