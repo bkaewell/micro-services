@@ -111,17 +111,11 @@ def is_valid_ip(ip: str) -> bool:
 
 def get_ip() -> IPResolutionResult:
     """
-    Resolve the current external IPv4 address using prioritized public endpoints.
-
-    Returns:
-        IPResolutionResult: Resolved IP (or None), elapsed time in ms, attempts,
-        max attempts, and success status. Success indicates high confidence in
-        the returned IP.
-
-    Notes:
-        - Caller should verify WAN reachability before calling.
-        - Failure reflects inability to obtain a confident IP, not necessarily a WAN outage.
-        - elapsed_ms is total wall-clock time for all attempts.
+    Resolve the current external IPv4 address using prioritized public 
+    endpoints, returning a result that reflects confidence in the resolved IP,
+    total wall-clock latency, and attempt count; callers are expected to 
+    ensure WAN reachability, and failure indicates insufficient confidence 
+    rather than definitive network outage.
     """
     start = time.monotonic()
     services = (

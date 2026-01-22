@@ -1,4 +1,4 @@
-# --- Standard library imports ---
+# ─── Standard library imports ───
 import time
 import json
 from pathlib import Path
@@ -6,7 +6,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 
-# --- Cache layout ---
+# ─── Cache layout ───
 CACHE_DIR = Path.home() / ".cache" / "update_dns"
 CACHE_DIR.mkdir(parents=True, exist_ok=True) 
 

@@ -67,7 +67,7 @@ class RecoveryPolicy:
             self.escalation_delay_s / self.fast_poll_nominal_interval_s
         )
 
-    # ─── Introspection / debugging helpers ───────────────────────────────
+    # ─── Introspection / debugging helpers ───
 
     def summary(self) -> dict[str, int | float]:
         """
