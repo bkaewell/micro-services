@@ -686,25 +686,19 @@ config:
    theme: 'default'
 ---
 graph TD
-    Start([Init]) --> Loop{Supervisor<br>While Loop ♾️}
+    Start([Init]) --> Loop{Supervisor<br>Loop ♾️}
 
-    Loop --> Update([Update Network Health<br>Observe → Assess → Act → Report])
+    Loop --> Update([Network Health Monitor<br>Reconcile DNS])
 
-    Update --> State([NetworkState<br>Fresh from Cycle])
+    Update --> Poll([Adaptive Polling Engine])
 
-    State --> Poll([Adaptive Polling Engine<br>Decides next interval])
 
-    Poll --> Decision{State?}
+    Poll --> Fast[Fast Polling<br>~30s<br>Quick Recovery<br>(DEGRADED / DOWN)]
 
-    Decision -->|DEGRADED / DOWN| Fast[Fast Polling<br>~30s<br>Quick Recovery]
+    Poll --> Slow[Slow Polling<br>~130s<br>Quiet & Efficient<br>(UP)]
 
-    Decision -->|UP| Slow[Slow Polling<br>~130s<br>Quiet & Efficient]
-
-    Fast --> Sleep[Sleep → Next Cycle]
-
-    Slow --> Sleep
-
-    Sleep --> Loop
+    Fast --> Loop
+    Slow --> Loop
 
     %% Visual highlights
     style Fast fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
@@ -712,7 +706,6 @@ graph TD
     style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
     style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
     style Update fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style State fill:#f8f9fa,stroke:#666,stroke-width:2px
     style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
 
     linkStyle default stroke:#666,stroke-width:2px
