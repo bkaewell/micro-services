@@ -368,7 +368,7 @@ class NetworkControlAgent:
             cache_state,
             primary=f"ip={cache.ip}" if cache_hit else "no cache",
             meta=(
-                f"rtt={cache.elapsed_ms:.1f}ms | age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
+                f"rtt={cache.elapsed_ms:.0f}ms | age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
             ) if cache_hit else None,
         )
 
@@ -384,7 +384,7 @@ class NetworkControlAgent:
                 "DNS",
                 "MATCH",
                 primary=f"ip={doh.ip}",
-                meta=f"rtt={doh.elapsed_ms:.1f}ms | cache refreshed"
+                meta=f"rtt={doh.elapsed_ms:.0f}ms | cache refreshed"
             )
             store_cloudflare_ip(public_ip)   # Safe: DoH confirmed current IP is what DNS has
             return
@@ -399,7 +399,7 @@ class NetworkControlAgent:
             "DNS",
             "UPDATED",
             primary="Cloudflare",
-            meta=f"rtt={elapsed_ms:.1f}ms | {doh.ip if doh.success else 'unknown'} → {public_ip} | modified={dns_last_modified}"
+            meta=f"rtt={elapsed_ms:.0f}ms | {doh.ip if doh.success else 'unknown'} → {public_ip} | modified={dns_last_modified}"
         )
 
         # ─── Low-frequency audit log ───
@@ -409,7 +409,7 @@ class NetworkControlAgent:
             dns_last_modified=dns_last_modified
         )
         if gsheets_ok:
-            tlog("🟢", "GSHEET", "OK", primary="audit dns update", meta=f"rtt={elapsed_ms:.1f}ms")
+            tlog("🟢", "GSHEET", "OK", primary="audit dns update", meta=f"rtt={elapsed_ms:.0f}ms")
 
     def _power_cycle_edge(self) -> bool:
         """
@@ -602,7 +602,7 @@ class NetworkControlAgent:
             "ROUTER",
             "UP" if lan.success else "DOWN",
             primary=f"ip={self.router_ip}",
-            meta=f"rtt={lan.elapsed_ms:.1f}ms"
+            meta=f"rtt={lan.elapsed_ms:.0f}ms"
         )
 
         # WAN path reachability (strong signal; feeds Network Health FSM)
@@ -612,20 +612,23 @@ class NetworkControlAgent:
             "WAN_PATH",
             "OK" if wan_path.success else "FAIL",
             #primary=f""
-            meta=f"rtt={wan_path.elapsed_ms:.1f}ms"
+            meta=f"rtt={wan_path.elapsed_ms:.0f}ms"
         )
 
         # ─── Policy: IP stability check (only when we have some confidence) ───
         allow_promotion = False
         public = None
 
-        if self.network_fsm.state in (NetworkState.DEGRADED, NetworkState.UP):
-            public = get_ip(wan_ok=wan_path)
+        if (
+            self.network_fsm.state in (NetworkState.DEGRADED, NetworkState.UP) 
+            and wan_path.success
+        ):
+            public = get_ip()
             #public = self._override_public_ip_for_test(public)  # DEBUG hook
             #self.count += 1
 
             meta = []
-            meta.append(f"rtt={public.elapsed_ms:.1f}ms")
+            meta.append(f"rtt={public.elapsed_ms:.0f}ms")
             meta.append(f"attempts={public.attempts}/{public.max_attempts}")
             tlog(
                 "🟢" if public.success else "🔴",
@@ -638,6 +641,8 @@ class NetworkControlAgent:
             # Determine whether promotion (DEGRADED → UP) is allowed
             if public.success and self.network_fsm.state == NetworkState.DEGRADED:
                 allow_promotion = self._update_ip_stability(public.ip)
+        else:
+            tlog("🔴", "PUBLIC_IP", "SKIPPED")
         
 
         # ─── Assess: FSM transition (single source of truth) ───
@@ -673,7 +678,7 @@ class NetworkControlAgent:
 
         escalate = (
             network_state == NetworkState.DOWN
-            and self.consecutive_down_count >= recovery_policy.max_consecutive_down_before_escalation()
+            and self.consecutive_down_count >= recovery_policy.max_consecutive_down_before_escalation
         )
         failures_at_decision = self.consecutive_down_count
 
@@ -699,7 +704,7 @@ class NetworkControlAgent:
                 dns_last_modified=None
             )
             if gsheets_ok:
-                tlog("🟢", "GSHEET", "OK", meta=f"rtt={elapsed_ms:.1f}ms")
+                tlog("🟢", "GSHEET", "OK", meta=f"rtt={elapsed_ms:.0f}ms")
 
         elif escalate and self.allow_physical_recovery:
             if self._trigger_physical_recovery():
@@ -712,7 +717,7 @@ class NetworkControlAgent:
                 "RECOVERY",
                 "SUPPRESSED",
                 primary="disabled by config",
-                meta=f"failures={self.consecutive_down_count}"
+                meta=f"down_count={self.consecutive_down_count}"
             )
 
 
@@ -726,7 +731,7 @@ class NetworkControlAgent:
             )
 
         elif network_state == NetworkState.DOWN:
-            meta.append(f"down_streak={self.consecutive_down_count}/{recovery_policy.max_consecutive_down_before_escalation()}")
+            meta.append(f"down_count={self.consecutive_down_count}/{recovery_policy.max_consecutive_down_before_escalation}")
             meta.append(f"escalate={escalate}")
 
         # Only log detailed NET_HEALTH when something is wrong or building confidence

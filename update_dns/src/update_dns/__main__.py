@@ -1,9 +1,9 @@
-# --- Standard library imports ---
+# ─── Standard library imports ───
 import sys
 import time
 import logging
 
-# --- Project imports ---
+# ─── Project imports ───
 from .config import Config
 from .telemetry import tlog
 from .time_service import TimeService
@@ -44,7 +44,7 @@ def main_loop(
     while True:
         start = time.monotonic()
 
-        # --- Heartbeat (local only, no network dependency) ---
+        # ─── Heartbeat (local only, no network dependency) ───
         dt_local, _ = local_time.now_local()
         heartbeat = local_time.heartbeat_string(dt_local)
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
@@ -66,14 +66,14 @@ def main_loop(
                 "NET_HEALTH", 
                 network_state.name, 
                 primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
-                meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
+                meta=f"loop_ms={elapsed_ms:.0f} | sleep={sleep_for:.0f}s\n"
             )
         else:
             tlog(
                 NETWORK_EMOJI[network_state], 
                 "NET_HEALTH", 
                 network_state.name,
-                meta=f"full_rtt={elapsed_ms:.1f}ms | sleep={sleep_for:.1f}s\n"
+                meta=f"loop_ms={elapsed_ms:.0f} | sleep={sleep_for:.0f}s\n"
             )
 
         time.sleep(sleep_for)
