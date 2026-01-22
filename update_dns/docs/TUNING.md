@@ -88,7 +88,7 @@ Every number is tuned from real-world residential WAN behavior + extensive testi
 
 | Category                  | Parameter / Derived Value                        | Default       | Core Intent / Why It Matters                                                                 | Quick Tuning Range / Notes                          |
 |---------------------------|--------------------------------------------------|---------------|----------------------------------------------------------------------------------------------|-----------------------------------------------------|
-| **Scheduling**            | `CYCLE_INTERVAL_S`                               | 60–65 s       | Baseline heartbeat — foundation of all timing                                                | ≥ 60 s (TTL floor)                                  |
+| **Scheduling**            | `CYCLE_INTERVAL_S`                               | 60s       | Baseline heartbeat — foundation of all timing                                                | ≥ 60s (TTL floor)                                  |
 |                           | `FAST_POLL_SCALAR`                               | 0.5           | Aggressive recovery when unhealthy                                                           | 0.3–0.8 (lower = faster)                            |
 |                           | `SLOW_POLL_SCALAR`                               | 2.0           | I/O minimization in steady state — biggest long-term efficiency win                          | 1.5–3.0 (higher = quieter)                          |
 |                           | `POLLING_JITTER_S`                               | 5–10 s        | Anti-rate-limit defense — makes calls appear human-like                                      | 3–15 s                                              |
@@ -123,3 +123,211 @@ Every number is tuned from real-world residential WAN behavior + extensive testi
 **Cheap & local first. Expensive & authoritative only when trust is low. Fast when broken, whisper-quiet when healthy.**
 
 Happy tuning — and feel free to fork & experiment!
+
+
+
+
+
+```mermaid
+sequenceDiagram
+    participant Boot as 🏠 Boot / Power-On
+    participant Netplan as 🛡️ Netplan (Stable Identity)
+    participant Agent as ⚙️ Agent Runtime (Supervisor Loop)
+    participant FSM as 🔍 Health FSM
+    participant Poll as ⏱️ Polling Engine
+    participant External as 🌐 External (DoH / ipify / Cloudflare)
+    participant Recovery as ⚠️ Recovery Policy
+    participant VPN as 🔐 wg-easy VPN
+
+    %% Boot & Stable Identity (Blue swimlane – foundational)
+    rect rgb(220, 240, 255)
+    Boot->>+Netplan: Assign stable LAN IP 192.168.0.123
+    Note over Netplan: eth + wlan via Netplan YAML
+    Netplan-->>-Boot: Stable identity anchored
+    end
+
+    %% Container Launch (Green swimlane – always-on services)
+    rect rgb(230, 255, 230)
+    Netplan->>+Agent: Launch Docker containers<br>unless-stopped policy
+    Agent->>Agent: Start DNS Updater + wg-easy VPN
+    Agent-->>-Netplan: Containers running
+    end
+
+    %% Infinite Supervisor Loop (Purple swimlane – autonomous core)
+    rect rgb(240, 230, 255)
+    loop Infinite Supervisor Loop
+        Agent->>+Poll: Cycle start + timestamp
+        Poll->>FSM: Observe WAN path + public IP
+
+        alt State = DEGRADED / DOWN
+            Poll->>Poll: Fast Poll ~30s + jitter<br>Quick recovery
+        else State = UP
+            Poll->>Poll: Slow Poll ~130s + jitter<br>Quiet & low I/O
+        end
+
+        FSM->>FSM: Stable 2× IP? (gating)
+        alt Yes
+            FSM->>Poll: Promote to UP<br>Monotonic + Trust Achieved
+            Poll->>Poll: Switch to slow poll
+            Agent->>+External: Cache freshness check ≤ 600s
+            alt Cache stale / mismatch
+                External->>External: DoH lookup (authoritative)
+                alt DNS drifted
+                    External->>External: Update Cloudflare DNS
+                    External-->>Agent: Cache refreshed
+                end
+            end
+        else No
+            FSM->>Poll: Remain DEGRADED → retry
+        end
+
+        alt Escalation needed
+            Agent->>Recovery: Check escalation_delay_s (~240s)<br>+ cooldown guardrail
+            Recovery-->>Agent: Allow / Suppress physical recovery
+            alt Allowed
+                Agent->>Recovery: Trigger power-cycle (30s delay)
+                Recovery->>Recovery: Enforce 30-min cooldown
+            end
+        end
+
+        Poll-->>-Agent: Sleep (adaptive interval)
+    end
+    end
+
+    %% VPN Endpoint (Orange swimlane – end-user value)
+    rect rgb(255, 240, 230)
+    Agent->>VPN: WireGuard ready<br>UDP 51820 forwarded
+    VPN->>VPN: Clients connect securely<br>via vpn.mydomain.com
+    end
+
+    %% Styling highlights
+    style Boot fill:#e6f3ff,stroke:#0066cc
+    style Netplan fill:#e6f3ff,stroke:#0066cc
+    style Agent fill:#f0f8ff,stroke:#004080
+    style FSM fill:#fff3e6,stroke:#cc6600
+    style Poll fill:#ffe6e6,stroke:#cc0000
+    style External fill:#f8f8f8,stroke:#666
+    style Recovery fill:#ffcccc,stroke:#990000
+    style VPN fill:#cce5ff,stroke:#004080
+```
+
+
+
+
+```mermaid
+sequenceDiagram
+    participant Boot as Boot / Power-On
+    participant Netplan as Netplan
+    participant Agent as Agent Runtime
+    participant FSM as Health FSM
+    participant Poll as Polling Engine
+    participant External as External (DoH / ipify / Cloudflare)
+    participant Recovery as Recovery Policy
+    participant VPN as wg-easy VPN
+
+    Boot->>Netplan: Assign stable LAN IP (192.168.0.123)
+    Note over Netplan: Static via 10-wired / 20-wifi YAML
+
+    Netplan->>Agent: Agent starts (2 containers: DNS Updater + wg-easy)
+    Note over Agent: restart: unless-stopped
+
+    Agent->>FSM: Initialize FSM → DEGRADED (safe-by-default)
+    Note over FSM: Monotonic promotion only
+
+    loop Supervisor Loop (infinite)
+        Agent->>Poll: Start cycle (timestamp)
+        Poll->>FSM: Observe (WAN path + IP checks)
+
+        alt State = DEGRADED / DOWN
+            Poll->>Poll: Fast Poll ~30s + jitter
+            Note over Poll: Aggressive recovery
+        else State = UP
+            Poll->>Poll: Slow Poll ~130s + jitter
+            Note over Poll: Quiet & I/O-efficient
+        end
+
+        FSM->>FSM: Stable 2× IP? (gating)
+        alt Yes
+            FSM->>FSM: Promote to UP
+            FSM->>Poll: Switch to slow poll
+            Agent->>External: Cache freshness check (≤ 600s)
+            alt Cache stale / mismatch
+                Agent->>External: DoH lookup → authoritative truth
+                alt DNS drifted
+                    Agent->>External: Update Cloudflare DNS
+                    External-->>Agent: Cache refreshed
+                end
+            end
+        else No
+            FSM->>Poll: Remain DEGRADED → retry next cycle
+        end
+
+        alt Escalation needed (consecutive DOWN ≥ ~8–9 cycles)
+            Agent->>Recovery: Check escalation_delay_s (~240s) + cooldown
+            Recovery-->>Agent: Allow / Suppress physical recovery
+            alt Allowed
+                Agent->>Recovery: Trigger power-cycle (30s delay)
+                Recovery->>Recovery: Enforce 30-min cooldown
+            end
+        end
+
+        Agent->>Agent: Sleep (adaptive interval)
+    end
+
+    VPN->>VPN: WireGuard ready (UDP 51820)
+    Note over VPN: Clients connect via vpn.mydomain.com
+```
+
+
+
+
+
+
+# TUNING.md — The Knobs
+
+This agent is deliberately tuned like a high-performance system:  
+cheap & fast signals first → expensive external checks only when trust is low → throttle hard when healthy.
+
+Every number is the result of first-principles reasoning + real residential WAN testing.
+
+## Core Knobs — What to Tune & Why
+
+| Knob                              | Default     | What it controls                              | Sweet Spot / Hard Constraint                  | Why this value? (First-principles reasoning)                                                                 |
+|-----------------------------------|-------------|-----------------------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `CYCLE_INTERVAL_S`                | 60–65 s     | Baseline heartbeat (UP state)                 | ≥ 60 s (Cloudflare unproxied TTL)             | Never poll faster than TTL → avoids chasing ghosts. 65 s gives ~5 s breathing room for jitter & clock skew. |
+| `FAST_POLL_SCALAR`                | 0.5         | Speed multiplier when DOWN/DEGRADED           | 0.4–0.7                                       | 2× faster recovery during outage. Lower = more aggressive, but risks API spam during transient blips.       |
+| `SLOW_POLL_SCALAR`                | 2.0         | Speed multiplier when healthy (UP)            | 1.5–3.0                                       | Biggest I/O win. Turns agent near-silent in steady state. Higher = more savings, but delays outage detection. |
+| `POLLING_JITTER_S`                | 5–10 s      | ± random offset per cycle                     | 3–15 s                                        | Breaks detectable periodic patterns → dodges rate limits. 5–10 s is sweet spot: human-like without chaos.     |
+| `MAX_CACHE_AGE_S`                 | 600 s       | Max cache lifetime before forcing DoH         | 300–900 s (~5–15× TTL)                        | Cheap local read vs authoritative truth. Covers ~5 slow cycles → big savings. Forces refresh on long offline. |
+| `API_TIMEOUT_S`                   | 8 s         | Timeout for DoH / ipify / Cloudflare calls    | 5–12 s                                        | Residential latency sweet spot. Too low → false negatives; too high → cycle hangs. 8 s proven robust.         |
+
+## Recovery & Escalation Beliefs (RecoveryPolicy)
+
+| Belief / Derived Value                     | Default / Formula                              | What it protects against / Why it matters      | Tuning Guidance / Typical Range                |
+|--------------------------------------------|------------------------------------------------|------------------------------------------------|------------------------------------------------|
+| `expected_network_recovery_s`              | 180 s (~3 min)                                 | Give infrastructure time to self-heal          | 120–300 s                                      |
+| `escalation_buffer_s`                      | 60 s                                           | Tolerate transient ISP/routing wobble          | 30–120 s                                       |
+| `escalation_delay_s` (derived)             | 240 s (~4 min)                                 | Sustained DOWN time before power-cycle         | Computed — conservative by design              |
+| `max_consecutive_down_before_escalation`   | ~8–9 cycles (derived)                          | Jitter-robust escalation threshold             | Computed (assumes fastest confirmation)        |
+| `recovery_cooldown_s`                      | 1800 s (30 min)                                | Prevent relay thrashing / PSU stress           | 900–3600 s (15–60 min)                         |
+
+**First-principles tuning mindset**  
+- **Cheap & local** (LAN pings, cache, counters) → always first  
+- **Expensive & remote** (DoH, ipify, Cloudflare API) → only when trust is low  
+- **Fast when broken** → quick recovery  
+- **Slow when healthy** → whisper-quiet, near-zero I/O  
+- **Fail-safe bias** → monotonic FSM + gating + conservative escalation → never act without proof
+
+**Sweet spot philosophy**  
+Less dumb = more simple.  
+More simple = fewer bugs, easier reasoning, lower maintenance, higher reliability.
+
+Happy tuning — and feel free to push these values harder if your ISP is unusually stable or your hardware is unusually fragile.
+
+See also: [RecoveryPolicy.py](./recovery_policy.py) – escalation beliefs & math
+
+
+
+
+
+
