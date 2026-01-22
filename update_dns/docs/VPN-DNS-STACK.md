@@ -693,7 +693,7 @@ graph TD
     Update --> Poll([Adaptive Polling Engine])
 
 
-    Poll --> Fast[Fast Polling<br>~30s<br>Quick Recovery<br>(DEGRADED / DOWN)]
+    Poll --> Fast[Fast Polling<br>~30s<br>Quick Recovery<br>[DEGRADED / DOWN]]
 
     Poll --> Slow[Slow Polling<br>~130s<br>Quiet & Efficient<br>(UP)]
 
