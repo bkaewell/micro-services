@@ -692,21 +692,16 @@ graph TD
 
     Update --> Poll([Adaptive Polling Engine])
 
+    Poll --> Sleep[Sleep → Next Cycle<br>(Fast Poll if DEGRADED/DOWN<br>Slow Poll if UP)]
 
-    Poll --> Fast["Fast Polling<br>~30s<br>Quick Recovery<br>(DEGRADED / DOWN)"]
-
-    Poll --> Slow["Slow Polling<br>~130s<br>Quiet & Efficient<br>(UP)"]
-
-    Fast --> Loop
-    Slow --> Loop
+    Sleep --> Loop
 
     %% Visual highlights
-    style Fast fill:#ffe6e6,stroke:#cc0000,stroke-width:2px
-    style Slow fill:#e6ffe6,stroke:#006600,stroke-width:2px
     style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
     style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
     style Update fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
     style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
+    style Sleep fill:#f8f9fa,stroke:#666,stroke-width:2px
 
     linkStyle default stroke:#666,stroke-width:2px
 ```
