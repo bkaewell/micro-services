@@ -227,7 +227,9 @@ class NetworkControlAgent:
         # Physical recovery guardrail
         self.last_recovery_time: float = 0.0  # far in the past → first recovery allowed immediately
 
-
+        # Metrics
+        self.total_cycles: int = 0
+        self.up_cycles: int = 0
 
         # ─── Telemetry / epochs ───
         self.wan_epoch: int = 0

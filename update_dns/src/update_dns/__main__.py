@@ -50,30 +50,42 @@ def main_loop(
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
+            # Update Network Health / Reconcile DNS:
             network_state = agent.update_network_health()
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
             #network_state = NetworkState.ERROR
 
-        # Compute sleep interval
+        # Adaptive Polling Engine (APE): compute next poll interval
         elapsed = time.monotonic() - start
         elapsed_ms = elapsed * 1000
         sleep_for = scheduling_policy.next_sleep(elapsed=elapsed, state=network_state)
+
+        # ─── Uptime Cycle Counting ───
+        agent.total_cycles += 1
+        if network_state == NetworkState.UP:
+            agent.up_cycles += 1
+        uptime_pct = (agent.up_cycles / agent.total_cycles * 100) if agent.total_cycles > 0 else 0.0
+
+        meta = []
+        meta.append(f"loop_ms={elapsed_ms:.0f}")
+        meta.append(f"uptime={uptime_pct:.2f}% ({agent.up_cycles}/{agent.total_cycles} cycles)")
+        meta.append(f"sleep={sleep_for:.0f}s\n")
 
         if network_state == NetworkState.UP:
             tlog(
                 NETWORK_EMOJI[network_state], 
                 "NET_HEALTH", 
                 network_state.name, 
-                primary="ALL SYSTEMS NOMINAL 🐾🌤️ ",
-                meta=f"loop_ms={elapsed_ms:.0f} | sleep={sleep_for:.0f}s\n"
+                primary="ALL SYSTEMS NOMINAL 🐾🌤️ ", 
+                meta=" | ".join(meta) if meta else ""
             )
         else:
             tlog(
                 NETWORK_EMOJI[network_state], 
                 "NET_HEALTH", 
-                network_state.name,
-                meta=f"loop_ms={elapsed_ms:.0f} | sleep={sleep_for:.0f}s\n"
+                network_state.name, 
+                meta=" | ".join(meta) if meta else ""
             )
 
         time.sleep(sleep_for)
