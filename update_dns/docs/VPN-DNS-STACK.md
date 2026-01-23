@@ -77,6 +77,36 @@ graph TD
     linkStyle default stroke:#666,stroke-width:2px
 ```
 
+
+```mermaid
+---
+title: Main Supervisor Loop
+config:
+   look: classic
+   theme: 'default'
+---
+graph TD
+    Start([Init]) --> Loop{Supervisor<br>Loop ♾️}
+
+    Loop --> Update([Network Health Monitor 🩺 <br>Reconcile DNS 🌐])
+
+    Update --> |"Network State"| Poll([Adaptive Polling Engine 🦍])
+
+    Poll -->  |"Polling Speed"| Sleep[Sleep → Next Cycle]
+
+    Sleep -->  Loop
+
+    %% Visual highlights
+    style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
+    style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
+    style Update fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
+    style Sleep fill:#f8f9fa,stroke:#666,stroke-width:2px
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
 ```mermaid
 ---
 title: Main Supervisor Loop
@@ -111,6 +141,66 @@ graph TD
     linkStyle default stroke:#666,stroke-width:2px
 ```
 
+
+```mermaid
+---
+title: update_network_health() – One Control Cycle
+config:
+   look: classic
+   theme: 'default'
+---
+graph TD
+    Start([Start Cycle]) --> Observe([Observe Raw Signals<br>LAN • WAN Path • Public IP])
+
+    Observe --> IPCheck{Confidence? <br>(DEGRADED or UP + WAN OK?)}
+
+    IPCheck -->|Yes| PublicIP([Get Public IP<br>Check Stability])
+
+    PublicIP --> PromotionGate{2× Stable IP?}
+
+    PromotionGate -->|Yes| Promote([Allow Promotion<br>to UP])
+
+    IPCheck -->|No| FSM([FSM Transition<br>Single Source of Truth])
+
+    PublicIP -->|No| FSM
+
+    Promote --> FSM
+
+    FSM --> State{New State?}
+
+    State -->|DOWN| Escalate([Escalation Check<br>Consecutive DOWN ≥ threshold?])
+
+    State -->|DEGRADED| Report([Report Telemetry<br>Detailed when unhealthy])
+
+    State -->|UP| Act([Act: Safe Side-Effects<br>DNS Reconciliation<br>GSHEET Uptime])
+
+    Escalate -->|Yes + Allowed| Recover([Trigger Physical Recovery<br>Power-Cycle Edge])
+
+    Escalate -->|No| Report
+
+    Recover --> Report
+
+    Act --> Report
+
+    Report --> End([Return Updated NetworkState])
+
+    %% Visual highlights – core flow
+    style Observe fill:#f0f8ff,stroke:#666
+    style IPCheck fill:#fff3e6,stroke:#cc6600
+    style FSM fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style Act fill:#e6ffe6,stroke:#006600
+    style Recover fill:#ffcccc,stroke:#990000
+    style Report fill:#f8f9fa,stroke:#666
+    style End fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    linkStyle default stroke:#666,stroke-width:2px
+   ```
+
+
+
+
+
+
 ## Why It Works So Well
 
 - Router swap = 2 minutes of port forwards
@@ -125,6 +215,10 @@ graph TD
 See also:  
 - [TUNING.md](./TUNING.md) – parameter guide  
 - TBD
+
+
+
+
 
 
 
@@ -677,31 +771,3 @@ graph TD
 
 
 
-
-```mermaid
----
-title: Main Supervisor Loop
-config:
-   look: classic
-   theme: 'default'
----
-graph TD
-    Start([Init]) --> Loop{Supervisor<br>Loop ♾️}
-
-    Loop --> Update([Network Health Monitor 🩺 <br>Reconcile DNS 🌐])
-
-    Update --> |"Network State<br>(DOWN / DEGRADED / UP)"| Poll([Adaptive Polling Engine 🦍])
-
-    Poll -->  |"Polling Speed<br>(Fast: DOWN/DEGRADED<br>Slow: UP)"| Sleep[Sleep → Next Cycle]
-
-    Sleep -->  Loop
-
-    %% Visual highlights
-    style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
-    style Loop fill:#f0f8ff,stroke:#004080,stroke-width:3px,rx:12,ry:12
-    style Update fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style Start fill:#cce5ff,stroke:#004080,rx:12,ry:12
-    style Sleep fill:#f8f9fa,stroke:#666,stroke-width:2px
-
-    linkStyle default stroke:#666,stroke-width:2px
-```
