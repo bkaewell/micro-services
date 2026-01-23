@@ -90,7 +90,7 @@ graph TD
 
     Loop --> Update([Network Health Monitor 🩺 <br>Reconcile DNS 🌐])
 
-    Update --> |"Network State"| Poll([Adaptive Polling Engine 🦍 🦧])
+    Update --> |"Network State"| Poll([Adaptive Polling Engine 🦧])
 
     Poll -->  |"Polling Speed"| Sleep[Sleep → Next Cycle]
 
@@ -152,7 +152,7 @@ config:
 graph TD
     Start([Start Cycle]) --> Observe([Observe Raw Signals<br>LAN • WAN Path • Public IP])
 
-    Observe --> IPCheck{"Confidence? <br>(DEGRADED or UP + WAN OK?)"}"
+    Observe --> IPCheck{"Confidence? <br>(DEGRADED or UP + WAN OK?)"}
 
     IPCheck -->|Yes| PublicIP([Get Public IP<br>Check Stability])
 
