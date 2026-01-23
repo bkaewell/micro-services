@@ -6,12 +6,13 @@ from typing import Optional
 from dataclasses import dataclass
 
 
-# ─── Cache layout ───
+# ─── Cache layout (persistent storage) ───
 CACHE_DIR = Path.home() / ".cache" / "update_dns"
 CACHE_DIR.mkdir(parents=True, exist_ok=True) 
 
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
 GOOGLE_SHEET_ID_FILE = CACHE_DIR / 'google_sheet_id.txt'
+UPTIME_FILE = CACHE_DIR / "uptime.json"
 
 @dataclass(frozen=True)
 class CacheLookupResult:
@@ -83,5 +84,66 @@ def store_cloudflare_ip(ip: Optional[str]) -> None:
         }
         CLOUDFLARE_IP_FILE.write_text(json.dumps(payload, indent=2))
     
+    except OSError:
+        pass
+
+@dataclass(frozen=True)
+class Uptime:
+    """
+    Tracks cumulative uptime based on observed healthy states.
+
+    - total:    number of measurement points (control cycles)
+    - up:       number of those points where the network was healthy (UP)
+    - last_update: timestamp of most recent write (monotonic time)
+    """
+    total: int = 0
+    up: int = 0
+    last_update: float = 0.0
+
+    @property
+    def percentage(self) -> float:
+        """Current uptime percentage (0.0 - 100.0)"""
+        return (self.up / self.total * 100) if self.total > 0 else 0.0
+
+    def __str__(self) -> str:
+        return f"{self.percentage:.2f}% ({self.up}/{self.total})"
+
+
+def load_uptime() -> Uptime:
+    """
+    Load previously persisted uptime counters.
+
+    Returns a fresh Uptime object (0/0) if the file is missing,
+    corrupted, or unreadable. Failures are silent.
+    """
+    now = time.time()
+
+    try:
+        data = json.loads(UPTIME_FILE.read_text())
+        return Uptime(
+            total=data.get("total", 0),
+            up=data.get("up", 0),
+            last_update=data.get("last_update", now)
+        )
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return Uptime()
+
+def store_uptime(uptime: Uptime) -> None:
+    """
+    Persist current uptime counters to disk.
+
+    Best-effort operation — failures are ignored to avoid
+    impacting the main control loop. The file survives container
+    restarts if the cache directory is volume-mounted.
+    """
+    now = time.time()
+
+    try:
+        payload = {
+            "total": uptime.total,
+            "up": uptime.up,
+            "last_update": now
+        }
+        UPTIME_FILE.write_text(json.dumps(payload, indent=2))
     except OSError:
         pass
