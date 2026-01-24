@@ -168,11 +168,11 @@ graph TD
 
     FSM --> State{New State?}
 
+    State -->|UP| Act([Act: Safe Side-Effects<br>DNS Reconciliation])
+
+    State -->|DEGRADED| Report([Report Telemetry])
+
     State -->|DOWN| Escalate([Escalation Check<br>Consecutive DOWN ≥ threshold?])
-
-    State -->|DEGRADED| Report([Report Telemetry<br>Detailed when unhealthy])
-
-    State -->|UP| Act([Act: Safe Side-Effects<br>DNS Reconciliation<br>GSHEET Uptime])
 
     Escalate -->|Yes + Allowed| Recover([Trigger Physical Recovery<br>Power-Cycle Edge])
 
