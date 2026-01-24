@@ -10,13 +10,15 @@ x-common-base: &common-base
     - TZ=${TZ:-UTC}
 
 services:
-  # ================================
-  # Continuous Operation (Main Loop)
-  # ================================
+  # ─── Continuous Operation (Main Loop) ───
   app:
     <<: *common-base
     container_name: update_dns_app
     restart: unless-stopped
+
+    # ─── Persistent cache volume (named volume) ───
+    volumes:
+      - update_dns_cache:/app/.cache/update_dns
 
     logging:
       driver: json-file
@@ -24,10 +26,11 @@ services:
         max-size: "20m"
         max-file: "15"
 
-  # ================================
-  # On-Demand Execution (Manual Run)
-  # ================================
+  # ─── On-Demand Execution (Manual Run) ───
   test:
     <<: *common-base
     container_name: update_dns_test
     restart: "no"
+
+volumes:
+  update_dns_cache:
