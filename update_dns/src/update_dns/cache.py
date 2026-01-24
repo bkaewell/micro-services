@@ -6,8 +6,32 @@ from typing import Optional
 from dataclasses import dataclass
 
 
+def get_cache_dir() -> Path:
+    """
+    Automatically detect runtime environment and return appropriate cache directory.
+
+    - Local/host: ~/.cache/update_dns/
+    - Docker/container: /app/cache/update_dns/ (volume-mounted)
+    """
+    # Docker detection: presence of /.dockerenv file (most reliable)
+    is_docker = os.path.exists('/.dockerenv')
+
+    # Fallback: check for common container env vars
+    if not is_docker:
+        is_docker = any(
+            key in os.environ
+            for key in ('DOCKER_CONTAINER', 'CONTAINER_ID', 'KUBERNETES_SERVICE_HOST')
+        )
+
+    if is_docker:
+        # Fixed path inside container – must be volume-mounted in docker-compose
+        return Path("/app/cache/update_dns")
+    else:
+        # Local development / host
+        return Path.home() / ".cache" / "update_dns"
+
 # ─── Cache layout (persistent storage) ───
-CACHE_DIR = Path.home() / ".cache" / "update_dns"
+CACHE_DIR = get_cache_dir()
 CACHE_DIR.mkdir(parents=True, exist_ok=True) 
 
 CLOUDFLARE_IP_FILE = CACHE_DIR / "cloudflare_ip.json"
@@ -87,7 +111,7 @@ def store_cloudflare_ip(ip: Optional[str]) -> None:
     except OSError:
         pass
 
-@dataclass(frozen=True)
+@dataclass
 class Uptime:
     """
     Tracks cumulative uptime based on observed healthy states.
