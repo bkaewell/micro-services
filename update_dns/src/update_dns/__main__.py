@@ -6,6 +6,7 @@ import logging
 # ─── Project imports ───
 from .config import Config
 from .telemetry import tlog
+from .cache import store_uptime
 from .time_service import TimeService
 from .logger import get_logger, setup_logging
 from .bootstrap import validate_runtime_config
@@ -62,14 +63,18 @@ def main_loop(
         sleep_for = scheduling_policy.next_sleep(elapsed=elapsed, state=network_state)
 
         # ─── Uptime Cycle Counting ───
-        agent.total_cycles += 1
+        agent.uptime.total += 1
         if network_state == NetworkState.UP:
-            agent.up_cycles += 1
-        uptime_pct = (agent.up_cycles / agent.total_cycles * 100) if agent.total_cycles > 0 else 0.0
+            agent.uptime.up += 1
+        
+        # Optional: save every 50 measurements (low I/O)
+        #if self.uptime.total % 50 == 0:
+        # Align with CACHE_MAX_AGE_S ~3600 seconds?
+        store_uptime(agent.uptime)
 
         meta = []
         meta.append(f"loop_ms={elapsed_ms:.0f}")
-        meta.append(f"uptime={uptime_pct:.2f}% ({agent.up_cycles}/{agent.total_cycles} cycles)")
+        meta.append(f"uptime={agent.uptime}")
         meta.append(f"sleep={sleep_for:.0f}s\n")
 
         if network_state == NetworkState.UP:
