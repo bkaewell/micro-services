@@ -14,7 +14,7 @@ from .time_service import TimeService
 from .cloudflare import CloudflareClient
 from .gsheets_service import GSheetsService
 from .recovery_policy import recovery_policy
-from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult
+from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult, load_uptime
 from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult
 #from .db import log_metrics
 
@@ -228,8 +228,7 @@ class NetworkControlAgent:
         self.last_recovery_time: float = 0.0  # far in the past → first recovery allowed immediately
 
         # Metrics
-        self.total_cycles: int = 0
-        self.up_cycles: int = 0
+        self.uptime = load_uptime()
 
         # ─── Telemetry / epochs ───
         self.wan_epoch: int = 0
@@ -370,7 +369,7 @@ class NetworkControlAgent:
             cache_state,
             primary=f"ip={cache.ip}" if cache_hit else "no cache",
             meta=(
-                f"rtt={cache.elapsed_ms:.0f}ms | age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
+                f"rtt={cache.elapsed_ms:.1f}ms | age={cache.age_s:.0f}s / {self.max_cache_age_s}s"
             ) if cache_hit else None,
         )
 
