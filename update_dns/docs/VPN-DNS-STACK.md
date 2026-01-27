@@ -50,6 +50,174 @@ Router is disposable. Clients never notice changes.
 
 ## Simplified Workflow
 
+
+```mermaid
+graph TD
+title: 1
+
+    Start([Init]) --> Loop{Supervisor Loop ♾️}
+
+    Loop --> Update([update_network_health()<br>Observe → Assess → Act → Report])
+
+    Update --> Poll([Adaptive Polling Engine<br>Uses fresh NetworkState])
+
+    Poll --> Sleep[Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)]
+
+    Sleep --> Loop
+
+    %% Clean, modern styling
+    style Poll fill:#f0f4ff,stroke:#5c7cfa,stroke-width:3px,rx:14,ry:14
+    style Loop fill:#e6f9ff,stroke:#0c8599,stroke-width:3px,rx:14,ry:14
+    style Update fill:#f8f9fa,stroke:#495057,stroke-width:2px,rx:12,ry:12
+    style Start fill:#f8f9fa,stroke:#495057,rx:12,ry:12
+    style Sleep fill:#f8f9fa,stroke:#495057,stroke-width:2px,rx:12,ry:12
+
+    linkStyle default stroke:#adb5bd,stroke-width:2.5px
+```
+
+
+
+```mermaid
+graph TD
+title: 2
+    Loop{Supervisor Loop ♾️} --> Update([update_network_health()])
+
+    Update --> Poll([Adaptive Polling Engine])
+
+    Poll --> Decision{Healthy?}
+
+    Decision -->|No<br>(DEGRADED/DOWN)| Fast[Fast Poll<br>~30s]
+
+    Decision -->|Yes<br>(UP)| Slow[Slow Poll<br>~130s]
+
+    Fast --> Sleep[Sleep → Next Cycle]
+    Slow --> Sleep
+
+    Sleep --> Loop
+
+    %% Strong visual contrast
+    style Decision fill:#fff3e6,stroke:#cc6600,stroke-width:3px
+    style Fast fill:#ffe6e6,stroke:#cc0000
+    style Slow fill:#e6ffe6,stroke:#006600
+    style Loop fill:#f0f8ff,stroke:#004080,rx:12,ry:12
+    style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:2px
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+```mermaid
+graph LR
+title: 3
+    Loop{Supervisor Loop ♾️} <--> Update([update_network_health()])
+
+    Update --> Poll([Adaptive Polling Engine])
+
+    Poll --> Sleep[Sleep<br>(adaptive interval)]
+
+    Sleep --> Loop
+
+    %% Minimal & elegant
+    style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:14,ry:14
+    style Loop fill:#e6f9ff,stroke:#0c8599,stroke-width:4px,rx:16,ry:16
+    style Update fill:#f8f9fa,stroke:#495057,stroke-width:2px,rx:12,ry:12
+    style Sleep fill:#f8f9fa,stroke:#495057,rx:12,ry:12
+
+    linkStyle default stroke:#5c7cfa,stroke-width:3px
+```
+
+
+
+```mermaid
+---
+title: Boot Sequence
+config:
+   look: classic
+   theme: 'default'
+---
+graph TD
+    PowerOn([Power-On / Boot]) --> Netplan([Netplan assigns stable LAN IP<br>192.168.0.123<br>eth + wlan])
+
+    Netplan --> Containers([Launch Docker Containers<br>unless-stopped policy])
+
+    subgraph "Always-Running Services"
+        Containers --> DNSUpdater[update_dns_app<br>Public IP → Cloudflare DNS]
+        Containers --> WgEasy[wg-easy<br>WireGuard VPN Server<br>UDP 51820 / TCP 51821]
+    end
+
+    %% Power resilience
+    UPS([UPS Battery Backup]) -->|Continuous Operation| Containers
+    UPS -->|Survives outages| Netplan
+
+    %% Styling
+    style PowerOn fill:#e6f3ff,stroke:#0066cc,rx:12,ry:12
+    style Netplan fill:#f0f8ff,stroke:#0066cc,rx:12,ry:12
+    style Containers fill:#e6ffe6,stroke:#006600,rx:12,ry:12
+    style UPS fill:#cce5ff,stroke:#004080,rx:12,ry:12
+    style DNSUpdater fill:#e6ffe6,stroke:#006600
+    style WgEasy fill:#e6ffe6,stroke:#006600
+
+    linkStyle default stroke:#666,stroke-width:2px
+```
+
+
+```mermaid
+---
+title: Resilient Home Network Stack – Full Flow
+config:
+   look: classic
+   theme: 'default'
+---
+graph TD
+    %% Boot Phase (Blue tones – foundational)
+    PowerOn([Power-On / Boot]) --> Netplan([Netplan → Stable IP<br>192.168.0.123<br>eth + wlan])
+
+    Netplan --> Containers([Launch Docker Containers<br>unless-stopped])
+
+    Containers --> Loop{Supervisor Loop ♾️}
+
+    %% Supervisor Loop (Purple tones – autonomous core)
+    Loop --> Update([Network Health Monitor<br>Reconcile DNS])
+
+    Update --> Poll([Adaptive Polling Engine<br>Uses fresh NetworkState])
+
+    Poll --> Sleep[Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)]
+
+    Sleep --> Loop
+
+    %% Power resilience (connects to key points)
+    UPS([UPS Battery Backup]) -->|Continuous Operation| Containers
+    UPS -->|Survives outages| Netplan
+    UPS -->|Powers Loop| Loop
+
+    %% Styling
+    style PowerOn fill:#e6f3ff,stroke:#0066cc,rx:12,ry:12
+    style Netplan fill:#e6f3ff,stroke:#0066cc,rx:12,ry:12
+    style Containers fill:#f0f8ff,stroke:#004080,rx:12,ry:12
+    style Poll fill:#fff3e6,stroke:#cc6600,stroke-width:3px,rx:12,ry:12
+    style Loop fill:#e6f9ff,stroke:#0c8599,stroke-width:3px,rx:14,ry:14
+    style Update fill:#f8f9fa,stroke:#495057,stroke-width:2px,rx:12,ry:12
+    style Sleep fill:#f8f9fa,stroke:#495057,rx:12,ry:12
+    style UPS fill:#cce5ff,stroke:#004080,rx:12,ry:12
+
+    linkStyle default stroke:#666,stroke-width:2.5px
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Pre-Backup
+
 ```mermaid
 graph TD
     A([Boot]) --> B([Netplan → Stable IP<br>192.168.0.123])
