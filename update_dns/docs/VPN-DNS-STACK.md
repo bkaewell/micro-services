@@ -52,9 +52,10 @@ Router is disposable. Clients never notice changes.
 
 
 ```mermaid
-graph TD
+---
 title: 1
-
+---
+graph TD
     Start([Init]) --> Loop{Supervisor Loop ♾️}
 
     Loop --> Update([update_network_health()<br>Observe → Assess → Act → Report])
@@ -78,8 +79,10 @@ title: 1
 
 
 ```mermaid
-graph TD
+---
 title: 2
+---
+graph TD
     Loop{Supervisor Loop ♾️} --> Update([update_network_health()])
 
     Update --> Poll([Adaptive Polling Engine])
@@ -106,8 +109,10 @@ title: 2
 ```
 
 ```mermaid
-graph LR
+---
 title: 3
+---
+graph LR
     Loop{Supervisor Loop ♾️} <--> Update([update_network_health()])
 
     Update --> Poll([Adaptive Polling Engine])
@@ -180,7 +185,7 @@ graph TD
 
     Update --> Poll([Adaptive Polling Engine<br>Uses fresh NetworkState])
 
-    Poll --> Sleep[Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)]
+    Poll --> Sleep["Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)"]
 
     Sleep --> Loop
 
