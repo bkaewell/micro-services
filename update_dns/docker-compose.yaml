@@ -18,7 +18,7 @@ services:
 
     # ─── Persistent cache volume (named volume) ───
     volumes:
-      - update_dns_cache:/app/.cache/update_dns
+      - update_dns_cache:/app/cache/update_dns
 
     logging:
       driver: json-file
