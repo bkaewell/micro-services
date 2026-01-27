@@ -12,7 +12,7 @@ def get_cache_dir() -> Path:
     Automatically detect runtime environment and return appropriate cache directory.
 
     - Local/host: ~/.cache/update_dns/
-    - Docker/container: /app/cache/update_dns/ (volume-mounted)
+    - Docker/container: /app/.cache/update_dns/ (volume-mounted)
     """
     # Docker detection: presence of /.dockerenv file (most reliable)
     is_docker = os.path.exists('/.dockerenv')
@@ -26,7 +26,7 @@ def get_cache_dir() -> Path:
 
     if is_docker:
         # Fixed path inside container – must be volume-mounted in docker-compose
-        return Path("/app/cache/update_dns")
+        return Path("/app/.cache/update_dns")
     else:
         # Local development / host
         return Path.home() / ".cache" / "update_dns"
