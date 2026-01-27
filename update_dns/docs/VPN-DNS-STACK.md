@@ -58,11 +58,11 @@ title: 1
 graph TD
     Start([Init]) --> Loop{Supervisor Loop ♾️}
 
-    Loop --> Update([update_network_health()<br>Observe → Assess → Act → Report])
+    Loop --> Update(["update_network_health()<br>Observe → Assess → Act → Report"])
 
     Update --> Poll([Adaptive Polling Engine<br>Uses fresh NetworkState])
 
-    Poll --> Sleep[Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)]
+    Poll --> Sleep["Sleep → Next Cycle<br>(fast if unhealthy • slow if UP)"]
 
     Sleep --> Loop
 
@@ -89,9 +89,9 @@ graph TD
 
     Poll --> Decision{Healthy?}
 
-    Decision -->|No<br>(DEGRADED/DOWN)| Fast[Fast Poll<br>~30s]
+    Decision -->|"No<br>(DEGRADED/DOWN)"| Fast[Fast Poll<br>~30s]
 
-    Decision -->|Yes<br>(UP)| Slow[Slow Poll<br>~130s]
+    Decision -->|"Yes<br>(UP)"| Slow[Slow Poll<br>~130s]
 
     Fast --> Sleep[Sleep → Next Cycle]
     Slow --> Sleep
@@ -113,11 +113,11 @@ graph TD
 title: 3
 ---
 graph LR
-    Loop{Supervisor Loop ♾️} <--> Update([update_network_health()])
+    Loop{Supervisor Loop ♾️} <--> Update(["update_network_health()"])
 
     Update --> Poll([Adaptive Polling Engine])
 
-    Poll --> Sleep[Sleep<br>(adaptive interval)]
+    Poll --> Sleep["Sleep<br>(adaptive interval)"]
 
     Sleep --> Loop
 
