@@ -83,7 +83,7 @@ graph TD
 title: 2
 ---
 graph TD
-    Loop{Supervisor Loop ♾️} --> Update([update_network_health()])
+    Loop{Supervisor Loop ♾️} --> Update(["update_network_health()"])
 
     Update --> Poll([Adaptive Polling Engine])
 
