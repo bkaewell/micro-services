@@ -2,22 +2,22 @@
 
 ## Why I Built This
 
-I’ve always taken **smart risks** — moving where the work and learning were hardest and most interesting. My career has taken me across the world, living and working in **Hawaii, Tokyo, and Munich**, often far from home. One constant problem followed me everywhere: *how do I maintain assured, trustworthy access to my home network when I’m thousands of miles away?*
+I’ve tended to take smart risks, moving toward roles and locations that offered real technical challenge and operational responsibility. My career has taken me across the world, including living and working in Hawaii, Tokyo, and Munich, often far from home. One recurring problem followed me everywhere: how to maintain reliable, trustworthy access to my home network while thousands of miles away.
 
-I wanted something more than "it usually works." I wanted **full control**.
+I wanted something more than “it usually works.” I wanted control over system behavior.
 
-This project started as a very real need: reliably accessing my home network from anywhere in the world — to monitor a smart home, keep IoT devices healthy, ensure security systems stay online during outages, and yes, **watch my local sports teams no matter what continent I’m on**. That same assured access also benefits my siblings, now scattered up and down the East Coast — stretched across the Atlantic seaboard like distant lighthouses — who can securely connect back home as if they never left.
+This project began as a practical need: accessing my home network from anywhere in the world to monitor a smart home, keep IoT devices healthy, ensure security systems remain online during outages, and watch local sports while traveling. That same access now supports my siblings, spread up and down the East Coast, stretched across the Atlantic seaboard, who can securely connect back home as if they were still local.
 
-But it quickly became something deeper.
+Over time, the project grew beyond that initial use case.
 
-Earlier in my career, outside of my time in Germany, I spent years working on **legacy weapon systems with legacy tooling**. That experience taught me how to engineer around constraints, design resilient systems with limited tools, and extract reliability from imperfect environments. What it didn’t give me was space to build something modern, opinionated, and production-grade — end to end — using today’s tooling.
+Earlier in my career, outside of my time in Germany, I worked primarily on legacy weapon systems using legacy tooling. That experience reinforced how to design resilient systems under constraints, reason about failure modes, and extract reliability from imperfect environments. What it didn’t provide was the opportunity to build something modern, opinionated, and production-grade from the ground up using current tools.
 
-So I decided to build exactly the system I wished existed.
+So I built the system I wanted to operate.
 
-I designed this control plane with **intentional ownership over every variable**: cycle timing, polling behavior, jitter, convergence guarantees, and high-signal telemetry. I wanted to see the system think. I wanted every external API call to be justified. I wanted the network to **survive power loss**, stay reachable via **UPS-backed infrastructure**, and recover cleanly without human intervention.
+I designed this control plane with direct ownership over every variable: cycle timing, polling behavior, jitter, convergence guarantees, and emitted telemetry. The goal was to make system behavior observable, justify every external dependency, and ensure the network could survive power loss, remain reachable through UPS-backed infrastructure, and recover cleanly without human intervention.
 
-The result is **Cadence Cloud** — named after my yellow lab, *Cadence*, and the rhythmic heartbeat of the control loop itself. From anywhere in the world, connecting through the VPN feels like stepping back into my home network — steady, reliable, and quietly doing its job. The cloud connects me home; the cadence keeps it honest.
+The result is Cadence Cloud, named after my dog, Cadence, and the steady rhythm of the control loop itself. From anywhere in the world, connecting through the VPN feels like returning to a stable home network that continues operating quietly and correctly in the background.
 
-This repository isn’t a hobby script. It’s a **production-grade system built with purpose** — a demonstration of how I think, how I build, and how I ship.
+This repository reflects how I approach engineering: building systems that are designed for unattended operation, measured in production, and resilient by construction.
 
 
