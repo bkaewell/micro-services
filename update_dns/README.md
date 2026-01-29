@@ -114,3 +114,27 @@ This is hands-on IC work: architecture, control theory, fault tolerance, observa
 * **UPS-backed power** for compute node *and* network gear (router + modem), enabling continued operation and clean recovery through residential power outages
 
 Everything runs **continuously**, unattended, with structured per-cycle telemetry.
+
+---
+
+## 🧩 Operator-Inspired Design (Single-Node, No Crutches)
+
+This project deliberately mirrors Kubernetes operator principles — without Kubernetes:
+
+* **Monotonic FSM** → equivalent of [Custom Resource (CR)](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) status/conditions
+* **Fail-fast demotion + gated promotion** → safety via evidence
+* **Adaptive polling + jitter** → load-aware reconciliation
+* **Side-effect gating** → mutations only when trust is high
+
+This demonstrates the ability to **internalize distributed-systems patterns** and apply them pragmatically in constrained environments.
+
+---
+
+## 📚 Deep Dives
+
+* **[TUNING.md](./docs/TUNING.md)** — first-principles reasoning behind every timing, threshold, and trade-off
+* **[VPN-DNS-STACK.md](./docs/VPN-DNS-STACK.md)** — architecture, layer boundaries, router checklist, Mermaid workflows
+* **[LESSONS-LEARNED.md](./docs/LESSONS-LEARNED.md)** — real-world surprises, failure modes, and what I’d improve next
+
+---
+
