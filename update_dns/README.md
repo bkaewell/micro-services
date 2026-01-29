@@ -138,3 +138,28 @@ This demonstrates the ability to **internalize distributed-systems patterns** an
 
 ---
 
+##  ⚡ Quick Start
+
+```bash
+git clone https://github.com/bkaewell/micro-services.git
+cd update_dns
+
+cp .env.example .env          # configure domain, flags, keys, tokens
+docker compose up -d --build app
+```
+
+---
+
+## Why This Project Matters
+
+This is not a resume bullet generator.
+
+It demonstrates:
+
+* Extreme **ownership** (idea → design → deployment → operation)
+* Comfort operating **production systems alone**
+* Ability to **quantify impact**, not just describe intent
+* Fast learning and adaptation across networking, control systems, and reliability engineering
+
+If you value engineers who **build, measure, and iterate relentlessly**, this repository is the proof.
+
