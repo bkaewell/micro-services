@@ -97,3 +97,20 @@ This is hands-on IC work: architecture, control theory, fault tolerance, observa
 
 ---
 
+## ⚙️ Technical Stack (Hands-On)
+
+* **Python** — control loop, FSM, reconciliation logic, observability
+* **Poetry** — dependency management, reproducible environments, clean packaging
+* **Docker & docker-compose** — production packaging and deployment
+* **WireGuard (kernel-space)** — VPN transport
+* **Netplan** — stable LAN identity under hardware changes
+* **Cloudflare API + DoH** — authoritative DNS management
+* **Filesystem persistence** — durable IP history, uptime counters, and FSM state (`~/.cache/` for local dev, `/app/cache/` for containerized runtime)
+* **VS Code** — primary IDE for development, debugging, and iteration
+
+**Runtime environment:**
+
+* Single low-power **System76 mini-PC**
+* **UPS-backed power** for compute node *and* network gear (router + modem), enabling continued operation and clean recovery through residential power outages
+
+Everything runs **continuously**, unattended, with structured per-cycle telemetry.
