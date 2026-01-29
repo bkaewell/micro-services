@@ -45,3 +45,10 @@ This repository reflects how I approach engineering: building systems that are d
 11:08:45 🟢 NET_HEALTH  UP         ALL SYSTEMS NOMINAL 🐾🌤️   | loop_ms=295 | uptime=99.85% (3403/3408) | sleep=129s
 ```
 
+## 🧠 What I Built (Not Managed — Built)
+
+I designed, implemented, deployed, and operate a fully autonomous, operator-inspired control plane that behaves like a mini Kubernetes controller, but tuned for a single-node, hostile home-network environment.
+
+This is hands-on IC work: architecture, control theory, fault tolerance, observability, and production hardening — all executed solo.
+
+---
