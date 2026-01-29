@@ -20,7 +20,6 @@ The result is Cadence Cloud, named after my dog, Cadence, and the steady rhythm 
 
 This repository reflects how I approach engineering: building systems that are designed for unattended operation, measured in production, and resilient by construction.
 
-
 ---
 
 ## 📈 Impact at a Glance (Real Metrics)
@@ -30,4 +29,19 @@ This repository reflects how I approach engineering: building systems that are d
 * **~83% reduction in external API calls** (120/hr → ~21/hr steady state)
 * **Zero false-positive DNS mutations** under real residential WAN churn
 * Runs **24/7 on consumer hardware** (single low-power System76 mini-PC)
+
+---
+
+## 📊 Live Telemetry (Production Output)
+
+```console
+11:08:44 🔁 LOOP        START      Wed Jan 28 2026            | loop=3408
+11:08:44 💚 HEARTBEAT   OK         ———————                   
+11:08:44 🟢 ROUTER      UP         ip=192.168.0.1             | rtt=9ms
+11:08:45 🟢 WAN_PATH    OK         ———————                    | rtt=28ms
+11:08:45 🟢 PUBLIC_IP   OK         ip=###.##.##.##            | rtt=74ms | attempts=1/4
+11:08:45 🟢 CACHE       HIT        ip=###.##.##.##            | rtt=0.3ms | age=250s / 3600s
+11:08:45 🟢 GSHEET      OK         ———————                    | rtt=182ms
+11:08:45 🟢 NET_HEALTH  UP         ALL SYSTEMS NOMINAL 🐾🌤️   | loop_ms=295 | uptime=99.85% (3403/3408) | sleep=129s
+```
 
