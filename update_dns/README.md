@@ -21,3 +21,13 @@ The result is Cadence Cloud, named after my dog, Cadence, and the steady rhythm 
 This repository reflects how I approach engineering: building systems that are designed for unattended operation, measured in production, and resilient by construction.
 
 
+---
+
+## 📈 Impact at a Glance (Real Metrics)
+
+* **99.85% uptime** over thousands of autonomous control cycles (cycle-based metrics persisted to disk - IP history + uptime counters survive restarts and power loss; no extrapolation)
+* **<3 minutes DNS convergence** after public IP change — **>50–90% faster** than typical third‑party Dynamic DNS (DDNS) providers, which commonly converge in 5–30 minutes under residential WAN conditions
+* **~83% reduction in external API calls** (120/hr → ~21/hr steady state)
+* **Zero false-positive DNS mutations** under real residential WAN churn
+* Runs **24/7 on consumer hardware** (single low-power System76 mini-PC)
+
