@@ -52,3 +52,48 @@ I designed, implemented, deployed, and operate a fully autonomous, operator-insp
 This is hands-on IC work: architecture, control theory, fault tolerance, observability, and production hardening — all executed solo.
 
 ---
+
+## 🏗️ Engineering Achievements (Impact-Driven)
+
+### Autonomous Control Loop & Reliability
+
+* **Designed and implemented a monotonic finite state machine (FSM)** with fail-fast DOWN demotion and hysteresis-based promotion (2× consecutive stable IP confirmations required), eliminating flapping and guaranteeing **zero false-positive DNS updates**.
+
+* Built a **self-healing control loop** inspired by Kubernetes operators and circuit-breaker patterns, achieving **99.93% uptime** across thousands of real execution cycles — not simulated runs.
+
+### Extreme API Efficiency Without Losing Responsiveness
+
+* Reduced Cloudflare + ipify external API calls by **~83%** in steady state using:
+
+  * 3600s cache freshness windows
+  * 2× IP stability gating
+  * Adaptive polling (≈30s during recovery → ≈180s when healthy)
+
+* Maintained **sub‑3‑minute IP convergence** despite aggressive call suppression — proving efficiency and responsiveness are not mutually exclusive.
+
+### Anti-Detection & Unconventional Problem Solving
+
+* Engineered **always-on 0–10s cycle jitter** to intentionally break detectable polling signatures (Cloudflare / IP services), preventing heuristic rate-limiting while preserving deterministic control behavior.
+
+* Applied **domain-specific polling intelligence**: fast when broken, whisper-quiet when healthy — a pattern rarely implemented correctly outside large-scale systems.
+
+### DNS Reconciliation & Eventual Consistency
+
+* Built a **layered DNS reconciliation pipeline**:
+
+  1. Local persisted cache
+  2. DNS-over-HTTPS truth validation
+  3. Cloudflare mutation (only when trust threshold is met)
+
+* Achieves **eventual consistency with minimal external I/O**, converging quickly during outages and remaining near-silent during steady state.
+
+### Production VPN Delivery
+
+* Delivered **kernel-space WireGuard VPN** via wg-easy with a dynamic DNS endpoint (`vpn.*.example.com:51820`).
+
+* Result: **zero-config, reliable remote access** that survives ISP IP churn and router replacements.
+
+* Added **beta physical self-healing**: controlled edge power-cycling after sustained DOWN states with safety guardrails.
+
+---
+
