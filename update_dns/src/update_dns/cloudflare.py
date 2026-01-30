@@ -42,8 +42,9 @@ class CloudflareClient:
             "Content-Type": "application/json",
         }
         self.record_type = "A"  # Fixed type
-        self.ttl = 1            # auto → resolves to 60s (30s for Enterprise)
         self.proxied = False    # Grey cloud icon (not proxied thru Cloudflare)
+        self.ttl = config.CLOUDFLARE_MIN_TTL_S
+
 
     def validate_cloudflare(self) -> None:
         """
