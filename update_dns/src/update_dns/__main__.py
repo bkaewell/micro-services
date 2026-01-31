@@ -39,7 +39,7 @@ def main_loop(
     """
 
     logger = get_logger("main_loop")
-    network_state = NetworkState.DOWN
+    network_state = NetworkState.INIT
     loop = 1
 
     while True:
@@ -55,12 +55,7 @@ def main_loop(
             network_state = agent.update_network_health()
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
-            #network_state = NetworkState.ERROR
-
-        # Adaptive Polling Engine (APE): compute next poll interval
-        elapsed = time.monotonic() - start
-        elapsed_ms = elapsed * 1000
-        sleep_for = scheduling_policy.next_sleep(elapsed=elapsed, state=network_state)
+            network_state = NetworkState.ERROR
 
         # ─── Uptime Cycle Counting ───
         agent.uptime.total += 1
@@ -72,28 +67,31 @@ def main_loop(
         # Align with CACHE_MAX_AGE_S ~3600 seconds?
         store_uptime(agent.uptime)
 
-        meta = []
-        meta.append(f"loop_ms={elapsed_ms:.0f}")
-        meta.append(f"uptime={agent.uptime}")
-        meta.append(f"sleep={sleep_for:.0f}s\n")
+        # Adaptive Polling Engine (APE): compute next poll interval
+        elapsed = time.monotonic() - start
+        elapsed_ms = elapsed * 1000
+        decision = scheduling_policy.next_schedule(
+            elapsed=elapsed, 
+            state=network_state
+        )
 
-        if network_state == NetworkState.UP:
-            tlog(
-                NETWORK_EMOJI[network_state], 
-                "NET_HEALTH", 
-                network_state.name, 
-                primary="ALL SYSTEMS NOMINAL 🐾🌤️ ", 
-                meta=" | ".join(meta) if meta else ""
-            )
-        else:
-            tlog(
-                NETWORK_EMOJI[network_state], 
-                "NET_HEALTH", 
-                network_state.name, 
-                meta=" | ".join(meta) if meta else ""
-            )
+        tlog(
+            "⏱️ ",
+            "SCHEDULER",
+            "CADENCE",
+            primary=str(decision.poll_speed),
+            meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s"
+        )
 
-        time.sleep(sleep_for)
+        tlog(
+            NETWORK_EMOJI[network_state], 
+            "NET_STATUS", 
+            network_state.name, 
+            primary="steady-state" if network_state == NetworkState.UP else "recovery",
+            meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={agent.uptime}\n"
+        )
+
+        time.sleep(decision.sleep_for)
         loop += 1
 
 def main():
@@ -109,7 +107,7 @@ def main():
 
     setup_logging(level=getattr(logging, Config.LOG_LEVEL))
     logger = get_logger("main")
-    logger.info("🚀 Starting Network Health & DNS Reconciliation Agent")
+    logger.info("🚀 Starting Network Health & Cloudflare DDNS Reconciliation Agent")
     logger.debug(f"Python version: {sys.version}")
 
     validate_runtime_config()
@@ -119,7 +117,7 @@ def main():
     scheduling_policy = SchedulingPolicy()
     agent = NetworkControlAgent()
     
-    logger.info("Entering supervisor loop...")
+    logger.info("Entering supervisor loop...\n")
     main_loop(local_time, scheduling_policy, agent)
 
 if __name__ == "__main__":
