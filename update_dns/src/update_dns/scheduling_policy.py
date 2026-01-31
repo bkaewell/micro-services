@@ -1,49 +1,58 @@
 # ─── Standard library imports ───
 import random
+from enum import Enum, auto
+from dataclasses import dataclass
 
 # ─── Project imports ───
 from .config import config
-from .logger import get_logger
 from .infra_agent import NetworkState
 
 
+class PollSpeed(Enum):
+    FAST = auto()
+    SLOW = auto()
+
+    def __str__(self) -> str:
+        return f"{self.name}_POLL"
+
+@dataclass(frozen=True)
+class ScheduleDecision:
+    poll_speed: PollSpeed
+    base_interval: int
+    jitter: float
+    sleep_for: float
+
 class SchedulingPolicy:
+    """
+    Monotonic FSM-driven scheduler.
+
+    Invariant:
+    - DOWN / DEGRADED states poll aggressively to accelerate recovery.
+    - All other states (UP) poll conservatively to preserve steady-state.
+    """
+
+    FAST_STATES = {NetworkState.DOWN, NetworkState.DEGRADED}
+
     def __init__(self):
         self.base_interval = config.CYCLE_INTERVAL_S
-        self.polling_jitter = config.POLLING_JITTER_S
-        self.fast_scalar = config.FAST_POLL_SCALAR
-        self.slow_scalar = config.SLOW_POLL_SCALAR
-        self.min_ttl = config.CLOUDFLARE_MIN_TTL_S
-        self.logger = get_logger("scheduling_policy")
+        self.jitter_max = config.POLLING_JITTER_S
+        self.scalars = {
+            PollSpeed.FAST: config.FAST_POLL_SCALAR,
+            PollSpeed.SLOW: config.SLOW_POLL_SCALAR,
+        }
 
-    def interval_for_state(self, state: NetworkState) -> int:
-        """
-        Returns the minimum interval (seconds) for the given network state.
-        This value is guaranteed to be a lower bound on scheduling.
-        """
+    def next_schedule(self, *, elapsed: float, state: NetworkState) -> ScheduleDecision:
+        poll_speed = (
+            PollSpeed.FAST if state in self.FAST_STATES else PollSpeed.SLOW
+        )
 
-        scalar = self._scalar_for_state(state)
-        minimum_interval = int(self.base_interval * scalar)
-        return minimum_interval
+        base_interval = int(self.base_interval * self.scalars[poll_speed])
+        jitter = random.uniform(0.0, self.jitter_max)
+        sleep_for = max(0.0, base_interval + jitter - elapsed)
 
-    def _scalar_for_state(self, state: NetworkState) -> float:
-        """
-        Return the polling interval scalar for the given network state.
-
-        DOWN and DEGRADED states use a faster polling scalar to accelerate recovery;
-        all other states use a slower, steady-state scalar.
-        """
-        if state in (NetworkState.DOWN, NetworkState.DEGRADED):
-            return self.fast_scalar
-        return self.slow_scalar 
-
-    def next_sleep(self, *, elapsed: float, state: NetworkState) -> float:
-        """
-        Computes the next sleep duration, enforcing:
-        - a minimum interval per state
-        - positive-only jitter to avoid detectable periodicity
-        """
-        minimum_interval = self.interval_for_state(state)
-        jitter = random.uniform(0, self.polling_jitter)
-        scheduled_interval = minimum_interval + jitter
-        return max(0.0, scheduled_interval - elapsed)
+        return ScheduleDecision(
+            poll_speed=poll_speed,
+            base_interval=base_interval,
+            jitter=jitter,
+            sleep_for=sleep_for,
+        )
