@@ -1,3 +1,6 @@
+# ─── Standard library imports ───
+from dataclasses import dataclass
+
 # ─── Project imports ───
 from .config import config
 from .utils import ping_host
@@ -6,17 +9,28 @@ from .logger import get_logger
 
 logger = get_logger("bootstrap")
 
-def validate_runtime_config() -> None:
-    """
-    Validate runtime configuration and surface misconfiguration early.
+from dataclasses import dataclass
 
-    This performs two classes of checks:
-    1. Hard invariants that would make the control loop nonsensical.
-    2. Soft environmental checks (reachability) that may self-heal.
+@dataclass(frozen=True)
+class RuntimeCapabilities:
+    """
+    Observed runtime capabilities derived at startup.
+
+    These represent what the system is actually capable of doing,
+    not what it is configured to do in theory.
+    """
+    physical_recovery_available: bool
+
+def bootstrap() -> RuntimeCapabilities:
+    """
+    Validate runtime configuration and derive startup capabilities.
+
+    Hard invariant violations raise and abort startup.
+    Soft reachability checks are logged and used to gate capabilities.
     """
 
     _validate_invariants()
-    _validate_reachability()
+    return discover_runtime_capabilities()
 
 def _validate_invariants() -> None:
     """
@@ -43,12 +57,13 @@ def _validate_invariants() -> None:
             f"DNS propagation may lag control-loop updates"
     )
 
-def _validate_reachability() -> None:
+def discover_runtime_capabilities() -> RuntimeCapabilities:
     """
     Perform non-fatal reachability checks of local hardware.
 
     Failures are logged for visibility but do not prevent startup,
     as recovery mechanisms may restore connectivity.
+    Observations are used to derive runtime capabilities.
     """
     router_ip = config.Hardware.ROUTER_IP
     plug_ip = config.Hardware.PLUG_IP
@@ -58,7 +73,21 @@ def _validate_reachability() -> None:
     else:
         logger.warning(f"Router NOT reachable at startup ({router_ip})")
 
-    if ping_host(plug_ip):
+    plug_reachable = ping_host(plug_ip)
+    if plug_reachable:
         logger.info(f"Smart plug reachable at startup ({plug_ip})")
     else:
         logger.warning(f"Smart plug NOT reachable at startup ({plug_ip})")
+
+    physical_recovery_available = (
+        config.ALLOW_PHYSICAL_RECOVERY and plug_reachable
+    )
+
+    if not physical_recovery_available:
+        logger.info(
+            "Physical recovery disabled (startup capability check failed)"
+        )
+
+    return RuntimeCapabilities(
+        physical_recovery_available=physical_recovery_available
+    )

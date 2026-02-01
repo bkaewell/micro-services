@@ -12,6 +12,7 @@ from .telemetry import tlog
 from .logger import get_logger
 from .time_service import TimeService
 from .cloudflare import CloudflareClient
+from .bootstrap import RuntimeCapabilities
 from .gsheets_service import GSheetsService
 from .recovery_policy import recovery_policy
 from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult, load_uptime
@@ -126,7 +127,7 @@ class NetworkControlAgent:
         - Emits a single authoritative NetworkState per control cycle
     """
 
-    def __init__(self):
+    def __init__(self, capabilities: RuntimeCapabilities):
         """
         Initialize the NetworkControlAgent — the core autonomous network health monitor
         and self-healing orchestrator.
@@ -184,6 +185,11 @@ class NetworkControlAgent:
 
         # ─── Telemetry / epochs ───
         self.wan_epoch: int = 0
+
+
+        self.physical_recovery_available = capabilities.physical_recovery_available
+        self.logger.info(f"self.physical_recovery_available={self.physical_recovery_available}")
+
 
         ##################
         # For testing only

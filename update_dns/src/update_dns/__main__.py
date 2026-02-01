@@ -7,9 +7,9 @@ import logging
 from .config import Config
 from .telemetry import tlog
 from .cache import store_uptime
+from .bootstrap import bootstrap
 from .time_service import TimeService
 from .logger import get_logger, setup_logging
-from .bootstrap import validate_runtime_config
 from .scheduling_policy import SchedulingPolicy
 from .infra_agent import NetworkState, NETWORK_EMOJI, NetworkControlAgent
 
@@ -110,12 +110,12 @@ def main():
     logger.info("🚀 Starting Network Health & Cloudflare DDNS Reconciliation Agent")
     logger.debug(f"Python version: {sys.version}")
 
-    validate_runtime_config()
+    capabilities = bootstrap()
 
     # Dependencies
     local_time = TimeService()
     scheduling_policy = SchedulingPolicy()
-    agent = NetworkControlAgent()
+    agent = NetworkControlAgent(capabilities)
     
     logger.info("Entering supervisor loop...\n")
     main_loop(local_time, scheduling_policy, agent)
