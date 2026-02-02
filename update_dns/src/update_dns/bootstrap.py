@@ -68,14 +68,11 @@ def discover_runtime_capabilities() -> RuntimeCapabilities:
     router_ip = config.Hardware.ROUTER_IP
     plug_ip = config.Hardware.PLUG_IP
 
-
     lan_reachable = ping_host(router_ip)
     if lan_reachable.success:
         logger.info(f"Router reachable at startup ({router_ip})")
     else:
         logger.warning(f"Router NOT reachable at startup ({router_ip})")
-
-
 
     plug_reachable = ping_host(plug_ip)
     if plug_reachable.success:
