@@ -12,7 +12,7 @@ logger = get_logger("bootstrap")
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
-class RuntimeCapabilities:
+class EnvCapabilities:
     """
     Observed runtime capabilities derived at startup.
 
@@ -21,7 +21,7 @@ class RuntimeCapabilities:
     """
     physical_recovery_available: bool
 
-def bootstrap() -> RuntimeCapabilities:
+def bootstrap() -> EnvCapabilities:
     """
     Validate runtime configuration and derive startup capabilities.
 
@@ -49,15 +49,15 @@ def _validate_invariants() -> None:
         "cache will expire before it can be reused"
     )
 
-    # Warn-only: DNS propagation may lag control loop expectations
-    if config.CLOUDFLARE_MIN_TTL_S > slow_poll_interval_s:
-        logger.warning(
-            f"Cloudflare minimum TTL ({config.CLOUDFLARE_MIN_TTL_S}s) exceeds " 
-            f"slow polling interval ({slow_poll_interval_s}s); "
-            f"DNS propagation may lag control-loop updates"
-    )
+    # # Warn-only: DNS propagation may lag control loop expectations
+    # if config.CLOUDFLARE_MIN_TTL_S > slow_poll_interval_s:
+    #     logger.warning(
+    #         f"Cloudflare minimum TTL ({config.CLOUDFLARE_MIN_TTL_S}s) exceeds " 
+    #         f"slow polling interval ({slow_poll_interval_s}s); "
+    #         f"DNS propagation may lag control-loop updates"
+    # )
 
-def discover_runtime_capabilities() -> RuntimeCapabilities:
+def discover_runtime_capabilities() -> EnvCapabilities:
     """
     Perform non-fatal reachability checks of local hardware.
 
@@ -86,9 +86,9 @@ def discover_runtime_capabilities() -> RuntimeCapabilities:
 
     if not physical_recovery_available:
         logger.warn(
-            "Physical recovery disabled (startup capability check failed)"
+            "Physical recovery disabled"
         )
 
-    return RuntimeCapabilities(
+    return EnvCapabilities(
         physical_recovery_available=physical_recovery_available
     )
