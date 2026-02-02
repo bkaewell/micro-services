@@ -11,7 +11,7 @@ from .cache import store_uptime
 from .bootstrap import bootstrap
 from .logger import get_logger, setup_logging
 from .scheduling_policy import SchedulingPolicy
-from .infra_agent import NetworkState, NETWORK_EMOJI, NetworkControlAgent
+from .infra_agent import ReadinessState, READINESS_EMOJI, DDNSController
 
 
 class SupervisorState(Enum):
@@ -35,7 +35,7 @@ SUPERVISOR_EMOJI = {
 
 def main_loop(
         scheduling_policy: SchedulingPolicy,
-        agent: NetworkControlAgent
+        ddns: DDNSController
     ):
     """
     Supervisor loop for autonomous network control, dynamic DNS reconciliation,
@@ -51,13 +51,13 @@ def main_loop(
     Features:
         - Continuously run the NetworkControlAgent evaluation cycle
         - Sync Cloudflare DNS only when WAN and IP are verified stable
-        - Maintain telemetry and NetworkState logging for long-running operation
+        - Maintain telemetry and ReadinessState logging for long-running operation
         - Enforce drift-aware scheduling to balance consistency and API friendliness
         - Escalate physical WAN recovery after repeated failures
     """
 
     logger = get_logger("main_loop")
-    network_state = NetworkState.INIT
+    network_state = ReadinessState.INIT
     loop = 1
 
     while True:
@@ -67,21 +67,21 @@ def main_loop(
 
         try:
             # Update Network Health / Reconcile DNS:
-            network_state = agent.update_network_health()
+            network_state = ddns.reconcile()
             supervisor_state = SupervisorState.OK
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
             supervisor_state = SupervisorState.ERROR
 
         # ─── Uptime Cycle Counting ───
-        agent.uptime.total += 1
-        if network_state == NetworkState.UP:
-            agent.uptime.up += 1
+        ddns.uptime.total += 1
+        if network_state == ReadinessState.READY:
+            ddns.uptime.up += 1
         
         # Optional: save every 50 measurements (low I/O)
         #if self.uptime.total % 50 == 0:
         # Align with CACHE_MAX_AGE_S ~3600 seconds?
-        store_uptime(agent.uptime)
+        store_uptime(ddns.uptime)
 
         # Adaptive Polling Engine (APE): compute next poll interval
         elapsed = time.monotonic() - start
@@ -108,11 +108,11 @@ def main_loop(
             )
 
         tlog(
-            NETWORK_EMOJI[network_state], 
+            READINESS_EMOJI[network_state], 
             "NET_STATUS", 
             network_state.name, 
-            primary="steady-state" if network_state == NetworkState.UP else "recovery",
-            meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={agent.uptime}\n"
+            primary="steady-state" if network_state == ReadinessState.READY else "recovery",
+            meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={ddns.uptime}\n"
         )
 
         time.sleep(decision.sleep_for)
@@ -138,10 +138,10 @@ def main():
 
     # Dependencies
     scheduling_policy = SchedulingPolicy()
-    agent = NetworkControlAgent(capabilities)
+    ddns = DDNSController(capabilities)
     
     logger.info("Entering supervisor loop...\n")
-    main_loop(scheduling_policy, agent)
+    main_loop(scheduling_policy, ddns)
 
 if __name__ == "__main__":
     main()

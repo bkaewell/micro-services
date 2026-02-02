@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 # ─── Project imports ───
 from .config import config
-from .infra_agent import NetworkState
+from .infra_agent import ReadinessState
 
 
 class PollSpeed(Enum):
@@ -27,11 +27,11 @@ class SchedulingPolicy:
     Monotonic FSM-driven scheduler.
 
     Invariant:
-    - DOWN / DEGRADED states poll aggressively to accelerate recovery.
-    - All other states (UP) poll conservatively to preserve steady-state.
+    - NOT_READY / PROBING states poll aggressively to accelerate recovery.
+    - All other states (READY) poll conservatively to preserve steady-state.
     """
 
-    FAST_STATES = {NetworkState.DOWN, NetworkState.DEGRADED}
+    FAST_STATES = {ReadinessState.NOT_READY, ReadinessState.PROBING}
 
     def __init__(self):
         self.base_interval = config.CYCLE_INTERVAL_S
@@ -41,7 +41,7 @@ class SchedulingPolicy:
             PollSpeed.SLOW: config.SLOW_POLL_SCALAR,
         }
 
-    def next_schedule(self, *, elapsed: float, state: NetworkState) -> ScheduleDecision:
+    def next_schedule(self, *, elapsed: float, state: ReadinessState) -> ScheduleDecision:
         poll_speed = (
             PollSpeed.FAST if state in self.FAST_STATES else PollSpeed.SLOW
         )
