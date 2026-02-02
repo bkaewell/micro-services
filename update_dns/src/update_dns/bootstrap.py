@@ -68,23 +68,27 @@ def discover_runtime_capabilities() -> RuntimeCapabilities:
     router_ip = config.Hardware.ROUTER_IP
     plug_ip = config.Hardware.PLUG_IP
 
-    if ping_host(router_ip):
+
+    lan_reachable = ping_host(router_ip)
+    if lan_reachable.success:
         logger.info(f"Router reachable at startup ({router_ip})")
     else:
         logger.warning(f"Router NOT reachable at startup ({router_ip})")
 
+
+
     plug_reachable = ping_host(plug_ip)
-    if plug_reachable:
+    if plug_reachable.success:
         logger.info(f"Smart plug reachable at startup ({plug_ip})")
     else:
         logger.warning(f"Smart plug NOT reachable at startup ({plug_ip})")
 
     physical_recovery_available = (
-        config.ALLOW_PHYSICAL_RECOVERY and plug_reachable
+        config.ALLOW_PHYSICAL_RECOVERY and plug_reachable.success
     )
 
     if not physical_recovery_available:
-        logger.info(
+        logger.warn(
             "Physical recovery disabled (startup capability check failed)"
         )
 
