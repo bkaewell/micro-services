@@ -2,20 +2,38 @@
 import sys
 import time
 import logging
+from enum import Enum, auto
 
 # ─── Project imports ───
 from .config import Config
 from .telemetry import tlog
 from .cache import store_uptime
 from .bootstrap import bootstrap
-from .time_service import TimeService
 from .logger import get_logger, setup_logging
 from .scheduling_policy import SchedulingPolicy
 from .infra_agent import NetworkState, NETWORK_EMOJI, NetworkControlAgent
 
 
+class SupervisorState(Enum):
+    """
+    Canonical representation of supervisor loop health.
+
+    States are intentionally minimal:
+        OK    → loop completed without error
+        ERROR → unhandled exception occurred
+    """    
+    OK = auto()
+    ERROR = auto()
+
+    def __str__(self) -> str:
+        return self.name
+
+SUPERVISOR_EMOJI = {
+    SupervisorState.OK:    "💚",
+    SupervisorState.ERROR: "💣",
+}
+
 def main_loop(
-        local_time: TimeService,
         scheduling_policy: SchedulingPolicy,
         agent: NetworkControlAgent
     ):
@@ -44,18 +62,16 @@ def main_loop(
 
     while True:
         start = time.monotonic()
-
-        # ─── Heartbeat (local only, no network dependency) ───
-        dt_local, _ = local_time.now_local()
-        heartbeat = local_time.heartbeat_string(dt_local)
+        heartbeat = heartbeat = time.strftime("%a %b %d %Y")
         tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
 
         try:
             # Update Network Health / Reconcile DNS:
             network_state = agent.update_network_health()
+            supervisor_state = SupervisorState.OK
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
-            network_state = NetworkState.ERROR
+            supervisor_state = SupervisorState.ERROR
 
         # ─── Uptime Cycle Counting ───
         agent.uptime.total += 1
@@ -82,6 +98,14 @@ def main_loop(
             primary=str(decision.poll_speed),
             meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s"
         )
+
+        if supervisor_state == SupervisorState.ERROR:
+            tlog(
+                SUPERVISOR_EMOJI[supervisor_state], 
+                "SUPERVISOR", 
+                supervisor_state.name, 
+                primary="observer failure"
+            )
 
         tlog(
             NETWORK_EMOJI[network_state], 
@@ -113,12 +137,11 @@ def main():
     capabilities = bootstrap()
 
     # Dependencies
-    local_time = TimeService()
     scheduling_policy = SchedulingPolicy()
     agent = NetworkControlAgent(capabilities)
     
     logger.info("Entering supervisor loop...\n")
-    main_loop(local_time, scheduling_policy, agent)
+    main_loop(scheduling_policy, agent)
 
 if __name__ == "__main__":
     main()
