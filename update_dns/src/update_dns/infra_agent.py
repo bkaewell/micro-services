@@ -10,13 +10,11 @@ import requests
 from .config import config
 from .telemetry import tlog
 from .logger import get_logger
-from .time_service import TimeService
 from .cloudflare import CloudflareClient
 from .bootstrap import RuntimeCapabilities
-from .gsheets_service import GSheetsService
 from .recovery_policy import recovery_policy
-from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult, load_uptime
 from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult
+from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult, load_uptime
 #from .db import log_metrics
 
 
@@ -33,7 +31,6 @@ class NetworkState(Enum):
     UP = auto()
     DEGRADED = auto()
     DOWN = auto()
-    ERROR = auto()
 
     def __str__(self) -> str:
         return self.name
@@ -43,7 +40,6 @@ NETWORK_EMOJI = {
     NetworkState.UP:       "💚",
     NetworkState.DEGRADED: "🟡",
     NetworkState.DOWN:     "🔴",
-    NetworkState.ERROR:    "💣",
 }
 
 class NetworkHealthFSM:
@@ -138,24 +134,21 @@ class NetworkControlAgent:
         - No external priming/calls required at boot
 
         Initialization order reflects the agent's workflow:
-        1. Pure dependencies (time, logging, external clients)
+        1. Pure dependencies (logging, external clients)
         2. Static configuration & policy thresholds
         3. State machine & initial health assessment
         4. Cross-cycle runtime state (memory between loops)
         """
 
         # ─── 1. Core dependencies & services ─── 
-        self.time = TimeService()
         self.logger = get_logger("infra_agent")
         self.cloudflare_client = CloudflareClient()
-        self.gsheets_service = GSheetsService()
-        self.gsheets_service.warmup()
 
         # ─── 2. Static configuration & policy thresholds ─── 
         self.router_ip = config.Hardware.ROUTER_IP
         self.max_cache_age_s = config.MAX_CACHE_AGE_S
         self.plug_ip = config.Hardware.PLUG_IP
-        self.allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
+        self.physical_recovery_available = capabilities.physical_recovery_available
 
         # Promotion policy
         self.confirmations_required_for_up = 2   # consecutive stable IPs needed
@@ -187,8 +180,6 @@ class NetworkControlAgent:
         self.wan_epoch: int = 0
 
 
-        self.physical_recovery_available = capabilities.physical_recovery_available
-        self.logger.info(f"self.physical_recovery_available={self.physical_recovery_available}")
 
 
         ##################
@@ -349,8 +340,7 @@ class NetworkControlAgent:
         # ─── L3 Mutation required ───
         result, elapsed_ms = self.cloudflare_client.update_dns(public_ip)
         store_cloudflare_ip(public_ip)       # Safe: we just wrote it
-        dns_last_modified = \
-            self.time.iso_to_local_string(result.get("modified_on"))
+        #result.get("modified_on")
         
         meta=[]
         meta.append(f"rtt={elapsed_ms:.0f}ms")
@@ -364,13 +354,6 @@ class NetworkControlAgent:
             meta=" | ".join(meta) if meta else ""
         )
         tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
-
-        # ─── Low-frequency audit log ───
-        gsheets_ok, elapsed_ms = self.gsheets_service.update_status(
-            ip_address=public_ip,
-            current_time=None,
-            dns_last_modified=dns_last_modified
-        )
 
     def _power_cycle_edge(self) -> bool:
         """
@@ -567,14 +550,14 @@ class NetworkControlAgent:
         wan_path = verify_wan_reachability(host=host, port=port)
         meta = []
         meta.append(f"rtt={wan_path.elapsed_ms:.0f}ms")
-        meta.append(f"tls=ok" if wan_path.success else "")
-
+        if wan_path.success:
+            meta.append("tls=ok")
         tlog(
             "🟢" if wan_path.success else "🔴",
             "WAN_PATH",
             "UP" if wan_path.success else "DOWN",
             primary=f"dest={host}:{port}",
-            meta=" | ".join(meta) if meta else ""
+            meta=" | ".join(meta) if meta else None
         )
 
 
@@ -658,17 +641,7 @@ class NetworkControlAgent:
             # if public:
             self._sync_dns_if_drifted(public.ip)
 
-            # High-frequency uptime heartbeat
-            _, dt_str = self.time.now_local()
-            gsheets_ok, elapsed_ms = self.gsheets_service.update_status(
-                ip_address=None,
-                current_time=dt_str,
-                dns_last_modified=None
-            )
-            if gsheets_ok:
-                tlog("🟢", "GSHEET", "UPDATED", meta=f"rtt={elapsed_ms:.0f}ms")
-
-        elif escalate and self.allow_physical_recovery:
+        elif escalate and self.physical_recovery_available:
             if self._trigger_physical_recovery():
                 # Prevent recovery storms
                 self.consecutive_down_count = 0
@@ -684,9 +657,11 @@ class NetworkControlAgent:
 
 
         # ─── Report: main network evaluation telemetry ───
+        primary = []
         meta = []
 
         if network_state == NetworkState.DEGRADED:
+            primary.append("gate=HOLD")
             if (self.ip_stability_count == 0):
                 meta.append("awaiting confirmation")
             else:
@@ -695,19 +670,19 @@ class NetworkControlAgent:
                     f"{self.confirmations_required_for_up}"
                 )
         elif network_state == NetworkState.DOWN:
+            primary.append("escalate=GO" if escalate else "escalate=HOLD")
             meta.append(
                 f"down_count={self.consecutive_down_count}/"
                 f"{recovery_policy.max_consecutive_down_before_escalation}"
             )
-            meta.append(f"escalate={escalate}")
 
-        # Only log detailed NET_EVAL when something is wrong or building confidence
+        # Only log detailed NET_EVAL when not healthy
         if network_state is not NetworkState.UP:
             tlog(
                 NETWORK_EMOJI[network_state],
                 "NET_EVAL",
                 network_state.name,
-                primary="gate=HOLD",
+                primary=" ".join(primary),
                 meta=" | ".join(meta) if meta else ""
             )
 
