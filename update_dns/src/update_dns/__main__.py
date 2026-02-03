@@ -91,14 +91,6 @@ def main_loop(
             state=network_state
         )
 
-        tlog(
-            "⏱️ ",
-            "SCHEDULER",
-            "CADENCE",
-            primary=str(decision.poll_speed),
-            meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s"
-        )
-
         if supervisor_state == SupervisorState.ERROR:
             tlog(
                 SUPERVISOR_EMOJI[supervisor_state], 
@@ -108,12 +100,37 @@ def main_loop(
             )
 
         tlog(
-            READINESS_EMOJI[network_state], 
-            "NET_STATUS", 
-            network_state.name, 
-            primary="steady-state" if network_state == ReadinessState.READY else "recovery",
+            #"⏱️ ",
+            "🐾",
+            "SCHEDULER",
+            "CADENCE",
+            primary=str(decision.poll_speed),
+            meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s"
+        )
+
+        tlog(
+            "🔁",
+            "LOOP",
+            "COMPLETE",
+            #primary=,
             meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={ddns.uptime}\n"
         )
+
+        # if supervisor_state == SupervisorState.ERROR:
+        #     tlog(
+        #         SUPERVISOR_EMOJI[supervisor_state], 
+        #         "SUPERVISOR", 
+        #         supervisor_state.name, 
+        #         primary="observer failure"
+        #     )
+
+        # tlog(
+        #     READINESS_EMOJI[network_state], 
+        #     "NET_STATUS", 
+        #     network_state.name, 
+        #     primary="steady-state" if network_state == ReadinessState.READY else "recovery",
+        #     meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={ddns.uptime}\n"
+        # )
 
         time.sleep(decision.sleep_for)
         loop += 1

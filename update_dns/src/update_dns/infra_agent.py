@@ -263,6 +263,8 @@ class DDNSController:
         This is the **single authoritative path** for DNS mutation in the agent.
         Keeps the system self-healing while minimizing API calls and risk.
         """
+        ddns_decision  = None
+        ddns_reason = None
 
         # ─── L1 Cache (Cheap, local, fast no-op) ───
         # Only proceed to DoH if cache is absent, stale, or mismatched
@@ -298,6 +300,9 @@ class DDNSController:
         )
 
         if cache_match:
+            ddns_decision = "NO-OP"
+            ddns_reason = "cache=hit"
+            tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
             return  # Fast no-op: we trust the cache = DNS = current IP
 
         # ─── L2 DoH (Authoritative truth) ───
@@ -313,13 +318,17 @@ class DDNSController:
             )
             store_cloudflare_ip(public_ip)   # Safe: DoH confirmed current IP is what DNS has
             tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
+            ddns_decision = "NO-OP"
+            ddns_reason = "doh=verified"
+            tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
             return
 
         # ─── L3 Mutation required ───
         result, elapsed_ms = self.cloudflare_client.update_dns(public_ip)
         store_cloudflare_ip(public_ip)       # Safe: we just wrote it
-        #result.get("modified_on")
-        
+
+        ddns_decision = "UPDATED"
+        ddns_reason = "reason=ip-mismatch"
         meta=[]
         meta.append(f"rtt={elapsed_ms:.0f}ms")
         meta.append(f"desired={public_ip}")
@@ -329,9 +338,11 @@ class DDNSController:
             "CLOUDFLARE",
             "UPDATED",
             primary=f"dns={self.cloudflare_client.dns_name}",
-            meta=" | ".join(meta) if meta else ""
+            meta=" | ".join(meta)
         )
         tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
+        tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
+
 
     def _power_cycle_edge(self) -> bool:
         """
@@ -526,20 +537,21 @@ class DDNSController:
         host="1.1.1.1"
         port=443
         wan_path = verify_wan_reachability(host=host, port=port)
-        meta = []
-        meta.append(f"rtt={wan_path.elapsed_ms:.0f}ms")
+
+        meta = [f"rtt={wan_path.elapsed_ms:.0f}ms"]
         if wan_path.success:
             meta.append("tls=ok")
+
         tlog(
             "🟢" if wan_path.success else "🔴",
             "WAN_PATH",
             "UP" if wan_path.success else "DOWN",
             primary=f"dest={host}:{port}",
-            meta=" | ".join(meta) if meta else None
+            meta=" | ".join(meta)
         )
 
 
-        # ─── Policy: IP stability check (only when we have some confidence) ───
+        # ─── Policy: IP observation (only when preliminary trustworthy) ───
         allow_promotion = False
         public = None
 
@@ -548,8 +560,8 @@ class DDNSController:
             and wan_path.success
         ):
             public = get_ip()
-            #public = self._override_public_ip_for_test(public)  # DEBUG hook
-            #self.count += 1
+            public = self._override_public_ip_for_test(public)  # DEBUG hook
+            self.count += 1
 
             tlog(
                 "🟢" if public.success else "🔴",
@@ -559,7 +571,7 @@ class DDNSController:
                 meta=f"rtt={public.elapsed_ms:.0f}ms"
             )
 
-            # Determine whether promotion (PROBING → READY) is allowed
+            # Promotion confidence accrual (PROBING only)
             if public.success and self.readiness.state == ReadinessState.PROBING:
                 allow_promotion = self._record_ip_observation(public.ip)
 
@@ -567,12 +579,63 @@ class DDNSController:
             tlog("🟡", "PUBLIC_IP", "SKIPPED")
         
 
-        # ─── Assess: FSM advance (single source of truth) ───
+        # ─── Assess: readiness FSM advance (single source of truth) ───
         prev_readiness = self.prev_readiness
         readiness = self.readiness.advance(
             wan_path_ok=wan_path.success,
             allow_promotion = allow_promotion
         )
+
+        # ─── Confidence telemetry (internal reasoning; non-authoritative ───
+        if readiness == ReadinessState.PROBING:
+            meta = (
+                "awaiting confirmation"
+                if self.promotion_votes == 0
+                else f"confirmations={self.promotion_votes}/{self.promotion_confirmations_required}"
+            )
+            tlog(
+                READINESS_EMOJI[readiness],
+                "CONFIDENCE",
+                readiness.name,
+                primary="gate=HOLD",
+                meta=meta
+            )    
+        elif readiness == ReadinessState.NOT_READY:
+            primary.append("escalate=GO" if escalate else "escalate=HOLD")
+            meta.append(
+                f"down_count={self.not_ready_streak}/"
+                f"{recovery_policy.max_consecutive_down_before_escalation}"
+            )
+            tlog(
+                READINESS_EMOJI[readiness],
+                "CONFIDENCE",
+                readiness.name,
+                primary=primary,
+                meta=meta
+            )
+
+
+        # # ─── Report: main network evaluation telemetry ───
+        # primary = []
+        # meta = []
+
+        # if readiness == ReadinessState.PROBING:
+        #     primary.append("gate=HOLD")
+        #     if (self.promotion_votes == 0):
+        #         meta.append("awaiting confirmation")
+        #     else:
+        #         meta.append(
+        #             f"confirmations={self.promotion_votes}/"
+        #             f"{self.promotion_confirmations_required}"
+        #         )
+        # elif readiness == ReadinessState.NOT_READY:
+        #     primary.append("escalate=GO" if escalate else "escalate=HOLD")
+        #     meta.append(
+        #         f"down_count={self.not_ready_streak}/"
+        #         f"{recovery_policy.max_consecutive_down_before_escalation}"
+        #     )
+
+
 
         # Transition telemetry (single line, high signal)
         if prev_readiness != readiness:
@@ -580,7 +643,12 @@ class DDNSController:
                 prev=prev_readiness,
                 current=readiness,
                 promotion_votes=self.promotion_votes,
-            )    
+            ) 
+
+
+
+        tlog(READINESS_EMOJI[readiness], "VERDICT", readiness.name)
+
 
 
         # ─── Decide + Act: edge-triggered actions ───
@@ -590,8 +658,7 @@ class DDNSController:
         self.prev_readiness = readiness
 
 
-        # ─── Decide: escalation check ───
-        # Escalation counter increments only during NOT_READY
+        # ─── Decide: escalation tracking ───
         if readiness == ReadinessState.NOT_READY:
             self.not_ready_streak += 1
         else:
@@ -601,10 +668,10 @@ class DDNSController:
             readiness == ReadinessState.NOT_READY
             and self.not_ready_streak >= recovery_policy.max_consecutive_down_before_escalation
         )
-        failures_at_decision = self.not_ready_streak
+        #failures_at_decision = self.not_ready_streak
 
 
-        # ─── Act: state-dependent side effects ───
+        # ─── Act: side effects (strictly gated by readiness verdict) ───
         if readiness == ReadinessState.READY:
             if not lan.success:
                 tlog(
@@ -615,14 +682,23 @@ class DDNSController:
                     meta="WAN confirmed healthy"
                 )
 
-            # if public:
+            # DDNS reconciliation (safe to act)
             self._reconcile_dns(public.ip)
+
 
         elif escalate and self.physical_recovery_available:
             if self._initiate_recovery():
                 # Prevent recovery storms
                 self.not_ready_streak = 0
  
+                # tlog(
+                #     "🚨",
+                #     "RECOVERY",
+                #     "INITIATED",
+                #     primary="physical intervention"
+                # )
+
+
         elif escalate:
             tlog(
                 "🟡",
@@ -653,15 +729,15 @@ class DDNSController:
                 f"{recovery_policy.max_consecutive_down_before_escalation}"
             )
 
-        # Only log detailed NET_EVAL when not healthy
-        if readiness is not ReadinessState.READY:
-            tlog(
-                READINESS_EMOJI[readiness],
-                "NET_EVAL",
-                readiness.name,
-                primary=" ".join(primary),
-                meta=" | ".join(meta) if meta else ""
-            )
+        # # Only log detailed NET_EVAL when not healthy
+        # if readiness is not ReadinessState.READY:
+        #     tlog(
+        #         READINESS_EMOJI[readiness],
+        #         "NET_EVAL",
+        #         readiness.name,
+        #         primary=" ".join(primary),
+        #         meta=" | ".join(meta) if meta else ""
+        #     )
 
         return readiness
     
