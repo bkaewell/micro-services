@@ -3,11 +3,12 @@ import time
 import requests
 
 # ─── Project imports ───
-from .recovery_policy import RecoveryPolicy
+from .config import config
 from .telemetry import tlog
 from .utils import ping_host
-from .config import config
-from .control_loop import ReadinessState
+from .readiness import ReadinessState
+from .bootstrap import EnvCapabilities
+from .recovery_policy import RecoveryPolicy
 
 
 class RecoveryController:
@@ -29,15 +30,22 @@ class RecoveryController:
     def __init__(
         self,
         policy: RecoveryPolicy,
-        enabled: bool,
-        plug_ip: str | None,
+        #enabled: bool,
+        capabilities: EnvCapabilities,
+        #plug_ip: str | None,
     ):
         self.policy = policy
-        self.enabled = enabled
-        self.plug_ip = plug_ip
+        #self.enabled = enabled
+        self.enabled = False
+        #self.plug_ip = plug_ip
+        self.plug_ip = config.Hardware.PLUG_IP
+        self.physical_recovery_available = capabilities.physical_recovery_available
 
-        self.not_ready_streak = 0
-        self.last_recovery_time = 0.0
+        # ─── Failure & Escalation Tracking ───
+        self.not_ready_streak: int = 0
+
+        # ─── Recovery Guardrails ───
+        self.last_recovery_time: float = 0.0  # far in the past → first recovery allowed immediately
 
     def observe(self, readiness: ReadinessState) -> None:
         """
