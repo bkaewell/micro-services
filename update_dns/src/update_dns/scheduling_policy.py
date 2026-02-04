@@ -5,10 +5,16 @@ from dataclasses import dataclass
 
 # ─── Project imports ───
 from .config import config
-from .infra_agent import ReadinessState
+from .readiness import ReadinessState
 
 
 class PollSpeed(Enum):
+    """
+    High-level polling modes.
+
+    • FAST — aggressive polling during recovery or uncertainty
+    • SLOW — steady-state polling once things are stable
+    """
     FAST = auto()
     SLOW = auto()
 
@@ -17,6 +23,12 @@ class PollSpeed(Enum):
 
 @dataclass(frozen=True)
 class ScheduleDecision:
+    """
+    Concrete scheduling outcome for a single control-loop iteration.
+
+    All values are precomputed so callers can sleep without
+    re-deriving timing logic.
+    """
     poll_speed: PollSpeed
     base_interval: int
     jitter: float
@@ -24,13 +36,15 @@ class ScheduleDecision:
 
 class SchedulingPolicy:
     """
-    Monotonic FSM-driven scheduler.
+    Readiness-aware polling policy.
 
-    Invariant:
-    - NOT_READY / PROBING states poll aggressively to accelerate recovery.
-    - All other states (READY) poll conservatively to preserve steady-state.
+    • Poll faster when the system is unhealthy or uncertain
+    • Poll slower once steady-state is reached
+    • Add jitter to avoid sync patterns and API abuse
+
+    This class is stateless aside from configuration and is safe
+    to call once per control-loop cycle.
     """
-
     FAST_STATES = {ReadinessState.NOT_READY, ReadinessState.PROBING}
 
     def __init__(self):
@@ -41,7 +55,20 @@ class SchedulingPolicy:
             PollSpeed.SLOW: config.SLOW_POLL_SCALAR,
         }
 
-    def next_schedule(self, *, elapsed: float, state: ReadinessState) -> ScheduleDecision:
+    def next_schedule(
+            self, 
+            *, 
+            elapsed: float, 
+            state: ReadinessState
+        ) -> ScheduleDecision:
+        """
+        Compute the next polling interval for the control loop.
+
+        • Select FAST or SLOW polling based on readiness
+        • Scale the base interval accordingly
+        • Apply bounded jitter
+        • Account for time already spent in the cycle
+        """
         poll_speed = (
             PollSpeed.FAST if state in self.FAST_STATES else PollSpeed.SLOW
         )
