@@ -5,16 +5,15 @@ import logging
 from enum import Enum, auto
 
 # ─── Project imports ───
-from .config import Config
+from .config import config
 from .telemetry import tlog
-from .cache import store_uptime
 from .bootstrap import bootstrap
 from .recovery_policy import RecoveryPolicy
 from .ddns_controller import DDNSController
 from .logger import get_logger, setup_logging
 from .scheduling_policy import SchedulingPolicy
 from .recovery_controller import RecoveryController
-from .readiness import ReadinessState, ReadinessController, READINESS_EMOJI
+from .readiness import ReadinessState, ReadinessController
 
 
 class SupervisorState(Enum):
@@ -107,7 +106,7 @@ def main() -> None:
     After this point, the process is expected to run indefinitely.
     """
 
-    setup_logging(level=getattr(logging, Config.LOG_LEVEL))
+    setup_logging(level=getattr(logging, config.LOG_LEVEL))
     logger = get_logger("main")
 
     logger.info("🚀 Starting Cloudflare DDNS Agent")
@@ -115,15 +114,22 @@ def main() -> None:
 
     capabilities = bootstrap()
 
+    allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
+    plug_ip = config.Hardware.PLUG_IP
+
     # ─── Policies (stateless / config-driven) ───
     scheduler = SchedulingPolicy()
     recovery_policy = RecoveryPolicy()
+
+
+
 
     # ─── Controllers (stateful) ───
     readiness = ReadinessController()
     recovery = RecoveryController(
         policy=recovery_policy,
-        capabilities=capabilities,
+        allow_physical_recovery=allow_physical_recovery,
+        plug_ip=plug_ip
     )
     ddns = DDNSController(
         readiness=readiness,
