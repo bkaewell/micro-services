@@ -3,11 +3,9 @@ import time
 import requests
 
 # ─── Project imports ───
-from .config import config
 from .telemetry import tlog
 from .utils import ping_host
 from .readiness import ReadinessState
-from .bootstrap import EnvCapabilities
 from .recovery_policy import RecoveryPolicy
 
 
@@ -26,26 +24,31 @@ class RecoveryController:
     • No network health inference
     • No retries or adaptive behavior
     """
+    # ─── Class Constants ───
+    SMART_PLUG_HTTP_TIMEOUT_S: float = 2.0  # LAN device: fast-fail by design
 
     def __init__(
         self,
         policy: RecoveryPolicy,
-        #enabled: bool,
-        capabilities: EnvCapabilities,
-        #plug_ip: str | None,
+        allow_physical_recovery: bool,
+        plug_ip: str | None,
     ):
+        # ─── Dependencies / Configuration ───        
         self.policy = policy
-        #self.enabled = enabled
-        self.enabled = False
-        #self.plug_ip = plug_ip
-        self.plug_ip = config.Hardware.PLUG_IP
-        self.physical_recovery_available = capabilities.physical_recovery_available
+        self.plug_ip = plug_ip
 
-        # ─── Failure & Escalation Tracking ───
+        # ─── Capability Gates ───        
+        self.allow_physical_recovery = allow_physical_recovery
+
+        # ─── Runtime State ───
+        # Consecutive NOT_READY cycles (used for escalation)
         self.not_ready_streak: int = 0
 
         # ─── Recovery Guardrails ───
-        self.last_recovery_time: float = 0.0  # far in the past → first recovery allowed immediately
+        self.last_recovery_time: float = 0.0  # epoch → first recovery allowed immediately
+
+    def _plug_available(self) -> bool:
+        return ping_host(self.plug_ip).success
 
     def observe(self, readiness: ReadinessState) -> None:
         """
@@ -64,8 +67,12 @@ class RecoveryController:
             True if a recovery action was executed successfully.
             False otherwise (including suppression).
         """
-        if not self.enabled:
+        if not self.allow_physical_recovery:
             self._emit_suppressed("disabled by config")
+            return False
+        
+        if not self._plug_available():
+            self._emit_suppressed("smart plug unavailable")
             return False
 
         if self.not_ready_streak < self.policy.max_consecutive_down_before_escalation:
@@ -80,7 +87,7 @@ class RecoveryController:
                 meta=f"last_attempt={int(since_last)}s | window={self.policy.recovery_cooldown_s}s",
             )
             return False
-
+        
         return self._execute_recovery(now)
 
     def _execute_recovery(self, now: float) -> bool:
@@ -95,28 +102,14 @@ class RecoveryController:
             meta=f"reboot_delay={self.policy.reboot_settle_delay_s}s",
         )
 
-        # Optional pre-check (telemetry only)
-        plug_ok_before = ping_host(self.plug_ip).success
-
-        tlog(
-            "🟡" if plug_ok_before else "🔴",
-            "EDGE",
-            "REACHABLE" if plug_ok_before else "UNREACHABLE",
-            primary="pre-recovery check",
-            meta=f"smart_plug_ip={self.plug_ip}"
-        )
-
         # ─── Execute recovery ───
         success = self._power_cycle_edge()
-
-        plug_ok_after = ping_host(self.plug_ip).success
 
         tlog(
             "🟢" if success else "🔴",
             "RECOVERY",
             "COMPLETE" if success else "FAILED",
             primary="power-cycle attempt",
-            meta=f"plug_pre={plug_ok_before} | plug_post={plug_ok_after}",
         )
 
         # Update last recovery timestamp only on successful command execution
@@ -128,19 +121,22 @@ class RecoveryController:
 
     def _power_cycle_edge(self) -> bool:
         """
-        Perform a deterministic OFF → delay → ON power cycle of the network
-        edge device.
+        Perform a single OFF → delay → ON power cycle of the edge device.
 
-        Policy-agnostic. Single-shot. No retries.
+        Design:
+        - LAN-only, fast-fail semantics (no retries)
+        - Short, fixed HTTP timeout (device either responds or it doesn’t)
+        - Success = command issued, not device verified online
+
+        Returns:
+            True if power cycle commands were successfully issued.
         """
-        if not self.plug_ip:
-            return False
 
         try:
             # Power OFF
             requests.get(
                 f"http://{self.plug_ip}/relay/0?turn=off",
-                timeout=config.API_TIMEOUT_S,
+                timeout=RecoveryController.SMART_PLUG_HTTP_TIMEOUT_S,
             ).raise_for_status()
             self.logger.debug("Smart plug powered OFF")
             time.sleep(self.policy.reboot_settle_delay_s)
@@ -148,7 +144,7 @@ class RecoveryController:
             # Power ON
             requests.get(
                 f"http://{self.plug_ip}/relay/0?turn=on",
-                timeout=config.API_TIMEOUT_S,
+                timeout=RecoveryController.SMART_PLUG_HTTP_TIMEOUT_S,
             ).raise_for_status()
             self.logger.debug("Smart plug powered ON")
 
