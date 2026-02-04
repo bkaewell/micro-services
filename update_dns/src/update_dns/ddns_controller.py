@@ -23,21 +23,18 @@ from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupRe
 
 class DDNSController:
     """
-    Autonomous control-plane agent responsible for WAN health assessment,
-    public IP stabilization, and Cloudflare DNS reconciliation.
+    Control-loop coordinator for WAN readiness and DDNS reconciliation.
 
-    Designed for low-noise operation under healthy conditions, the agent
-    builds confidence in network stability across cycles and performs
-    corrective actions only after sustained failure is confirmed by policy.
-    Although deployed on a home network, it is engineered with real-world
-    reliability, observability, and failure isolation in mind.
+    Responsibilities:
+    • Observe LAN, WAN path, and public IP signals
+    • Derive a single authoritative readiness verdict per cycle
+    • Reconcile DNS only after stability is proven
+    • Escalate recovery after sustained failure
 
-    Features:
-        - Observes LAN reachability, WAN path health, and public IP state
-        - Promotes WAN health through a finite-state confidence model
-        - Reconciles Cloudflare DNS only after stability is established
-        - Escalates recovery actions when failure thresholds are exceeded
-        - Emits a single authoritative ReadinessState per control cycle
+    Design bias:
+    • Conservative by default
+    • Low-noise when healthy
+    • Fail-fast, recover deliberately
     """
 
     def __init__(
@@ -46,12 +43,11 @@ class DDNSController:
             recovery: RecoveryController
         ):
         """
-        Core autonomous network controller.
+        Initialize the DDNS control loop.
 
-        Design principles:
-        - Conservative startup (probationary, no assumptions)
-        - Single source of truth for readiness (FSM)
-        - Edge-triggered recovery with hard guardrails
+        • Readiness FSM is the single source of truth
+        • Recovery is policy-driven and externally gated
+        • Startup assumes nothing about network health
         """
 
         # ─── Readiness Controller (single source of truth) ─── 
@@ -89,18 +85,13 @@ class DDNSController:
 
     def _record_ip_observation(self, public_ip: Optional[str]) -> bool:
         """
-        Tracks public IP continuity to serve as a conservative promotion gate.
+        Track consecutive public IP observations for promotion gating.
 
-        Used exclusively by the FSM to prevent premature READY advances when
-        secondary signals (public IP) are unstable.
+        • IP change or missing value resets confidence
+        • Matching consecutive IPs build confidence
+        • Returns True only after required confirmations
 
-        Semantics:
-        • Any change/missing IP → reset stability counter
-        • Identical consecutive IPs → increment counter
-        • Returns True only after required consecutive matches
-
-        Keeps the FSM clean by externalizing hysteresis — simple, deterministic,
-        and focused on "has this IP been stable long enough?"
+        Keeps hysteresis out of the FSM and easy to reason about.
         """
         if not public_ip:
             self.promotion_votes = 0
@@ -122,7 +113,7 @@ class DDNSController:
         promotion_votes: Optional[int] = None,
     ):
         """
-        Emit a single authoritative log line describing a readiness advance.
+        Emit a single log line for a readiness state transition.
         """
 
         prev = prev or ReadinessState.INIT
@@ -149,22 +140,17 @@ class DDNSController:
 
     def _reconcile_dns_if_needed(self, public_ip: str) -> None:
         """
-        Reconciles Cloudflare DNS with the current public IP — only when safe.
+        Reconcile Cloudflare DNS with the current public IP.
 
-        Called exclusively when ReadinessState is READY (stable, verified WAN).
-        Enforces eventual consistency using a deliberate, layered approach:
+        Invariants:
+        • Called only when readiness is READY
+        • Safe to call repeatedly (idempotent)
+        • No mutation without authoritative confirmation
 
-        L1: Local cache check — fast no-op on match (zero external calls)
-        L2: Authoritative DoH lookup — external truth without mutation
-        L3: Targeted update — only on confirmed drift
-
-        Key safety invariants:
-        • Idempotent: safe to call repeatedly; converges without thrashing
-        • Mutation-gated: never updates unless L2 shows real mismatch
-        • Stability-first: runs only after consecutive IP + WAN confirmation
-
-        This is the **single authoritative path** for DNS mutation in the agent.
-        Keeps the system self-healing while minimizing API calls and risk.
+        Strategy:
+        • L1: local cache (cheap no-op)
+        • L2: DoH verification (truth without mutation)
+        • L3: targeted update (only on confirmed drift)
         """
         ddns_decision  = None
         ddns_reason = None
@@ -281,15 +267,17 @@ class DDNSController:
 
     def run_cycle(self) -> ReadinessState:
         """
-        One autonomous control cycle.
+        Execute one autonomous control-loop cycle.
 
         Phases:
-        1. Observe raw signals
+        1. Observe raw network signals
         2. Assess readiness (FSM)
-        3. Emit verdict
-        4. Act on READY (DDNS)
-        5. Observe + attempt recovery
+        3. Emit an authoritative verdict
+        4. Perform READY-only side effects (DDNS)
+        5. Track failures + attempt recovery
         6. Loop telemetry
+
+        Returns the readiness verdict for this cycle.
         """
         start = time.monotonic()
         heartbeat = heartbeat = time.strftime("%a %b %d %Y")
