@@ -11,6 +11,7 @@ from .bootstrap import bootstrap
 from .recovery_policy import RecoveryPolicy
 from .ddns_controller import DDNSController
 from .logger import get_logger, setup_logging
+from .cloudflare import CloudflareDNSProvider
 from .scheduling_policy import SchedulingPolicy
 from .recovery_controller import RecoveryController
 from .readiness import ReadinessState, ReadinessController
@@ -114,15 +115,17 @@ def main() -> None:
 
     capabilities = bootstrap()
 
+    # ─── Config Parameters ───
     allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
     plug_ip = config.Hardware.PLUG_IP
+    #config params to be passed into Cloudflare...
+    
+    # ─── External Actuator: DNS Provider ───
+    dns_provider = CloudflareDNSProvider()
 
     # ─── Policies (stateless / config-driven) ───
     scheduler = SchedulingPolicy()
     recovery_policy = RecoveryPolicy()
-
-
-
 
     # ─── Controllers (stateful) ───
     readiness = ReadinessController()
@@ -133,7 +136,8 @@ def main() -> None:
     )
     ddns = DDNSController(
         readiness=readiness,
-        recovery=recovery,
+        dns_provider=dns_provider,
+        recovery=recovery
     )
 
     logger.info("Entering supervisor loop...\n")

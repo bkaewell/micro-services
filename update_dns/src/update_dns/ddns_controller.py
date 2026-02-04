@@ -3,16 +3,13 @@ import time
 from enum import Enum, auto
 from typing import Optional
 
-# ─── Third-party imports ───
-import requests
-
 # ─── Project imports ───
 from .config import config
 from .telemetry import tlog
 from .logger import get_logger
 from .bootstrap import EnvCapabilities
-from .cloudflare import CloudflareClient
 from .recovery_policy import recovery_policy
+from .cloudflare import CloudflareDNSProvider
 from .recovery_controller import RecoveryController
 from .readiness import ReadinessState, READINESS_EMOJI, ReadinessController
 
@@ -39,7 +36,8 @@ class DDNSController:
 
     def __init__(
             self, 
-            readiness: ReadinessState, 
+            readiness: ReadinessState,
+            dns_provider: CloudflareDNSProvider, 
             recovery: RecoveryController
         ):
         """
@@ -59,7 +57,7 @@ class DDNSController:
 
         # ─── Observability & External Interfaces ─── 
         self.logger = get_logger("ddns_controller")
-        self.cloudflare_client = CloudflareClient()
+        self.dns_provider = dns_provider
 
         # ─── Environment & Hardware Topology ─── 
         self.router_ip = config.Hardware.ROUTER_IP
@@ -136,7 +134,6 @@ class DDNSController:
         # ─── Future Work ───
         # Send notification via 3rd party messaging app
         #  - Telegram's @BotFather API 
-        #  - WhatsApp API??
 
     def _reconcile_dns_if_needed(self, public_ip: str) -> None:
         """
@@ -152,14 +149,10 @@ class DDNSController:
         • L2: DoH verification (truth without mutation)
         • L3: targeted update (only on confirmed drift)
         """
-        ddns_decision  = None
-        ddns_reason = None
 
-        # ─── L1 Cache (Cheap, local, fast no-op) ───
+        # ─── L1 Local Cache (Cheap, fast no-op) ───
         # Only proceed to DoH if cache is absent, stale, or mismatched
-
         cache = load_cached_cloudflare_ip()
-
         cache_hit = cache.hit
         cache_fresh = cache_hit and (cache.age_s <= self.max_cache_age_s)
         cache_match = cache_fresh and (cache.ip == public_ip)
@@ -189,13 +182,11 @@ class DDNSController:
         )
 
         if cache_match:
-            ddns_decision = "NO-OP"
-            ddns_reason = "cache=hit"
-            tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
+            tlog("🌐", "DDNS", "NO-OP", primary="cache=hit")
             return  # Fast no-op: we trust the cache = DNS = current IP
 
-        # ─── L2 DoH (Authoritative truth) ───
-        doh = doh_lookup(self.cloudflare_client.dns_name)
+        # ─── L2 Authoritative DoH lookup ───
+        doh = doh_lookup(self.dns_provider.dns_name)
 
         if doh.success and doh.ip == public_ip:
             tlog(
@@ -207,30 +198,26 @@ class DDNSController:
             )
             store_cloudflare_ip(public_ip)   # Safe: DoH confirmed current IP is what DNS has
             tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
-            ddns_decision = "NO-OP"
-            ddns_reason = "doh=verified"
-            tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
+            tlog("🌐", "DDNS", "NO-OP", primary="doh=verified")
             return
 
-        # ─── L3 Mutation required ───
-        result, elapsed_ms = self.cloudflare_client.update_dns(public_ip)
+        # ─── L3 Targeted update required (mutation) ───
+        result, elapsed_ms = self.dns_provider.update_dns(public_ip)
         store_cloudflare_ip(public_ip)       # Safe: we just wrote it
 
-        ddns_decision = "UPDATED"
-        ddns_reason = "reason=ip-mismatch"
         meta=[]
         meta.append(f"rtt={elapsed_ms:.0f}ms")
         meta.append(f"desired={public_ip}")
-        meta.append(f"ttl={self.cloudflare_client.ttl}s")
+        meta.append(f"ttl={self.dns_provider.ttl}s")
         tlog(
             "🟢",
             "CLOUDFLARE",
             "UPDATED",
-            primary=f"dns={self.cloudflare_client.dns_name}",
+            primary=f"dns={self.dns_provider.dns_name}",
             meta=" | ".join(meta)
         )
         tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
-        tlog("🌐", "DDNS", ddns_decision, primary=ddns_reason)
+        tlog("🌐", "DDNS", "PUBLISHED", primary="reason=ip-mismatch")
 
 
     #********************************
@@ -307,10 +294,19 @@ class DDNSController:
         public = None
         allow_promotion = False
 
-        if wan.success and self.readiness.state != ReadinessState.NOT_READY:
+        can_observe_public_ip = (
+            wan.success
+            and self.readiness.state != ReadinessState.NOT_READY
+        )
+
+        in_promotion_window = (
+            self.readiness.state == ReadinessState.PROBING
+        )
+
+        if can_observe_public_ip:
             public = get_ip()
-            #public = self._override_public_ip_for_test(public)  # DEBUG hook
-            #self.count += 1
+            public = self._override_public_ip_for_test(public)  # DEBUG hook
+            self.count += 1
 
             tlog(
                 "🟢" if public.success else "🔴",
@@ -320,8 +316,7 @@ class DDNSController:
                 meta=f"rtt={public.elapsed_ms:.0f}ms"
             )
 
-            # Promotion confidence accrual (PROBING only)
-            if public.success and self.readiness.state == ReadinessState.PROBING:
+            if public.success and in_promotion_window:
                 allow_promotion = self._record_ip_observation(public.ip)
 
         else:
@@ -343,6 +338,7 @@ class DDNSController:
             ) 
 
         # ─── Verdict: authoritative ───
+        self.recovery.observe(readiness)
         verdict_primary = None
         verdict_meta = None
 
@@ -360,7 +356,7 @@ class DDNSController:
         elif readiness == ReadinessState.NOT_READY:
             verdict_primary = "observe-only"
             verdict_meta = (
-                f"down_count={self.not_ready_streak}/"
+                f"down_count={self.recovery.not_ready_streak}/"
                 f"{recovery_policy.max_consecutive_down_before_escalation}"
             )
 
@@ -386,21 +382,6 @@ class DDNSController:
         self.prev_readiness = readiness
 
 
-        # ─── Decide: escalation tracking ───
-        if readiness == ReadinessState.NOT_READY:
-            self.not_ready_streak += 1
-        else:
-            self.not_ready_streak = 0
-
-        escalate = (
-            readiness == ReadinessState.NOT_READY
-            and self.not_ready_streak >= recovery_policy.max_consecutive_down_before_escalation
-        )
-        #failures_at_decision = self.not_ready_streak
-
-
-
-
         # ─── Act: READY-only side effects ───
         if readiness == ReadinessState.READY:
             if not lan.success:
@@ -417,37 +398,7 @@ class DDNSController:
             self._reconcile_dns_if_needed(public.ip)
 
 
-
-
-        self.recovery.observe(readiness)
         self.recovery.maybe_recover()
-
-
-
-
-        #elif escalate and self.physical_recovery_available:
-        if escalate and self.physical_recovery_available:
-            if self._initiate_recovery():
-                # Prevent recovery storms
-                self.not_ready_streak = 0
- 
-                # tlog(
-                #     "🚨",
-                #     "RECOVERY",
-                #     "INITIATED",
-                #     primary="physical intervention"
-                # )
-
-        #elif escalate:
-        if escalate:
-            tlog(
-                "🟡",
-                "RECOVERY",
-                "SUPPRESSED",
-                primary="disabled by config",
-                meta=f"down_count={self.not_ready_streak}"
-            )
-
 
         # ─── Uptime Cycle Counting ───
         self.uptime.total += 1
