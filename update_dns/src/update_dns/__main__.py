@@ -9,19 +9,23 @@ from .config import Config
 from .telemetry import tlog
 from .cache import store_uptime
 from .bootstrap import bootstrap
+from .recovery_policy import RecoveryPolicy
+from .ddns_controller import DDNSController
 from .logger import get_logger, setup_logging
 from .scheduling_policy import SchedulingPolicy
-from .infra_agent import ReadinessState, READINESS_EMOJI, DDNSController
+from .recovery_controller import RecoveryController
+from .readiness import ReadinessState, ReadinessController, READINESS_EMOJI
 
 
 class SupervisorState(Enum):
     """
-    Canonical representation of supervisor loop health.
+    Health of a single supervisor loop iteration.
 
-    States are intentionally minimal:
-        OK    → loop completed without error
-        ERROR → unhandled exception occurred
-    """    
+    • OK    — cycle completed without error
+    • ERROR — unhandled exception occurred
+
+    Used for telemetry only; does not control scheduling or recovery.
+    """
     OK = auto()
     ERROR = auto()
 
@@ -33,62 +37,44 @@ SUPERVISOR_EMOJI = {
     SupervisorState.ERROR: "💣",
 }
 
-def main_loop(
-        scheduling_policy: SchedulingPolicy,
+def run_supervisor_loop(
+        scheduler: SchedulingPolicy,
         ddns: DDNSController
-    ):
+    ) -> None:
     """
-    Supervisor loop for autonomous network control, dynamic DNS reconciliation,
-    and self-healing infrastructure.
+    Top-level supervisor loop.
 
-    Built to maintain a dynamic WireGuard VPN, this agent monitors LAN/WAN 
-    health, stabilizes the public IP, and updates Cloudflare DNS only once WAN 
-    stability is confirmed. As a stretch goal, it can trigger physical recovery
-    if the network becomes unresponsive. Scheduling includes subtle timing 
-    adjustments to avoid Cloudflare API rate limits while maximizing telemetry 
-    and observability.
+    Responsibilities:
+    • Run the DDNS control cycle
+    • Capture and log unhandled failures
+    • Delegate timing decisions to the scheduler
+    • Maintain steady cadence for long-running operation
 
-    Features:
-        - Continuously run the NetworkControlAgent evaluation cycle
-        - Sync Cloudflare DNS only when WAN and IP are verified stable
-        - Maintain telemetry and ReadinessState logging for long-running operation
-        - Enforce drift-aware scheduling to balance consistency and API friendliness
-        - Escalate physical WAN recovery after repeated failures
+    Notes:
+    • This loop never exits
+    • Exceptions are contained and surfaced via telemetry
+    • Scheduling is adaptive to avoid API abuse and tight loops
     """
 
-    logger = get_logger("main_loop")
-    network_state = ReadinessState.INIT
-    loop = 1
-
+    logger = get_logger("run_supervisor_loop")
+    readiness = ReadinessState.INIT
+    
+    # Intentional infinite loop - lifecycle managed externally by Docker
     while True:
         start = time.monotonic()
-        heartbeat = heartbeat = time.strftime("%a %b %d %Y")
-        tlog("🔁", "LOOP", "START", primary=heartbeat, meta=f"loop={loop}")
+        supervisor_state = SupervisorState.OK
 
         try:
-            # Update Network Health / Reconcile DNS:
-            network_state = ddns.reconcile()
-            supervisor_state = SupervisorState.OK
+            readiness = ddns.run_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
             supervisor_state = SupervisorState.ERROR
 
-        # ─── Uptime Cycle Counting ───
-        ddns.uptime.total += 1
-        if network_state == ReadinessState.READY:
-            ddns.uptime.up += 1
-        
-        # Optional: save every 50 measurements (low I/O)
-        #if self.uptime.total % 50 == 0:
-        # Align with CACHE_MAX_AGE_S ~3600 seconds?
-        store_uptime(ddns.uptime)
-
         # Adaptive Polling Engine (APE): compute next poll interval
         elapsed = time.monotonic() - start
-        elapsed_ms = elapsed * 1000
-        decision = scheduling_policy.next_schedule(
+        decision = scheduler.next_schedule(
             elapsed=elapsed, 
-            state=network_state
+            state=readiness
         )
 
         if supervisor_state == SupervisorState.ERROR:
@@ -100,65 +86,52 @@ def main_loop(
             )
 
         tlog(
-            #"⏱️ ",
             "🐾",
             "SCHEDULER",
             "CADENCE",
             primary=str(decision.poll_speed),
-            meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s"
+            meta=f"sleep={decision.sleep_for:.0f}s | jitter={decision.jitter:.0f}s\n"
         )
-
-        tlog(
-            "🔁",
-            "LOOP",
-            "COMPLETE",
-            #primary=,
-            meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={ddns.uptime}\n"
-        )
-
-        # if supervisor_state == SupervisorState.ERROR:
-        #     tlog(
-        #         SUPERVISOR_EMOJI[supervisor_state], 
-        #         "SUPERVISOR", 
-        #         supervisor_state.name, 
-        #         primary="observer failure"
-        #     )
-
-        # tlog(
-        #     READINESS_EMOJI[network_state], 
-        #     "NET_STATUS", 
-        #     network_state.name, 
-        #     primary="steady-state" if network_state == ReadinessState.READY else "recovery",
-        #     meta=f"LOOP={elapsed_ms:.0f}ms | UPTIME={ddns.uptime}\n"
-        # )
 
         time.sleep(decision.sleep_for)
-        loop += 1
 
-def main():
+def main() -> None:
     """
-    Application entry point for the autonomous network control agent.
+    Application entry point.
 
-    Initializes observability, validates runtime configuration, and composes
-    the production-grade control loop responsible for WAN health assessment,
-    public IP stabilization, and Cloudflare DNS reconciliation. Although built
-    for a home network, the system is engineered with real-world reliability,
-    failure handling, and operational discipline in mind.
+    • Initialize logging and runtime configuration
+    • Bootstrap system capabilities
+    • Wire policies and controllers
+    • Hand off control to the supervisor loop
+
+    After this point, the process is expected to run indefinitely.
     """
 
     setup_logging(level=getattr(logging, Config.LOG_LEVEL))
     logger = get_logger("main")
-    logger.info("🚀 Starting Network Health & Cloudflare DDNS Reconciliation Agent")
+
+    logger.info("🚀 Starting Cloudflare DDNS Agent")
     logger.debug(f"Python version: {sys.version}")
 
     capabilities = bootstrap()
 
-    # Dependencies
-    scheduling_policy = SchedulingPolicy()
-    ddns = DDNSController(capabilities)
-    
+    # ─── Policies (stateless / config-driven) ───
+    scheduler = SchedulingPolicy()
+    recovery_policy = RecoveryPolicy()
+
+    # ─── Controllers (stateful) ───
+    readiness = ReadinessController()
+    recovery = RecoveryController(
+        policy=recovery_policy,
+        capabilities=capabilities,
+    )
+    ddns = DDNSController(
+        readiness=readiness,
+        recovery=recovery,
+    )
+
     logger.info("Entering supervisor loop...\n")
-    main_loop(scheduling_policy, ddns)
+    run_supervisor_loop(scheduler, ddns)
 
 if __name__ == "__main__":
     main()
