@@ -7,7 +7,8 @@ from enum import Enum, auto
 # ─── Project imports ───
 from .config import config
 from .telemetry import tlog
-from .bootstrap import bootstrap
+#from .bootstrap import bootstrap
+from .cache import PersistentCache
 from .recovery_policy import RecoveryPolicy
 from .ddns_controller import DDNSController
 from .logger import get_logger, setup_logging
@@ -113,17 +114,25 @@ def main() -> None:
     logger.info("🚀 Starting Cloudflare DDNS Agent")
     logger.debug(f"Python version: {sys.version}")
 
-    capabilities = bootstrap()
+    # def validate_config() -> None:
+    #     if not config.Cloudflare.DNS_NAME:
+    #         raise RuntimeError("CLOUDFLARE_DNS_NAME is required")
 
-    # ─── Config Parameters ───
-    allow_physical_recovery = config.ALLOW_PHYSICAL_RECOVERY
-    plug_ip = config.Hardware.PLUG_IP
-    #config params to be passed into Cloudflare...
-    
+    #     if config.MAX_CACHE_AGE_S < config.CYCLE_INTERVAL_S * config.SLOW_POLL_SCALAR:
+    #         raise RuntimeError("Cache expires before reuse")
+
     # ─── External Actuator: DNS Provider ───
-    dns_provider = CloudflareDNSProvider()
+    dns_provider = CloudflareDNSProvider(
+        api_token=config.Cloudflare.API_TOKEN,
+        zone_id=config.Cloudflare.ZONE_ID,
+        dns_name=config.Cloudflare.DNS_NAME,
+        dns_record_id=config.Cloudflare.DNS_RECORD_ID,
+        ttl=config.Cloudflare.MIN_TTL_S,
+        proxied=False,
+        http_timeout_s=config.API_TIMEOUT_S,
+    )
 
-    # ─── Policies (stateless / config-driven) ───
+    # ─── Policies (stateless) ───
     scheduler = SchedulingPolicy()
     recovery_policy = RecoveryPolicy()
 
@@ -131,13 +140,19 @@ def main() -> None:
     readiness = ReadinessController()
     recovery = RecoveryController(
         policy=recovery_policy,
-        allow_physical_recovery=allow_physical_recovery,
-        plug_ip=plug_ip
+        allow_physical_recovery=config.ALLOW_PHYSICAL_RECOVERY,
+        plug_ip=config.Hardware.PLUG_IP
     )
+
+    cache = PersistentCache()
+
     ddns = DDNSController(
+        router_ip=config.Hardware.ROUTER_IP,
+        max_cache_age_s=config.MAX_CACHE_AGE_S,
         readiness=readiness,
         dns_provider=dns_provider,
-        recovery=recovery
+        recovery=recovery,
+        cache=cache,
     )
 
     logger.info("Entering supervisor loop...\n")

@@ -4,17 +4,14 @@ from enum import Enum, auto
 from typing import Optional
 
 # ─── Project imports ───
-from .config import config
 from .telemetry import tlog
-from .logger import get_logger
-from .bootstrap import EnvCapabilities
 from .recovery_policy import recovery_policy
 from .cloudflare import CloudflareDNSProvider
 from .recovery_controller import RecoveryController
-from .readiness import ReadinessState, READINESS_EMOJI, ReadinessController
+from .readiness import ReadinessState, READINESS_EMOJI
 
-from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult
-from .cache import load_cached_cloudflare_ip, store_cloudflare_ip, CacheLookupResult, load_uptime, store_uptime
+from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult  # test hook
+from .cache import PersistentCache #load_cached_cloudflare_ip, store_cloudflare_ip, store_uptime
 #from .db import log_metrics
 
 
@@ -33,12 +30,19 @@ class DDNSController:
     • Low-noise when healthy
     • Fail-fast, recover deliberately
     """
+    # ─── Class Constants ───
+    # consecutive stable IPs required for READY
+    PROMOTION_CONFIRMATIONS_REQUIRED: int = 2
 
     def __init__(
-            self, 
+            self,
+            *,
+            router_ip: str, 
+            max_cache_age_s: str,
             readiness: ReadinessState,
             dns_provider: CloudflareDNSProvider, 
-            recovery: RecoveryController
+            recovery: RecoveryController,
+            cache: PersistentCache,
         ):
         """
         Initialize the DDNS control loop.
@@ -48,30 +52,29 @@ class DDNSController:
         • Startup assumes nothing about network health
         """
 
-        # ─── Readiness Controller (single source of truth) ─── 
+        # ─── Core Controle Plane (Single Source of Truth) ───
         self.readiness = readiness
-        self.prev_readiness: ReadinessState = ReadinessState.INIT
 
-
+        # ─── External Actuators ───
+        self.dns_provider = dns_provider
         self.recovery = recovery
 
-        # ─── Observability & External Interfaces ─── 
-        self.logger = get_logger("ddns_controller")
-        self.dns_provider = dns_provider
-
-        # ─── Environment & Hardware Topology ─── 
-        self.router_ip = config.Hardware.ROUTER_IP
+        # ─── Environment & Topology ─── 
+        self.router_ip = router_ip
 
         # ─── Policy & Control Parameters ─── 
-        self.max_cache_age_s = config.MAX_CACHE_AGE_S
-        self.promotion_confirmations_required = 2   # consecutive stable IPs required for READY
+        self.max_cache_age_s = max_cache_age_s
+
+        # ─── Readiness State Tracking ───
+        self.prev_readiness: ReadinessState = ReadinessState.INIT
 
         # ─── Promotion / Stability Tracking (Probation Logic) ───         
         self.last_public_ip: Optional[str] = None
         self.promotion_votes: int = 0   # consecutive confirmations
         
         # ─── Metrics & Long-Lived Counters ───
-        self.uptime = load_uptime()
+        self.cache = cache
+        self.uptime = cache.load_uptime()
         self.loop = 1
 
 
@@ -102,7 +105,7 @@ class DDNSController:
             self.promotion_votes = 1
             self.last_public_ip = public_ip
 
-        return self.promotion_votes >= self.promotion_confirmations_required
+        return self.promotion_votes >= DDNSController.PROMOTION_CONFIRMATIONS_REQUIRED
 
     def _log_readiness_change(
         self,
@@ -120,7 +123,8 @@ class DDNSController:
 
         if prev == ReadinessState.PROBING and current == ReadinessState.READY:
             meta.append(
-                f"confirmations={promotion_votes}/{self.promotion_confirmations_required}"
+                f"confirmations={promotion_votes}/"
+                f"{DDNSController.PROMOTION_CONFIRMATIONS_REQUIRED}"
             )
 
         tlog(
@@ -152,7 +156,7 @@ class DDNSController:
 
         # ─── L1 Local Cache (Cheap, fast no-op) ───
         # Only proceed to DoH if cache is absent, stale, or mismatched
-        cache = load_cached_cloudflare_ip()
+        cache = self.cache.load_cloudflare_ip()
         cache_hit = cache.hit
         cache_fresh = cache_hit and (cache.age_s <= self.max_cache_age_s)
         cache_match = cache_fresh and (cache.ip == public_ip)
@@ -196,14 +200,14 @@ class DDNSController:
                 primary=f"ip={doh.ip}",
                 meta=f"rtt={doh.elapsed_ms:.0f}ms"
             )
-            store_cloudflare_ip(public_ip)   # Safe: DoH confirmed current IP is what DNS has
+            self.cache.store_cloudflare_ip(public_ip)
             tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
             tlog("🌐", "DDNS", "NO-OP", primary="doh=verified")
             return
 
         # ─── L3 Targeted update required (mutation) ───
         result, elapsed_ms = self.dns_provider.update_dns(public_ip)
-        store_cloudflare_ip(public_ip)       # Safe: we just wrote it
+        self.cache.store_cloudflare_ip(public_ip)
 
         meta=[]
         meta.append(f"rtt={elapsed_ms:.0f}ms")
@@ -219,6 +223,22 @@ class DDNSController:
         tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
         tlog("🌐", "DDNS", "PUBLISHED", primary="reason=ip-mismatch")
 
+    def _tick_uptime(self) -> None:
+        """
+        Advance uptime counters for the current loop iteration.
+        """
+        self.uptime.total += 1
+
+        if self.readiness.state == ReadinessState.READY:
+            self.uptime.up += 1
+
+        # Align with CACHE_MAX_AGE_S ~3600 seconds?
+
+        # Persist periodically (best-effort)
+        # if self.uptime.total % 50 == 0:
+        #     self.cache.store_uptime(self.uptime)
+
+        self.cache.store_uptime(self.uptime)
 
     #********************************
     #********************************
@@ -305,8 +325,8 @@ class DDNSController:
 
         if can_observe_public_ip:
             public = get_ip()
-            public = self._override_public_ip_for_test(public)  # DEBUG hook
-            self.count += 1
+            #public = self._override_public_ip_for_test(public)  # DEBUG hook
+            #self.count += 1
 
             tlog(
                 "🟢" if public.success else "🔴",
@@ -349,7 +369,7 @@ class DDNSController:
                 if self.promotion_votes == 0
                 else (
                     f"confirmations={self.promotion_votes}/"
-                    f"{self.promotion_confirmations_required}"
+                    f"{DDNSController.PROMOTION_CONFIRMATIONS_REQUIRED}"
                 )
             )
 
@@ -381,7 +401,6 @@ class DDNSController:
 
         self.prev_readiness = readiness
 
-
         # ─── Act: READY-only side effects ───
         if readiness == ReadinessState.READY:
             if not lan.success:
@@ -396,19 +415,10 @@ class DDNSController:
             # DDNS reconciliation (safe to act)
             # if public and public.success:
             self._reconcile_dns_if_needed(public.ip)
+        else:
+            self.recovery.maybe_recover()
 
-
-        self.recovery.maybe_recover()
-
-        # ─── Uptime Cycle Counting ───
-        self.uptime.total += 1
-        if readiness == ReadinessState.READY:
-            self.uptime.up += 1
-
-        # Optional: save every 50 measurements (low I/O)
-        #if self.uptime.total % 50 == 0:
-        # Align with CACHE_MAX_AGE_S ~3600 seconds?
-        store_uptime(self.uptime)
+        self._tick_uptime()
 
         elapsed_ms = (time.monotonic() - start) * 1000
         tlog(
@@ -420,4 +430,3 @@ class DDNSController:
 
         self.loop += 1
         return readiness
-    
