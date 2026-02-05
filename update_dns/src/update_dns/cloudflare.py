@@ -4,61 +4,84 @@ import json
 import time
 import requests
 
-# ─── Third-party imports ───
-from dotenv import load_dotenv
-
 # ─── Project imports ───
-from .config import config
 from .logger import get_logger
 
 
-class CloudflareClient:
+class CloudflareDNSProvider:
     """
-    Handles all communication and logic specific to the Cloudflare DNS API.
+    Cloudflare DNS actuator.
+
+    Thin, deterministic wrapper around the Cloudflare DNS API.
+    Owns:
+      - API auth
+      - DNS record identity
+      - Idempotent mutation primitives
     """
-    
-    def __init__(self):
+    # ─── Class Constants ───
+    CLOUDFLARE_API_BASE_URL: str = "https://api.cloudflare.com/client/v4"
+
+    def __init__(
+        self,
+        *,
+        api_token: str,
+        zone_id: str,
+        dns_name: str,
+        dns_record_id: str,
+        ttl: int,
+        proxied: bool = False,    # Grey cloud icon (not proxied thru Cloudflare)
+        record_type: str = "A",   # Fixed type
+        http_timeout_s: float = 5.0,
+    ):
         """
         Initializes the client by resolving all config dependencies.
         """
 
         self.logger = get_logger("cloudflare")
 
-        # Load .env 
-        load_dotenv()
+        # ─── Identity & Auth ───
+        self.api_token = api_token
+        self.zone_id = zone_id
+        self.dns_name = dns_name
+        self.dns_record_id = dns_record_id
 
-        # Configuration
-        self.api_base_url = os.getenv("CLOUDFLARE_API_BASE_URL")
-        self.api_token = os.getenv("CLOUDFLARE_API_TOKEN")
-        self.zone_id = os.getenv("CLOUDFLARE_ZONE_ID")
-        self.dns_name = os.getenv("CLOUDFLARE_DNS_NAME")
-        self.dns_record_id = os.getenv("CLOUDFLARE_DNS_RECORD_ID")
-        self.validate_cloudflare()
-        self.logger.info("Cloudflare config OK")
+        # ─── Record Parameters ───
+        self.ttl = ttl
+        self.proxied = proxied
+        self.record_type = record_type
 
-        # Pre-calculated and necessary instance variables
+        # ─── Transport ───
+        self.http_timeout_s = http_timeout_s
         self.headers = {
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
         }
-        self.record_type = "A"  # Fixed type
-        self.proxied = False    # Grey cloud icon (not proxied thru Cloudflare)
-        self.ttl = config.CLOUDFLARE_MIN_TTL_S
 
+        self._validate_config()
+        self.logger.info("Cloudflare DNS provider initialized")
 
-    def validate_cloudflare(self) -> None:
+    def _validate_config(self) -> None:
         """
-        Validate a Cloudflare DNS configuration in one request.
+        Validate Cloudflare DNS identity in one authoritative call.
+        Fail fast on mismatch or auth errors.
         """
-        resp = requests.get(f"{self.api_base_url}/zones/{self.zone_id}/dns_records/{self.dns_record_id}",
-                            headers={"Authorization": f"Bearer {self.api_token}"})
+        resp = requests.get(
+            f"{CloudflareDNSProvider.CLOUDFLARE_API_BASE_URL}/zones/{self.zone_id}/dns_records/{self.dns_record_id}",
+            headers=self.headers,
+            timeout=self.http_timeout_s,
+        )
+        resp.raise_for_status()
+
         data = resp.json()
-        if (
-            not resp.ok 
-            or not data.get("success") 
-            or data["result"]["name"] != self.dns_name
-        ):
-            raise ValueError(f"Cloudflare config invalid: {data}")
+        if not data.get("success"):
+            raise ValueError(f"Cloudflare API error: {data}")
+
+        record = data.get("result", {})
+        if record.get("name") != self.dns_name:
+            raise ValueError(
+                f"DNS record mismatch: expected {self.dns_name}, "
+                f"got {record.get('name')}"
+            )
     
     def update_dns(self, new_ip: str) -> tuple[dict, float]:
         """
@@ -86,7 +109,7 @@ class CloudflareClient:
         resp = None
 
         url = (
-            f"{self.api_base_url}/zones/"
+            f"{CloudflareDNSProvider.CLOUDFLARE_API_BASE_URL}/zones/"
             f"{self.zone_id}/dns_records/"
             f"{self.dns_record_id}"
         )
@@ -101,7 +124,7 @@ class CloudflareClient:
         
         try:
             resp = requests.put(
-                url, headers=self.headers, json=payload, timeout=config.API_TIMEOUT_S
+                url, headers=self.headers, json=payload, timeout=self.http_timeout_s
             )
             resp.raise_for_status()
 
@@ -144,7 +167,7 @@ class CloudflareClient:
         """
 
         url = (
-            f"{self.api_base_url}/zones/"
+            f"{CloudflareDNSProvider.CLOUDFLARE_API_BASE_URL}/zones/"
             f"{self.zone_id}/dns_records"
             f"?name={self.dns_name}"
             f"&type={self.record_type}"
@@ -152,7 +175,7 @@ class CloudflareClient:
         
         try:
             resp = requests.get(
-                url, headers=self.headers, timeout=config.API_TIMEOUT_S
+                url, headers=self.headers, timeout=self.http_timeout_s
             )
             resp.raise_for_status()
         except requests.RequestException as e:

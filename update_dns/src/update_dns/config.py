@@ -13,6 +13,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 @dataclass(frozen=True)
+class CloudflareConfig:
+    API_TOKEN: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_API_TOKEN", ""))
+    ZONE_ID: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_ZONE_ID", ""))
+    DNS_NAME: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_DNS_NAME", ""))
+    DNS_RECORD_ID: str = field(default_factory=lambda: os.getenv("CLOUDFLARE_DNS_RECORD_ID", ""))
+    
+    # Cloudflare DNS hard limit (minimum allowed TTL)
+    MIN_TTL_S: int = 60
+
+@dataclass(frozen=True)
 class HardwareConfig:
     """
     Hardware-specific network endpoints.
@@ -49,9 +59,6 @@ class Config:
     #MAX_CACHE_AGE_S: int = 600-900  # 10 minutes - 15 minutes
     MAX_CACHE_AGE_S: int = 3600  # 60 minutes
 
-    # Cloudflare DNS hard limit (minimum allowed TTL)
-    CLOUDFLARE_MIN_TTL_S: int = 60
-
     # Timeout applied to all external HTTP / DoH requests (seconds)
     API_TIMEOUT_S: int = 8 
 
@@ -62,6 +69,9 @@ class Config:
     ALLOW_PHYSICAL_RECOVERY: bool = (
         os.getenv("ALLOW_PHYSICAL_RECOVERY", "false").lower() in ("true", "1", "yes")
     )
+
+    # Cloudflare endpoints
+    Cloudflare: CloudflareConfig = field(default_factory=CloudflareConfig)
 
     # Hardware endpoints
     Hardware: HardwareConfig = field(default_factory=HardwareConfig)
