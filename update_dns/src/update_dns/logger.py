@@ -2,9 +2,6 @@
 import sys
 import logging
 
-# --- Project imports ---
-from .config import Config
-
 
 # --- Format configuration constants ---
 LOG_LEVEL_EMOJIS = {
