@@ -139,7 +139,10 @@ def main() -> None:
         fast_poll_scalar=config.FAST_POLL_SCALAR,
         slow_poll_scalar=config.SLOW_POLL_SCALAR,
     )
-    recovery_policy = RecoveryPolicy()
+    recovery_policy = RecoveryPolicy(
+        cycle_interval_s=config.CYCLE_INTERVAL_S,
+        fast_poll_scalar=config.FAST_POLL_SCALAR,
+    )
 
     # ─── Controllers (stateful) ───
     readiness = ReadinessController()
