@@ -97,14 +97,15 @@ def run_supervisor_loop(
 
 def main() -> None:
     """
-    Application entry point.
+    Application entry point and composition root.
 
-    • Initialize logging and runtime configuration
-    • Bootstrap system capabilities
-    • Wire policies and controllers
-    • Hand off control to the supervisor loop
+    • Configure logging and runtime settings
+    • Construct external actuators, policies, and controllers
+    • Wire dependencies into the DDNS control loop
+    • Transfer control to the supervisor loop
 
-    After this point, the process is expected to run indefinitely.
+    No system state is managed here; this function is responsible only
+    for object composition and process startup.
     """
 
     setup_logging(level=getattr(logging, config.LOG_LEVEL))
@@ -132,7 +133,12 @@ def main() -> None:
     )
 
     # ─── Policies (stateless) ───
-    scheduler = SchedulingPolicy()
+    scheduler = SchedulingPolicy(
+        cycle_interval_s=config.CYCLE_INTERVAL_S,
+        polling_jitter_s=config.POLLING_JITTER_S,
+        fast_poll_scalar=config.FAST_POLL_SCALAR,
+        slow_poll_scalar=config.SLOW_POLL_SCALAR,
+    )
     recovery_policy = RecoveryPolicy()
 
     # ─── Controllers (stateful) ───

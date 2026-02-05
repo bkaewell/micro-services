@@ -4,7 +4,6 @@ from enum import Enum, auto
 from dataclasses import dataclass
 
 # ─── Project imports ───
-from .config import config
 from .readiness import ReadinessState
 
 
@@ -47,19 +46,25 @@ class SchedulingPolicy:
     """
     FAST_STATES = {ReadinessState.NOT_READY, ReadinessState.PROBING}
 
-    def __init__(self):
-        self.base_interval = config.CYCLE_INTERVAL_S
-        self.jitter_max = config.POLLING_JITTER_S
+    def __init__(
+            self,
+            cycle_interval_s: int,
+            polling_jitter_s: int,
+            fast_poll_scalar: float,
+            slow_poll_scalar: float,           
+    ):
+        self.base_interval = cycle_interval_s
+        self.jitter_max = polling_jitter_s
         self.scalars = {
-            PollSpeed.FAST: config.FAST_POLL_SCALAR,
-            PollSpeed.SLOW: config.SLOW_POLL_SCALAR,
+            PollSpeed.FAST: fast_poll_scalar,
+            PollSpeed.SLOW: slow_poll_scalar,
         }
 
     def next_schedule(
             self, 
             *, 
             elapsed: float, 
-            state: ReadinessState
+            readiness: ReadinessState
         ) -> ScheduleDecision:
         """
         Compute the next polling interval for the control loop.
@@ -70,7 +75,7 @@ class SchedulingPolicy:
         • Account for time already spent in the cycle
         """
         poll_speed = (
-            PollSpeed.FAST if state in self.FAST_STATES else PollSpeed.SLOW
+            PollSpeed.FAST if readiness in self.FAST_STATES else PollSpeed.SLOW
         )
 
         base_interval = int(self.base_interval * self.scalars[poll_speed])
