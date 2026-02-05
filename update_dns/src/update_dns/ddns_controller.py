@@ -65,9 +65,6 @@ class DDNSController:
         # ─── Policy & Control Parameters ─── 
         self.max_cache_age_s = max_cache_age_s
 
-        # ─── Readiness State Tracking ───
-        self.prev_readiness: ReadinessState = ReadinessState.INIT
-
         # ─── Promotion / Stability Tracking (Probation Logic) ───         
         self.last_public_ip: Optional[str] = None
         self.promotion_votes: int = 0   # consecutive confirmations
@@ -223,13 +220,13 @@ class DDNSController:
         tlog("🟢", "CACHE", "REFRESHED", primary=f"ttl={self.max_cache_age_s}s")
         tlog("🌐", "DDNS", "PUBLISHED", primary="reason=ip-mismatch")
 
-    def _tick_uptime(self) -> None:
+    def _tick_uptime(self, readiness: ReadinessState) -> None:
         """
         Advance uptime counters for the current loop iteration.
         """
         self.uptime.total += 1
 
-        if self.readiness.state == ReadinessState.READY:
+        if readiness == ReadinessState.READY:
             self.uptime.up += 1
 
         # Align with CACHE_MAX_AGE_S ~3600 seconds?
@@ -272,7 +269,7 @@ class DDNSController:
     #********************************
 
 
-    def run_cycle(self) -> ReadinessState:
+    def run_cycle(self) -> None:
         """
         Execute one autonomous control-loop cycle.
 
@@ -283,8 +280,6 @@ class DDNSController:
         4. Perform READY-only side effects (DDNS)
         5. Track failures + attempt recovery
         6. Loop telemetry
-
-        Returns the readiness verdict for this cycle.
         """
         start = time.monotonic()
         heartbeat = heartbeat = time.strftime("%a %b %d %Y")
@@ -344,25 +339,28 @@ class DDNSController:
         
 
         # ─── Assess: (FSM = single source of truth) ───
-        prev = self.prev_readiness
-        readiness = self.readiness.advance(
+        prev = self.readiness.state
+
+        self.readiness.advance(
             wan_path_ok=wan.success,
             allow_promotion = allow_promotion
         )
 
-        if prev != readiness:
+        current = self.readiness.state
+
+        if prev != current:
             self._log_readiness_change(
                 prev=prev,
-                current=readiness,
+                current=current,
                 promotion_votes=self.promotion_votes,
             ) 
 
         # ─── Verdict: authoritative ───
-        self.recovery.observe(readiness)
+        self.recovery.observe(current)
         verdict_primary = None
         verdict_meta = None
 
-        if readiness == ReadinessState.PROBING:
+        if current == ReadinessState.PROBING:
             verdict_primary = "gate=HOLD"
             verdict_meta = (
                 "awaiting confirmation"
@@ -373,7 +371,7 @@ class DDNSController:
                 )
             )
 
-        elif readiness == ReadinessState.NOT_READY:
+        elif current == ReadinessState.NOT_READY:
             verdict_primary = "observe-only"
             verdict_meta = (
                 f"down_count={self.recovery.not_ready_streak}/"
@@ -381,16 +379,16 @@ class DDNSController:
             )
 
         tlog(
-            READINESS_EMOJI[readiness],
+            READINESS_EMOJI[current],
             "VERDICT",
-            readiness.name,
+            current.name,
             primary=verdict_primary,
             meta=verdict_meta,
         )
 
         entering_not_ready = (
-            self.prev_readiness != ReadinessState.NOT_READY
-            and readiness == ReadinessState.NOT_READY
+            prev != ReadinessState.NOT_READY
+            and current == ReadinessState.NOT_READY
         )
 
         if entering_not_ready:
@@ -399,10 +397,9 @@ class DDNSController:
             self.promotion_votes = 0
             self.last_public_ip = None
 
-        self.prev_readiness = readiness
 
         # ─── Act: READY-only side effects ───
-        if readiness == ReadinessState.READY:
+        if current == ReadinessState.READY:
             if not lan.success:
                 tlog(
                     "🟡",
@@ -418,7 +415,7 @@ class DDNSController:
         else:
             self.recovery.maybe_recover()
 
-        self._tick_uptime()
+        self._tick_uptime(current)
 
         elapsed_ms = (time.monotonic() - start) * 1000
         tlog(
@@ -429,4 +426,3 @@ class DDNSController:
         )
 
         self.loop += 1
-        return readiness

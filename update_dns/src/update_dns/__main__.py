@@ -7,7 +7,6 @@ from enum import Enum, auto
 # ─── Project imports ───
 from .config import config
 from .telemetry import tlog
-#from .bootstrap import bootstrap
 from .cache import PersistentCache
 from .recovery_policy import RecoveryPolicy
 from .ddns_controller import DDNSController
@@ -58,15 +57,15 @@ def run_supervisor_loop(
     """
 
     logger = get_logger("run_supervisor_loop")
-    readiness = ReadinessState.INIT
     
     # Intentional infinite loop - lifecycle managed externally by Docker
     while True:
+
         start = time.monotonic()
         supervisor_state = SupervisorState.OK
 
         try:
-            readiness = ddns.run_cycle()
+            ddns.run_cycle()
         except Exception as e:
             logger.exception(f"Unhandled exception during run_control_cycle: {e}")
             supervisor_state = SupervisorState.ERROR
@@ -75,7 +74,7 @@ def run_supervisor_loop(
         elapsed = time.monotonic() - start
         decision = scheduler.next_schedule(
             elapsed=elapsed, 
-            state=readiness
+            readiness=ddns.readiness.state
         )
 
         if supervisor_state == SupervisorState.ERROR:
