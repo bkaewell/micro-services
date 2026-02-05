@@ -5,14 +5,16 @@ from typing import Optional
 
 # ─── Project imports ───
 from .telemetry import tlog
-from .recovery_policy import recovery_policy
+from .cache import PersistentCache
 from .cloudflare import CloudflareDNSProvider
 from .recovery_controller import RecoveryController
 from .readiness import ReadinessState, READINESS_EMOJI
-
-from .utils import ping_host, verify_wan_reachability, get_ip, doh_lookup, IPResolutionResult  # test hook
-from .cache import PersistentCache #load_cached_cloudflare_ip, store_cloudflare_ip, store_uptime
-#from .db import log_metrics
+from .utils import (
+    ping_host, 
+    verify_wan_reachability, 
+    get_ip, doh_lookup, 
+    IPResolutionResult  # test hook
+)
 
 
 class DDNSController:
@@ -340,12 +342,10 @@ class DDNSController:
 
         # ─── Assess: (FSM = single source of truth) ───
         prev = self.readiness.state
-
         self.readiness.advance(
             wan_path_ok=wan.success,
             allow_promotion = allow_promotion
         )
-
         current = self.readiness.state
 
         if prev != current:
@@ -375,7 +375,7 @@ class DDNSController:
             verdict_primary = "observe-only"
             verdict_meta = (
                 f"down_count={self.recovery.not_ready_streak}/"
-                f"{recovery_policy.max_consecutive_down_before_escalation}"
+                f"{self.recovery.policy.max_consecutive_not_ready_cycles}"
             )
 
         tlog(
@@ -399,7 +399,7 @@ class DDNSController:
 
 
         # ─── Act: READY-only side effects ───
-        if current == ReadinessState.READY:
+        if current == ReadinessState.READY and public.ip:
             if not lan.success:
                 tlog(
                     "🟡",
@@ -410,7 +410,7 @@ class DDNSController:
                 )
 
             # DDNS reconciliation (safe to act)
-            # if public and public.success:
+            #if public and public.success:
             self._reconcile_dns_if_needed(public.ip)
         else:
             self.recovery.maybe_recover()
