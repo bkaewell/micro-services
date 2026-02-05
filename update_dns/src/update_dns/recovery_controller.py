@@ -81,6 +81,7 @@ class RecoveryController:
         now = time.monotonic()
         since_last = now - self.last_recovery_time
 
+        # Prevent recovery storms
         if since_last < self.policy.recovery_cooldown_s:
             self._emit_suppressed(
                 "cooldown active",
