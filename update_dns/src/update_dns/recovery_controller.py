@@ -75,7 +75,7 @@ class RecoveryController:
             self._emit_suppressed("smart plug unavailable")
             return False
 
-        if self.not_ready_streak < self.policy.max_consecutive_down_before_escalation:
+        if self.not_ready_streak < self.policy.max_consecutive_not_ready_cycles:
             return False
 
         now = time.monotonic()
