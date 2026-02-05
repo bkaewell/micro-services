@@ -52,7 +52,7 @@ class ReadinessController:
             self, 
             wan_path_ok: bool, 
             allow_promotion: bool = True,
-        ) -> ReadinessState:
+        ) -> None:
         """
         Advance the readiness FSM by one evaluation cycle.
 
@@ -63,7 +63,7 @@ class ReadinessController:
         """
         if not wan_path_ok:
             self._demote()
-            return self.state
+            return
 
         match self.state:
             case ReadinessState.INIT | ReadinessState.NOT_READY:
@@ -74,5 +74,3 @@ class ReadinessController:
 
             case _:
                 pass  # READY stays READY
-
-        return self.state
